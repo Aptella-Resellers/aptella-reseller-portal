@@ -28,7 +28,7 @@ class ErrorCatcher extends React.Component {
 //
 
 // -------------------------- Config ---------------------------
-const GOOGLE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwp6JmvlrSG8pmqNlRPZkQzcqm7JWgh6cBQZgzzkJ_enQ5ZRr_RfjDxjlqnn_RaHMUw/exec"; // ← GAS Web App URL
+const GOOGLE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbw3O_GnYcTx4bRYdFD2vCSs26L_Gzl2ZIZd18dyJmZAEE442hvhqp7j1C4W6cFX_DWM/exec"; // ← GAS Web App URL
 const GOOGLE_SHEET_VIEW_URL = "";
 const __IMPORT_META__ = { env: {} }; // shim to avoid '__IMPORT_META__' parse errors   // ← optional viewer link
 const BASE_PATH = (() => {
@@ -41,7 +41,7 @@ const LOGO_URL = BASE_PATH + "aptella-logo.png"; // Put your logo file in /publi
 
 // Admin gate (frontend-only; for strong security use real auth)
 const ADMIN_PASSWORD = "Aptella2025!";
-const APTELLA_EVIDENCE_EMAIL = "evidence@aptella.com";
+const APTELLA_EVIDENCE_EMAIL = "admin.asia@aptella.com";
 
 const BRAND = {
   primaryBtn: "bg-[#0b2b3c] hover:bg-[#092331] focus:ring-[#f5a11a]",
