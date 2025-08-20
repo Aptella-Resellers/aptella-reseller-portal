@@ -3,11 +3,10 @@ import React, { useEffect, useMemo, useState } from "react";
 // ============================================================
 // Aptella reseller portal (60-day window)
 // - LocalStorage persistence + optional Google Sheets sync via GAS
-// - Fixes included in this revision:
-//   • ReferenceError: syncOne is not defined (now passed to AdminPanel)
-//   • SyntaxError: Unterminated RegExp in exportCSV (uses /\n/g correctly)
-//   • Stray closing tag in errors.accept render (removed)
-// - Adds lightweight self-tests (run in console) to guard basics
+// - Evidence flow: links stored in Sheet, optional file Email/Drive via Apps Script
+// - Admin view gated with a simple password (frontend only)
+// - Stats moved to Admin only
+// - Fixes kept: syncOne wiring, CSV /\n replace, stray tag
 // ============================================================
 
 // --------------------- Google Sheets Setup -------------------
@@ -16,7 +15,10 @@ import React, { useEffect, useMemo, useState } from "react";
 //    - Execute as: Me   |   Who has access: Anyone with the link
 //    - Copy the Web app URL into GOOGLE_APPS_SCRIPT_URL below
 //
-// ---- BEGIN Apps Script (GAS) EXAMPLE ----
+// ---- BEGIN Apps Script (GAS) EXAMPLE (with optional email/Drive) ----
+// const APTELLA_EVIDENCE_EMAIL = "evidence@aptella.com"; // <- change
+// const DRIVE_FOLDER_ID = '';// optional: if set, files upload to this Drive folder
+//
 // function doPost(e) {
 //   const sheetName = "Registrations";
 //   const ss = SpreadsheetApp.getActive();
@@ -28,36 +30,64 @@ import React, { useEffect, useMemo, useState } from "react";
 //   ];
 //   if (sheet.getLastRow() === 0) sheet.appendRow(headers);
 //
-//   const body = JSON.parse(e.postData.contents);
+//   const body = JSON.parse(e.postData.contents || '{}');
 //   const records = body.records || [];
 //   const now = new Date();
-//   const rows = records.map(r => [
-//     r.id, r.submittedAt, r.status, r.resellerName, r.resellerContact, r.resellerEmail, r.resellerPhone,
-//     r.customerName, r.customerLocation, r.country, r.industry, r.currency, r.value, r.solution, r.stage, r.probability,
-//     r.expectedCloseDate, r.lockExpiry, (r.supports||[]).join("; "), (r.competitors||[]).join("; "), r.notes,
-//     (r.evidenceLinks||[]).join("; "), (r.evidenceFiles||[]).map(f=>f.name||f).join("; "), r.confidential?"Yes":"No", now
-//   ]);
-//   if (rows.length) sheet.getRange(sheet.getLastRow()+1, 1, rows.length, headers.length).setValues(rows);
-//   return ContentService.createTextOutput(JSON.stringify({ ok: true, appended: rows.length }))
+//   let appended = 0;
+//
+//   records.forEach(r => {
+//     // Optional: email attachments to Aptella
+//     const attachments = (r.attachments||[]).map(a => Utilities.newBlob(Utilities.base64Decode(a.data), a.type||'application/octet-stream', a.name||'file'));
+//     if (attachments.length && (r.emailEvidence || true) && typeof MailApp !== 'undefined') {
+//       const subject = `[Evidence] Registration ${r.id} – ${r.customerName||''}`;
+//       const bodyTxt = `Reseller: ${r.resellerName||''}\nContact: ${r.resellerContact||''} <${r.resellerEmail||''}>\nCustomer: ${r.customerName||''}\nLocation: ${r.customerLocation||''}\nSolution: ${r.solution||''}\n\nLinks:\n${(r.evidenceLinks||[]).join('\n')}`;
+//       MailApp.sendEmail({ to: APTELLA_EVIDENCE_EMAIL, subject, body: bodyTxt, attachments });
+//     }
+//
+//    // Optional: store files to Drive and append their URLs into evidenceLinks
+//     let driveLinks = [];
+//     if (attachments.length && DRIVE_FOLDER_ID) {
+//       const folder = DriveApp.getFolderById(DRIVE_FOLDER_ID);
+//       attachments.forEach(b => { const file = folder.createFile(b); driveLinks.push(file.getUrl()); });
+//     }
+//
+//     const row = [
+//       r.id, r.submittedAt, r.status, r.resellerName, r.resellerContact, r.resellerEmail, r.resellerPhone,
+//       r.customerName, r.customerLocation, r.country, r.industry, r.currency, r.value, r.solution, r.stage, r.probability,
+//       r.expectedCloseDate, r.lockExpiry, (r.supports||[]).join("; "), (r.competitors||[]).join("; "), r.notes,
+//       [ ...(r.evidenceLinks||[]), ...driveLinks ].join("; "), (r.evidenceFiles||[]).map(f=>f.name||f).join("; "), r.confidential?"Yes":"No", now
+//     ];
+//     sheet.getRange(sheet.getLastRow()+1, 1, 1, headers.length).setValues([row]);
+//     appended++;
+//   });
+//
+//   return ContentService.createTextOutput(JSON.stringify({ ok: true, appended }))
 //     .setMimeType(ContentService.MimeType.JSON);
 // }
-// function doGet(e) { // optional
+// function doGet() {
 //   const sheet = SpreadsheetApp.getActive().getSheetByName("Registrations");
-//   const values = sheet.getDataRange().getValues();
+//   const values = sheet ? sheet.getDataRange().getValues() : [];
 //   const [headers, ...rows] = values;
-//   const data = rows.map(r => Object.fromEntries(headers.map((h,i)=>[h, r[i]])));
+//   const data = (rows||[]).map(r => Object.fromEntries(headers.map((h,i)=>[h, r[i]])));
 //   return ContentService.createTextOutput(JSON.stringify({ ok: true, data }))
 //     .setMimeType(ContentService.MimeType.JSON);
 // }
 // ---- END Apps Script (GAS) EXAMPLE ----
 
 // -------------------------- Config ---------------------------
-const GOOGLE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbw3O_GnYcTx4bRYdFD2vCSs26L_Gzl2ZIZd18dyJmZAEE442hvhqp7j1C4W6cFX_DWM/exec"; // ← GAS Web App URL
-const GOOGLE_SHEET_VIEW_URL = "";   // ← optional viewer link
+const GOOGLE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwp6JmvlrSG8pmqNlRPZkQzcqm7JWgh6cBQZgzzkJ_enQ5ZRr_RfjDxjlqnn_RaHMUw/exec"; // ← GAS Web App URL
+const GOOGLE_SHEET_VIEW_URL = "";
+const __IMPORT_META__ = { env: {} }; // shim to avoid '__IMPORT_META__' parse errors   // ← optional viewer link
+const LOGO_URL = "/aptella-logo.png"; // Put your logo file in /public as aptella-logo.png
+
+// Admin gate (frontend-only; for strong security use real auth)
+const ADMIN_PASSWORD = "Aptella2025!";
+const APTELLA_EVIDENCE_EMAIL = (typeof importMetaEnv !== 'undefined' && importMetaEnv?.VITE_APTELLA_EVIDENCE_EMAIL) || (typeof import !== 'undefined' && __IMPORT_META__?.env?.VITE_APTELLA_EVIDENCE_EMAIL) || "evidence@aptella.com";
 
 const BRAND = {
-  primaryBtn: "bg-sky-700 hover:bg-sky-800 focus:ring-sky-300",
-  primaryText: "text-sky-800",
+  primaryBtn: "bg-[#0b2b3c] hover:bg-[#092331] focus:ring-[#f5a11a]",
+  primaryText: "text-[#0b2b3c]",
+  accent: "#f5a11a",
 };
 
 // ---------------------- Utility helpers ---------------------
@@ -132,6 +162,11 @@ function countryFromLocation(loc){
   return parts.length ? parts[parts.length-1].trim() : "";
 }
 
+function mailto(to, subject, body){
+  const href = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  window.location.href = href;
+}
+
 // ----------------------- CSV Export -------------------------
 function exportCSV(items) {
   const headers = [
@@ -152,32 +187,17 @@ function exportCSV(items) {
 }
 
 // ---------------- Google Sheets sync (GAS) ------------------
-async function sendToGoogleSheets(records) {
-  if (!GOOGLE_APPS_SCRIPT_URL) throw new Error("Google Apps Script URL not configured");
-  let res;
-  try {
-    res = await fetch(GOOGLE_APPS_SCRIPT_URL, {
-      method: "POST",
-      // No headers -> avoids CORS preflight
-      body: JSON.stringify({ records }),
-    });
-  } catch (netErr) {
-    // Network-level failure (blocked, DNS, mixed content, offline, etc.)
-    throw new Error(`Network error: ${netErr?.message || netErr}`);
-  }
-
-  // If server answered but not 200-range:
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    // Helpful when it’s actually an HTML login page
-    if (text.includes("<html") || text.includes("accounts.google.com")) {
-      throw new Error("Apps Script not public – set Web app to 'Anyone with the link' and redeploy.");
-    }
-    throw new Error(`Sheets sync failed (${res.status}) ${text ? "- " + text.slice(0,180) : ""}`);
-  }
-
-  const json = await res.json().catch(() => null);
-  if (!json || !json.ok) throw new Error("Sheets sync returned not ok / invalid JSON");
+async function sendToGoogleSheets(records){
+  if(!GOOGLE_APPS_SCRIPT_URL) throw new Error("Google Apps Script URL not configured");
+  const res = await fetch(GOOGLE_APPS_SCRIPT_URL,{
+    method:"POST",
+    // Tip: omit Content-Type to avoid CORS preflight if needed
+    // headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({ records }),
+  });
+  if(!res.ok) throw new Error(`Sheets sync failed (${res.status})`);
+  const json = await res.json().catch(()=>({ ok:false }));
+  if(!json.ok) throw new Error("Sheets sync returned not ok");
   return json;
 }
 
@@ -206,7 +226,23 @@ function Label({ children, htmlFor, required }) {
 function Input(props) { return (<input {...props} className={`w-full rounded-xl border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 ${props.className||""}`} />); }
 function Select({ children, ...props }) { return (<select {...props} className={`w-full rounded-xl border border-gray-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 ${props.className||""}`}>{children}</select>); }
 function Textarea(props) { return (<textarea {...props} className={`w-full rounded-xl border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 ${props.className||""}`} />); }
-function Badge({ children, tone = "gray" }) { const toneMap = { gray: "bg-gray-100 text-gray-700", green: "bg-green-100 text-green-700", red: "bg-red-100 text-red-700", indigo: "bg-indigo-100 text-indigo-700", yellow: "bg-yellow-100 text-yellow-800", blue: "bg-blue-100 text-blue-700" }; return <span className={`px-2.5 py-1 rounded-full text-xs ${toneMap[tone] || toneMap.gray}`}>{children}</span>; }
+function Badge({ children, tone = "gray" }) { const toneMap = { gray: "bg-gray-100 text-gray-700", green: "bg-green-100 text-green-700", red: "bg-red-100 text-red-700", indigo: "bg-indigo-100 text-indigo-700", yellow: "bg-yellow-100 text-yellow-800", blue: "bg-blue-100 text-blue-700", orange: "bg-orange-100 text-orange-800" }; return <span className={`px-2.5 py-1 rounded-full text-xs ${toneMap[tone] || toneMap.gray}`}>{children}</span>; }
+
+function Modal({ open, onClose, title, children }){
+  if(!open) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/30" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-xl max-w-lg w-full p-5">
+        <div className="flex items-start justify-between mb-3">
+          <h3 className="text-lg font-semibold">{title}</h3>
+          <button onClick={onClose} className="text-sm">✕</button>
+        </div>
+        <div className="max-h-[60vh] overflow-auto">{children}</div>
+      </div>
+    </div>
+  );
+}
 
 // ------------------- Main Application ----------------------
 export default function DealRegistrationPortal() {
@@ -268,13 +304,15 @@ export default function DealRegistrationPortal() {
     }
   }
 
+  function switchToAdmin(){ setMode('admin'); }
+  function switchToReseller(){ setMode('reseller'); }
+
   return (
     <div className="min-h-screen bg-slate-50">
       <header className="sticky top-0 z-10 backdrop-blur bg-white/80 border-b">
         <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            {/* Aptella Logo Mark */}
-            <div className="h-10 w-10 rounded-2xl flex items-center justify-center text-white font-bold shadow-sm" style={{background:"linear-gradient(135deg,#0ea5e9,#0369a1)"}}>A</div>
+            <img src={LOGO_URL} alt="Aptella" className="h-10" />
             <div>
               <div className="flex items-baseline gap-2">
                 <h1 className="text-2xl font-semibold tracking-tight">Aptella</h1>
@@ -284,30 +322,32 @@ export default function DealRegistrationPortal() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={()=>setMode("reseller")} className={`px-3 py-2 text-sm rounded-xl ${mode==='reseller'?`${BRAND.primaryBtn} text-white`:'bg-gray-100'}`}>Reseller Submit</button>
-            <button onClick={()=>setMode("admin")} className={`px-3 py-2 text-sm rounded-xl ${mode==='admin'?`${BRAND.primaryBtn} text-white`:'bg-gray-100'}`}>Admin View</button>
+            <button onClick={switchToReseller} className={`px-3 py-2 text-sm rounded-xl ${mode==='reseller'?`${BRAND.primaryBtn} text-white`:'bg-gray-100'}`}>Reseller Submit</button>
+            <button onClick={switchToAdmin} className={`px-3 py-2 text-sm rounded-xl ${mode==='admin'?`${BRAND.primaryBtn} text-white`:'bg-gray-100'}`}>Admin View</button>
           </div>
         </div>
-        <div className="h-1 w-full" style={{background:"linear-gradient(90deg,#0ea5e9,#22d3ee,#f59e0b)"}} />
+        <div className="h-1 w-full" style={{background:"linear-gradient(90deg,#f5a11a,#0b2b3c)"}} /> style={{background:"linear-gradient(90deg,#0ea5e9,#22d3ee,#f59e0b)"}} />
       </header>
 
       <main className="max-w-7xl mx-auto p-4 grid gap-6">
-        <StatsBar items={filtered} totalsByCurrency={totalsByCurrency} />
-
         {mode === "reseller" ? (
           <SubmissionForm onSave={(rec)=>setItems([rec, ...items])} items={items} onSyncOne={syncOne} />
         ) : (
-          <AdminPanel
-            items={filtered}
-            rawItems={items}
-            setItems={setItems}
-            currencyFilter={currencyFilter}
-            setCurrencyFilter={setCurrencyFilter}
-            search={search}
-            setSearch={setSearch}
-            onSyncMany={syncMany}
-            onSyncOne={syncOne}
-          />
+          <AdminGate>
+            {/* Stats visible in Admin only */}
+            <StatsBar items={filtered} totalsByCurrency={totalsByCurrency} />
+            <AdminPanel
+              items={filtered}
+              rawItems={items}
+              setItems={setItems}
+              currencyFilter={currencyFilter}
+              setCurrencyFilter={setCurrencyFilter}
+              search={search}
+              setSearch={setSearch}
+              onSyncMany={syncMany}
+              onSyncOne={syncOne}
+            />
+          </AdminGate>
         )}
 
         <Card>
@@ -334,6 +374,27 @@ export default function DealRegistrationPortal() {
         <ResellerUpdates items={items} setItems={setItems} />
       </main>
     </div>
+  );
+}
+
+function AdminGate({ children }){
+  const [authed, setAuthed] = useState(()=> localStorage.getItem('aptella_admin_ok')==='1');
+  const [pw, setPw] = useState('');
+  const [err, setErr] = useState('');
+  if(authed) return children;
+  function unlock(){ if(pw===ADMIN_PASSWORD){ localStorage.setItem('aptella_admin_ok','1'); setAuthed(true); } else { setErr('Incorrect password'); } }
+  return (
+    <Card>
+      <CardHeader title="Admin Login" subtitle="Enter password to access admin view." />
+      <CardBody>
+        <div className="flex gap-2">
+          <Input type="password" placeholder="Enter admin password" value={pw} onChange={(e)=>setPw(e.target.value)} />
+          <button onClick={unlock} className={`px-3 py-2 rounded-xl text-white text-sm ${BRAND.primaryBtn}`}>Unlock</button>
+        </div>
+        {err && <p className="text-xs text-red-600 mt-2">{err}</p>}
+        <p className="text-xs text-gray-500 mt-3">Note: This is a simple client-side gate. For stronger security, use an authenticated backend.</p>
+      </CardBody>
+    </Card>
   );
 }
 
@@ -372,6 +433,7 @@ function AdminPanel({ items, rawItems, setItems, currencyFilter, setCurrencyFilt
   const [stageFilter, setStageFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [countryFilter, setCountryFilter] = useState("all");
+  const [evidenceFor, setEvidenceFor] = useState(null); // record
 
   const countries = useMemo(() => {
     const set = new Set();
@@ -391,8 +453,8 @@ function AdminPanel({ items, rawItems, setItems, currencyFilter, setCurrencyFilt
   function remove(id) { if (!confirm("Delete this registration? This cannot be undone.")) return; setItems(rawItems.filter(x => x.id !== id)); }
 
   function rowTone(x){
-    const isApproaching = x.status === 'approved' && daysUntil(x.lockExpiry) <= 7 && daysUntil(x.lockExpiry) >= 0;
-    if (isApproaching) return 'orange';
+    const approaching = x.status === 'approved' && daysUntil(x.lockExpiry) <= 7 && daysUntil(x.lockExpiry) >= 0;
+    if (approaching) return 'orange';
     if (x.status === 'approved') return 'green';
     if (x.status === 'rejected' || x.stage === 'lost') return 'red';
     if (x.status === 'pending') return 'blue';
@@ -446,6 +508,7 @@ function AdminPanel({ items, rawItems, setItems, currencyFilter, setCurrencyFilt
                 <th className="p-3 text-left">Customer</th>
                 <th className="p-3 text-left">Country</th>
                 <th className="p-3 text-left">Solution</th>
+                <th className="p-3 text-left">Evidence</th>
                 <th className="p-3 text-left">Value</th>
                 <th className="p-3 text-left">Stage</th>
                 <th className="p-3 text-left">Status</th>
@@ -469,6 +532,11 @@ function AdminPanel({ items, rawItems, setItems, currencyFilter, setCurrencyFilt
                   </td>
                   <td className="p-3">{x.country || '-'}</td>
                   <td className="p-3">{x.solution}</td>
+                  <td className="p-3">
+                    {(x.evidenceLinks?.length || x.evidenceFiles?.length) ? (
+                      <button className="underline text-sky-700" onClick={()=>setEvidenceFor(x)}>View</button>
+                    ) : '—'}
+                  </td>
                   <td className="p-3 whitespace-nowrap">{x.currency} {toCurrency(x.value)}</td>
                   <td className="p-3"><Badge tone="blue">{STAGES.find(s=>s.key===x.stage)?.label || x.stage}</Badge></td>
                   <td className="p-3">
@@ -496,12 +564,44 @@ function AdminPanel({ items, rawItems, setItems, currencyFilter, setCurrencyFilt
               ))}
               {visible.length === 0 && (
                 <tr>
-                  <td colSpan={12} className="p-6 text-center text-gray-500">No registrations match your filters.</td>
+                  <td colSpan={13} className="p-6 text-center text-gray-500">No registrations match your filters.</td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
+
+        <Modal open={!!evidenceFor} onClose={()=>setEvidenceFor(null)} title={`Evidence – ${evidenceFor?.id || ''}`}>
+          {evidenceFor && (
+            <div className="space-y-4">
+              <div>
+                <div className="font-medium mb-1">Links</div>
+                {(evidenceFor.evidenceLinks||[]).length ? (
+                  <ul className="list-disc pl-6 text-sm">
+                    {evidenceFor.evidenceLinks.map((l,i)=>(
+                      <li key={i}><a className="text-sky-700 underline" href={l} target="_blank" rel="noreferrer">{l}</a></li>
+                    ))}
+                  </ul>
+                ) : <div className="text-sm text-gray-500">No links provided.</div>}
+              </div>
+              <div>
+                <div className="font-medium mb-1">Uploaded files</div>
+                {(evidenceFor.evidenceFiles||[]).length ? (
+                  <ul className="list-disc pl-6 text-sm">
+                    {evidenceFor.evidenceFiles.map((f,i)=>(<li key={i}>{typeof f==='string'?f:(f?.name||'file')}</li>))}
+                  </ul>
+                ) : <div className="text-sm text-gray-500">No file names stored (files aren’t kept client-side after submit).</div>}
+                <p className="text-xs text-gray-500 mt-1">New submissions can automatically email attachments to Aptella if the reseller opts in.</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button onClick={()=>mailto(APTELLA_EVIDENCE_EMAIL, `Evidence for ${evidenceFor.id}`, `Links:\n${(evidenceFor.evidenceLinks||[]).join('\n')}\n\nCustomer: ${evidenceFor.customerName}\nReseller: ${evidenceFor.resellerName}`)} className={`px-3 py-2 rounded-xl text-white text-sm ${BRAND.primaryBtn}`}>Email links to Aptella</button>
+                {evidenceFor.resellerEmail && (
+                  <button onClick={()=>mailto(evidenceFor.resellerEmail, `Request files for registration ${evidenceFor.id}`, `Hi ${evidenceFor.resellerContact||''},\n\nPlease reply with the missing evidence files for your registration ${evidenceFor.id}.\nCustomer: ${evidenceFor.customerName}\nThanks!`)} className="px-3 py-2 rounded-xl bg-gray-200 text-sm">Request files from reseller</button>
+                )}
+              </div>
+            </div>
+          )}
+        </Modal>
       </CardBody>
     </Card>
   );
@@ -531,6 +631,7 @@ function SubmissionForm({ onSave, items, onSyncOne }) {
     notes: "",
     evidenceLinks: [],
     evidenceFiles: [],
+    emailEvidence: true, // NEW: email attachments to Aptella via GAS
     confidential: false,
     remindersOptIn: false,
     accept: false,
@@ -595,26 +696,61 @@ function SubmissionForm({ onSave, items, onSyncOne }) {
       notes: "",
       evidenceLinks: [],
       evidenceFiles: [],
+      emailEvidence: true,
       confidential: false,
       accept: false,
     });
     setErrors({}); setDupWarning(""); const el = document.getElementById("evidenceFiles"); if (el) el.value = "";
   }
 
+  function filesToBase64(files){
+    const MAX_TOTAL = 20 * 1024 * 1024; // 20MB safety
+    let total = 0;
+    const readers = (files||[]).map(f => new Promise((resolve, reject) => {
+      const fr = new FileReader();
+      fr.onload = () => {
+        const res = String(fr.result||'');
+        const base64 = res.split(',')[1] || '';
+        total += base64.length * 0.75; // rough bytes
+        resolve({ name:f.name, type:f.type||'application/octet-stream', data: base64 });
+      };
+      fr.onerror = reject;
+      fr.readAsDataURL(f);
+    }));
+    return Promise.all(readers).then(arr => { if(total>MAX_TOTAL) throw new Error('Attachments exceed 20MB total.'); return arr; });
+  }
+
   async function submit(e) {
     e.preventDefault();
     if (!validate()) return;
 
-    const record = {
+    const baseRecord = {
       id: uid(), submittedAt: todayLocalISO(), status: "pending", lockExpiry: null, syncedAt: null,
       ...form, value: Number(form.value), country: form.country,
     };
 
-    onSave(record);
+    // Record to keep locally (no heavy attachments)
+    const localRecord = { ...baseRecord };
+    delete localRecord.attachments;
+
+    // Record to send to GAS (optional attachments)
+    let payloadRecord = { ...baseRecord };
+    try {
+      if (form.emailEvidence && (form.evidenceFiles?.length||0) > 0) {
+        const attachments = await filesToBase64(form.evidenceFiles);
+        payloadRecord.attachments = attachments;
+        payloadRecord.emailEvidence = true;
+      }
+    } catch (err) {
+      alert(`File processing error: ${err.message||err}`);
+      return;
+    }
+
+    onSave(localRecord);
 
     if (typeof onSyncOne === 'function') {
       try {
-        const res = await onSyncOne(record);
+        const res = await onSyncOne(payloadRecord);
         if (res?.ok) alert("Submitted and synced to Google Sheets.");
         else if (GOOGLE_APPS_SCRIPT_URL) alert(`Submitted locally. Google Sheets sync failed: ${res?.reason||'unknown error'}`);
       } catch (err) {
@@ -696,6 +832,26 @@ function SubmissionForm({ onSave, items, onSyncOne }) {
           </div>
 
           <div className="grid md:grid-cols-3 gap-4">
+            <div className="grid gap-2 md:col-span-2">
+              <Label required>Solution offered (Xgrids)</Label>
+              <div className="grid gap-2">
+                <Select value={form.solution||""} onChange={e=>setForm(f=>({...f, solution: e.target.value}))}>
+                  <option value="">Select an Xgrids solution</option>
+                  {XGRIDS_SOLUTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+                </Select>
+                <Input id="solution" name="solution" value={form.solution||""} onChange={e=>setForm(f=>({...f, solution:e.target.value}))} placeholder="Or type Xgrids solution details" />
+                <a className="text-sky-700 underline text-xs" href="https://www.aptella.com/asia/product-brands/xgrids-asia/" target="_blank">Learn about Xgrids solutions</a>
+              </div>
+              {errors.solution && <p className="text-xs text-red-600">{errors.solution}</p>}
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="expectedCloseDate" required>Expected close date</Label>
+              <Input id="expectedCloseDate" name="expectedCloseDate" type="date" value={form.expectedCloseDate} onChange={handleChange} />
+              {errors.expectedCloseDate && <p className="text-xs text-red-600">{errors.expectedCloseDate}</p>}
+            </div>
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-4">
             <div className="grid gap-2">
               <Label htmlFor="industry">Industry</Label>
               <Select id="industry" name="industry" value={form.industry} onChange={handleChange}>
@@ -713,26 +869,6 @@ function SubmissionForm({ onSave, items, onSyncOne }) {
               <Label htmlFor="value" required>Deal value</Label>
               <Input id="value" name="value" type="number" step="0.01" min="0" value={form.value} onChange={handleChange} placeholder="e.g., 25000" />
               {errors.value && <p className="text-xs text-red-600">{errors.value}</p>}
-            </div>
-          </div>
-
-          <div className="grid md:grid-cols-3 gap-4">
-            <div className="grid gap-2 md:col-span-2">
-              <Label required>Solution offered (Xgrids)</Label>
-              <div className="grid gap-2">
-                <Select value={form.solution||""} onChange={e=>setForm(f=>({...f, solution: e.target.value}))}>
-                  <option value="">Select an Xgrids solution</option>
-                  {XGRIDS_SOLUTIONS.map(s => <option key={s} value={s}>{s}</option>)}
-                </Select>
-                <Input id="solution" name="solution" value={form.solution||""} onChange={e=>setForm(f=>({...f, solution:e.target.value}))} placeholder="Or type Xgrids solution details" />
-                <a className="text-sky-700 underline text-xs" href="https://www.aptella.com/asia/product-brands/xgrids-asia/" target="_blank">Learn about Xgrids solutions</a>
-              </div>
-              {errors.solution && <p className="text-xs text-red-600">{errors.solution}</p>}
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="expectedCloseDate" required>Expected close date</Label>
-              <Input id="expectedCloseDate" name="expectedCloseDate" type="date" value={form.expectedCloseDate} onChange={handleChange} />
-              {errors.expectedCloseDate && <p className="text-xs text-red-600">{errors.expectedCloseDate}</p>}
             </div>
           </div>
 
@@ -778,9 +914,13 @@ function SubmissionForm({ onSave, items, onSyncOne }) {
             </div>
             {form.evidenceLinks?.length>0 && (
               <ul className="list-disc pl-6 text-sm text-gray-700">
-                {form.evidenceLinks.map((l,i)=> <li key={i}><a href={l} target="_blank" className="text-sky-700 underline">{l}</a></li>)}
+                {form.evidenceLinks.map((l,i)=> <li key={i}><a href={l} target="_blank" className="text-sky-700 underline" rel="noreferrer">{l}</a></li>)}
               </ul>
             )}
+            <label className="flex items-center gap-2 text-sm mt-1">
+              <input type="checkbox" checked={!!form.emailEvidence} onChange={e=>setForm(f=>({...f, emailEvidence: e.target.checked}))} />
+              Email attached files to Aptella ({APTELLA_EVIDENCE_EMAIL}) via secure Apps Script
+            </label>
             {errors.evidence && <p className="text-xs text-red-600">{errors.evidence}</p>}
           </div>
 
