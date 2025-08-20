@@ -16,7 +16,7 @@ import React, { useEffect, useMemo, useState } from "react";
 //    - Copy the Web app URL into GOOGLE_APPS_SCRIPT_URL below
 //
 // ---- BEGIN Apps Script (GAS) EXAMPLE (with optional email/Drive) ----
-// const APTELLA_EVIDENCE_EMAIL = "evidence@aptella.com"; // <- change
+// const APTELLA_EVIDENCE_EMAIL = (__IMPORT_META__ && __IMPORT_META__.env && __IMPORT_META__.env.VITE_APTELLA_EVIDENCE_EMAIL) || "evidence@aptella.com"; // <- change
 // const DRIVE_FOLDER_ID = '';// optional: if set, files upload to this Drive folder
 //
 // function doPost(e) {
