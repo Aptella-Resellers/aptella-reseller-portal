@@ -1,4 +1,23 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { $1 } from "react";
+
+// Simple error boundary so blank-page errors render visibly
+class ErrorCatcher extends React.Component {
+  constructor(props){ super(props); this.state = { err: null }; }
+  static getDerivedStateFromError(error){ return { err: error }; }
+  componentDidCatch(error, info){ console.error("App error:", error, info); }
+  render(){
+    if (this.state.err) {
+      return (
+        <div className="max-w-3xl mx-auto my-8 p-4 rounded-xl border border-red-200 bg-red-50 text-red-800">
+          <div className="font-semibold mb-2">The app hit an error:</div>
+          <pre className="whitespace-pre-wrap text-xs">{String(this.state.err)}</pre>
+          <div className="mt-2 text-xs text-red-700">Open your browser console for full stack traces.</div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 // ============================================================
 // Aptella reseller portal (60-day window)
@@ -16,7 +35,7 @@ import React, { useEffect, useMemo, useState } from "react";
 //    - Copy the Web app URL into GOOGLE_APPS_SCRIPT_URL below
 //
 // ---- BEGIN Apps Script (GAS) EXAMPLE (with optional email/Drive) ----
-// const APTELLA_EVIDENCE_EMAIL = (__IMPORT_META__ && __IMPORT_META__.env && __IMPORT_META__.env.VITE_APTELLA_EVIDENCE_EMAIL) || "evidence@aptella.com"; // <- change
+// const APTELLA_EVIDENCE_EMAIL = "evidence@aptella.com"; // <- change
 // const DRIVE_FOLDER_ID = '';// optional: if set, files upload to this Drive folder
 //
 // function doPost(e) {
@@ -78,11 +97,17 @@ import React, { useEffect, useMemo, useState } from "react";
 const GOOGLE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwp6JmvlrSG8pmqNlRPZkQzcqm7JWgh6cBQZgzzkJ_enQ5ZRr_RfjDxjlqnn_RaHMUw/exec"; // ← GAS Web App URL
 const GOOGLE_SHEET_VIEW_URL = "";
 const __IMPORT_META__ = { env: {} }; // shim to avoid '__IMPORT_META__' parse errors   // ← optional viewer link
-const LOGO_URL = "/aptella-logo.png"; // Put your logo file in /public as aptella-logo.png
+const BASE_PATH = (() => {
+  const base = document.querySelector('base')?.getAttribute('href');
+  if (base) return base.endsWith('/') ? base : base + '/';
+  const p = window.location.pathname;
+  return p.endsWith('/') ? p : p + '/';
+})();
+const LOGO_URL = BASE_PATH + "aptella-logo.png"; // Put your logo file in /public as aptella-logo.png
 
 // Admin gate (frontend-only; for strong security use real auth)
 const ADMIN_PASSWORD = "Aptella2025!";
-const APTELLA_EVIDENCE_EMAIL = "evidence@aptella.com";
+const APTELLA_EVIDENCE_EMAIL = (typeof importMetaEnv !== 'undefined' && importMetaEnv?.VITE_APTELLA_EVIDENCE_EMAIL) || (typeof import !== 'undefined' && __IMPORT_META__?.env?.VITE_APTELLA_EVIDENCE_EMAIL) || "evidence@aptella.com";
 
 const BRAND = {
   primaryBtn: "bg-[#0b2b3c] hover:bg-[#092331] focus:ring-[#f5a11a]",
@@ -326,10 +351,11 @@ export default function DealRegistrationPortal() {
             <button onClick={switchToAdmin} className={`px-3 py-2 text-sm rounded-xl ${mode==='admin'?`${BRAND.primaryBtn} text-white`:'bg-gray-100'}`}>Admin View</button>
           </div>
         </div>
-        <div className="h-1 w-full" style={{background:"linear-gradient(90deg,#f5a11a,#0b2b3c)"}} /> style={{background:"linear-gradient(90deg,#0ea5e9,#22d3ee,#f59e0b)"}} />
+        <div className="h-1 w-full" style={{background:"linear-gradient(90deg,#f5a11a,#0b2b3c)"}} />
       </header>
 
-      <main className="max-w-7xl mx-auto p-4 grid gap-6">
+      <ErrorCatcher>
+        <main className="max-w-7xl mx-auto p-4 grid gap-6">
         {mode === "reseller" ? (
           <SubmissionForm onSave={(rec)=>setItems([rec, ...items])} items={items} onSyncOne={syncOne} />
         ) : (
@@ -373,6 +399,7 @@ export default function DealRegistrationPortal() {
 
         <ResellerUpdates items={items} setItems={setItems} />
       </main>
+        </ErrorCatcher>
     </div>
   );
 }
