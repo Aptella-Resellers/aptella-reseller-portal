@@ -82,7 +82,7 @@ const LOGO_URL = "/aptella-logo.png"; // Put your logo file in /public as aptell
 
 // Admin gate (frontend-only; for strong security use real auth)
 const ADMIN_PASSWORD = "Aptella2025!";
-const APTELLA_EVIDENCE_EMAIL = (typeof importMetaEnv !== 'undefined' && importMetaEnv?.VITE_APTELLA_EVIDENCE_EMAIL) || (typeof import !== 'undefined' && __IMPORT_META__?.env?.VITE_APTELLA_EVIDENCE_EMAIL) || "evidence@aptella.com";
+const APTELLA_EVIDENCE_EMAIL = "evidence@aptella.com";
 
 const BRAND = {
   primaryBtn: "bg-[#0b2b3c] hover:bg-[#092331] focus:ring-[#f5a11a]",
