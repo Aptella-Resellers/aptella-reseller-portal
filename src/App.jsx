@@ -10,7 +10,46 @@ import React, { useEffect, useMemo, useState } from "react";
 // - Adds lightweight self-tests (run in console) to guard basics
 // ============================================================
 
-
+// --------------------- Google Sheets Setup -------------------
+// 1) Create a Google Sheet and a tab named "Registrations".
+// 2) Extensions → Apps Script → paste the code below → Deploy → Web app
+//    - Execute as: Me   |   Who has access: Anyone with the link
+//    - Copy the Web app URL into GOOGLE_APPS_SCRIPT_URL below
+//
+// ---- BEGIN Apps Script (GAS) EXAMPLE ----
+// function doPost(e) {
+//   const sheetName = "Registrations";
+//   const ss = SpreadsheetApp.getActive();
+//   const sheet = ss.getSheetByName(sheetName) || ss.insertSheet(sheetName);
+//   const headers = [
+//     "id","submittedAt","status","resellerName","resellerContact","resellerEmail","resellerPhone",
+//     "customerName","customerLocation","country","industry","currency","value","solution","stage","probability",
+//     "expectedCloseDate","lockExpiry","supports","competitors","notes","evidenceLinks","evidenceFiles","confidential","syncedAt"
+//   ];
+//   if (sheet.getLastRow() === 0) sheet.appendRow(headers);
+//
+//   const body = JSON.parse(e.postData.contents);
+//   const records = body.records || [];
+//   const now = new Date();
+//   const rows = records.map(r => [
+//     r.id, r.submittedAt, r.status, r.resellerName, r.resellerContact, r.resellerEmail, r.resellerPhone,
+//     r.customerName, r.customerLocation, r.country, r.industry, r.currency, r.value, r.solution, r.stage, r.probability,
+//     r.expectedCloseDate, r.lockExpiry, (r.supports||[]).join("; "), (r.competitors||[]).join("; "), r.notes,
+//     (r.evidenceLinks||[]).join("; "), (r.evidenceFiles||[]).map(f=>f.name||f).join("; "), r.confidential?"Yes":"No", now
+//   ]);
+//   if (rows.length) sheet.getRange(sheet.getLastRow()+1, 1, rows.length, headers.length).setValues(rows);
+//   return ContentService.createTextOutput(JSON.stringify({ ok: true, appended: rows.length }))
+//     .setMimeType(ContentService.MimeType.JSON);
+// }
+// function doGet(e) { // optional
+//   const sheet = SpreadsheetApp.getActive().getSheetByName("Registrations");
+//   const values = sheet.getDataRange().getValues();
+//   const [headers, ...rows] = values;
+//   const data = rows.map(r => Object.fromEntries(headers.map((h,i)=>[h, r[i]])));
+//   return ContentService.createTextOutput(JSON.stringify({ ok: true, data }))
+//     .setMimeType(ContentService.MimeType.JSON);
+// }
+// ---- END Apps Script (GAS) EXAMPLE ----
 
 // -------------------------- Config ---------------------------
 const GOOGLE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbw3O_GnYcTx4bRYdFD2vCSs26L_Gzl2ZIZd18dyJmZAEE442hvhqp7j1C4W6cFX_DWM/exec"; // ← GAS Web App URL
@@ -48,12 +87,12 @@ const INDUSTRIES = [
 
 // Xgrids solutions (curated)
 const XGRIDS_SOLUTIONS = [
-  "Xgrids L2 Pro",
+  "Xgrids L2 PRO",
   "Xgrids K1",
   "Xgrids PortalCam",
   "Xgrids Drone Kit",
-  "Navvsi VLX2",
-  "Navvis VL3",
+  "Navvis VLX2",
+  "Navvis VLX3",
   "Navvis MLX"
 ];
 
@@ -580,7 +619,7 @@ function SubmissionForm({ onSave, items, onSyncOne }) {
           <div className="grid md:grid-cols-2 gap-4">
             <div className="grid gap-2">
               <Label htmlFor="resellerName" required>Reseller company</Label>
-              <Input id="resellerName" name="resellerName" value={form.resellerName} onChange={handleChange} placeholder="e.g., PT Alpha Solutions" />
+              <Input id="resellerName" name="resellerName" value={form.resellerName} onChange={handleChange} placeholder="e.g., Alpha Solutions Pte Ltd" />
               {errors.resellerName && <p className="text-xs text-red-600">{errors.resellerName}</p>}
             </div>
             <div className="grid gap-2">
