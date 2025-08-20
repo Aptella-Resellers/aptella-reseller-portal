@@ -1,0 +1,9 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Optional brand tweaks */
+:root {
+  --aptella: #0b2b3c;
+  --gold: #f5a11a;
+}
