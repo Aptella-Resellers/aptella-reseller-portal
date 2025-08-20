@@ -152,16 +152,32 @@ function exportCSV(items) {
 }
 
 // ---------------- Google Sheets sync (GAS) ------------------
-async function sendToGoogleSheets(records){
-  if(!GOOGLE_APPS_SCRIPT_URL) throw new Error("Google Apps Script URL not configured");
-  const res = await fetch(GOOGLE_APPS_SCRIPT_URL,{
-    method:"POST",
-    headers:{"Content-Type":"application/json"},
-    body: JSON.stringify({ records }),
-  });
-  if(!res.ok) throw new Error(`Sheets sync failed (${res.status})`);
-  const json = await res.json().catch(()=>({ ok:false }));
-  if(!json.ok) throw new Error("Sheets sync returned not ok");
+async function sendToGoogleSheets(records) {
+  if (!GOOGLE_APPS_SCRIPT_URL) throw new Error("Google Apps Script URL not configured");
+  let res;
+  try {
+    res = await fetch(GOOGLE_APPS_SCRIPT_URL, {
+      method: "POST",
+      // No headers -> avoids CORS preflight
+      body: JSON.stringify({ records }),
+    });
+  } catch (netErr) {
+    // Network-level failure (blocked, DNS, mixed content, offline, etc.)
+    throw new Error(`Network error: ${netErr?.message || netErr}`);
+  }
+
+  // If server answered but not 200-range:
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    // Helpful when it’s actually an HTML login page
+    if (text.includes("<html") || text.includes("accounts.google.com")) {
+      throw new Error("Apps Script not public – set Web app to 'Anyone with the link' and redeploy.");
+    }
+    throw new Error(`Sheets sync failed (${res.status}) ${text ? "- " + text.slice(0,180) : ""}`);
+  }
+
+  const json = await res.json().catch(() => null);
+  if (!json || !json.ok) throw new Error("Sheets sync returned not ok / invalid JSON");
   return json;
 }
 
