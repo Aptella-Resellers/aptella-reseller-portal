@@ -1,4 +1,4 @@
-import React, { $1 } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 
 // Simple error boundary so blank-page errors render visibly
 class ErrorCatcher extends React.Component {
@@ -19,14 +19,6 @@ class ErrorCatcher extends React.Component {
   }
 }
 
-// ============================================================
-// Aptella reseller portal (60-day window)
-// - LocalStorage persistence + optional Google Sheets sync via GAS
-// - Evidence flow: links stored in Sheet, optional file Email/Drive via Apps Script
-// - Admin view gated with a simple password (frontend only)
-// - Stats moved to Admin only
-// - Fixes kept: syncOne wiring, CSV /\n replace, stray tag
-// ============================================================
 
 // --------------------- Google Sheets Setup -------------------
 // 1) Create a Google Sheet and a tab named "Registrations".
@@ -34,64 +26,6 @@ class ErrorCatcher extends React.Component {
 //    - Execute as: Me   |   Who has access: Anyone with the link
 //    - Copy the Web app URL into GOOGLE_APPS_SCRIPT_URL below
 //
-// ---- BEGIN Apps Script (GAS) EXAMPLE (with optional email/Drive) ----
-// const APTELLA_EVIDENCE_EMAIL = "evidence@aptella.com"; // <- change
-// const DRIVE_FOLDER_ID = '';// optional: if set, files upload to this Drive folder
-//
-// function doPost(e) {
-//   const sheetName = "Registrations";
-//   const ss = SpreadsheetApp.getActive();
-//   const sheet = ss.getSheetByName(sheetName) || ss.insertSheet(sheetName);
-//   const headers = [
-//     "id","submittedAt","status","resellerName","resellerContact","resellerEmail","resellerPhone",
-//     "customerName","customerLocation","country","industry","currency","value","solution","stage","probability",
-//     "expectedCloseDate","lockExpiry","supports","competitors","notes","evidenceLinks","evidenceFiles","confidential","syncedAt"
-//   ];
-//   if (sheet.getLastRow() === 0) sheet.appendRow(headers);
-//
-//   const body = JSON.parse(e.postData.contents || '{}');
-//   const records = body.records || [];
-//   const now = new Date();
-//   let appended = 0;
-//
-//   records.forEach(r => {
-//     // Optional: email attachments to Aptella
-//     const attachments = (r.attachments||[]).map(a => Utilities.newBlob(Utilities.base64Decode(a.data), a.type||'application/octet-stream', a.name||'file'));
-//     if (attachments.length && (r.emailEvidence || true) && typeof MailApp !== 'undefined') {
-//       const subject = `[Evidence] Registration ${r.id} – ${r.customerName||''}`;
-//       const bodyTxt = `Reseller: ${r.resellerName||''}\nContact: ${r.resellerContact||''} <${r.resellerEmail||''}>\nCustomer: ${r.customerName||''}\nLocation: ${r.customerLocation||''}\nSolution: ${r.solution||''}\n\nLinks:\n${(r.evidenceLinks||[]).join('\n')}`;
-//       MailApp.sendEmail({ to: APTELLA_EVIDENCE_EMAIL, subject, body: bodyTxt, attachments });
-//     }
-//
-//    // Optional: store files to Drive and append their URLs into evidenceLinks
-//     let driveLinks = [];
-//     if (attachments.length && DRIVE_FOLDER_ID) {
-//       const folder = DriveApp.getFolderById(DRIVE_FOLDER_ID);
-//       attachments.forEach(b => { const file = folder.createFile(b); driveLinks.push(file.getUrl()); });
-//     }
-//
-//     const row = [
-//       r.id, r.submittedAt, r.status, r.resellerName, r.resellerContact, r.resellerEmail, r.resellerPhone,
-//       r.customerName, r.customerLocation, r.country, r.industry, r.currency, r.value, r.solution, r.stage, r.probability,
-//       r.expectedCloseDate, r.lockExpiry, (r.supports||[]).join("; "), (r.competitors||[]).join("; "), r.notes,
-//       [ ...(r.evidenceLinks||[]), ...driveLinks ].join("; "), (r.evidenceFiles||[]).map(f=>f.name||f).join("; "), r.confidential?"Yes":"No", now
-//     ];
-//     sheet.getRange(sheet.getLastRow()+1, 1, 1, headers.length).setValues([row]);
-//     appended++;
-//   });
-//
-//   return ContentService.createTextOutput(JSON.stringify({ ok: true, appended }))
-//     .setMimeType(ContentService.MimeType.JSON);
-// }
-// function doGet() {
-//   const sheet = SpreadsheetApp.getActive().getSheetByName("Registrations");
-//   const values = sheet ? sheet.getDataRange().getValues() : [];
-//   const [headers, ...rows] = values;
-//   const data = (rows||[]).map(r => Object.fromEntries(headers.map((h,i)=>[h, r[i]])));
-//   return ContentService.createTextOutput(JSON.stringify({ ok: true, data }))
-//     .setMimeType(ContentService.MimeType.JSON);
-// }
-// ---- END Apps Script (GAS) EXAMPLE ----
 
 // -------------------------- Config ---------------------------
 const GOOGLE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwp6JmvlrSG8pmqNlRPZkQzcqm7JWgh6cBQZgzzkJ_enQ5ZRr_RfjDxjlqnn_RaHMUw/exec"; // ← GAS Web App URL
