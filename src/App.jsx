@@ -4,43 +4,41 @@ import React, { useEffect, useMemo, useState } from "react";
 function AdminSettings({ open, onClose, ratesAUD = {}, onSave, saving }) {
   const [local, setLocal] = React.useState(ratesAUD || {});
   React.useEffect(() => { setLocal(ratesAUD || {}); }, [ratesAUD, open]);
-  const entries = Object.entries(local);
   if (!open) return null;
+  const entries = Object.entries(local);
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center">
       <div className="bg-white rounded-2xl shadow-xl w-[min(680px,95vw)] p-6">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold">FX Rates to AUD</h3>
-          <button
-                  onClick={() => mailto(
-                    APTELLA_EVIDENCE_EMAIL,
-                    `Evidence for ${evidenceFor.id}`,
-                    `Links:
-${(evidenceFor.evidenceLinks||[]).join('\n')}
-
-Customer: ${evidenceFor.customerName}
-Reseller: ${evidenceFor.resellerName}`
-                  )}
-                  className={`px-3 py-2 rounded-xl text-white text-sm ${BRAND.primaryBtn}`}
-                >
-                  Email links to Aptella
-                </button>
-                {evidenceFor.resellerEmail && (
-                  <button onClick={()=>mailto(evidenceFor.resellerEmail, `Request files for registration ${evidenceFor.id}`, `Hi ${evidenceFor.resellerContact||''},
-
-Please reply with the missing evidence files for your registration ${evidenceFor.id}.
-Customer: ${evidenceFor.customerName}
-Thanks!`)} className="px-3 py-2 rounded-xl bg-gray-200 text-sm">Request files from reseller</button>
-                )}
-              </div>
+          <button onClick={onClose} className="px-2 py-1 rounded-lg bg-gray-100">Close</button>
+        </div>
+        <div className="space-y-2 max-h-[60vh] overflow-auto">
+          <div className="grid grid-cols-3 gap-2 text-sm font-medium">
+            <div>Currency</div><div>Rate to AUD</div><div></div>
+          </div>
+          {entries.map(([cur,val]) => (
+            <div key={cur} className="grid grid-cols-3 gap-2 items-center">
+              <input className="border rounded-md px-2 py-1 uppercase" value={cur}
+                onChange={(e)=>{
+                  const newCur = e.target.value.toUpperCase();
+                  setLocal(prev=>{ const {[cur]:_, ...rest}=prev; return {...rest, [newCur]: val}; });
+                }} />
+              <input className="border rounded-md px-2 py-1" type="number" step="0.000001" value={val}
+                onChange={(e)=> setLocal(prev=> ({ ...prev, [cur]: Number(e.target.value) }))} />
+              <button className="text-red-600 text-sm" onClick={()=> setLocal(prev=>{ const cp={...prev}; delete cp[cur]; return cp; })}>Remove</button>
             </div>
-          )}
-        </Modal>
-      </CardBody>
-    </Card>
+          ))}
+          <button className="text-sm px-3 py-1 rounded-md bg-gray-100" onClick={()=> setLocal(prev=> ({ ...prev, USD: prev.USD || 0.67 }))}>Add Row</button>
+        </div>
+        <div className="mt-4 flex justify-end gap-2">
+          <button onClick={onClose} className="px-3 py-1.5 rounded-lg bg-gray-100">Cancel</button>
+          <button disabled={saving} onClick={()=> onSave(local)} className={`px-3 py-1.5 rounded-lg text-white ${BRAND?.primaryBtn || 'bg-slate-800'}`}>{saving? 'Saving…' : 'Save'}</button>
+        </div>
+      </div>
+    </div>
   );
 }
-
 
 function SubmissionForm({ onSave, items, onSyncOne, onLocaleChange }) {
   const [form, setForm] = useState({
