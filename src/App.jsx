@@ -87,6 +87,13 @@ const XGRIDS_SOLUTIONS = [
   "Navvis MLX"
 ];
 
+const COUNTRY_CONFIG = {
+  Indonesia: { currency: "IDR", capital: "Jakarta" },
+  Malaysia: { currency: "MYR", capital: "Kuala Lumpur" },
+  Philippines: { currency: "PHP", capital: "Manila" },
+  Singapore: { currency: "SGD", capital: "Singapore" },
+};
+
 const PROB_BY_STAGE = { lead: 15, qualified: 35, quote: 55, po_pending: 80, won: 100, lost: 0 };
 
 function todayLocalISO() {
@@ -317,7 +324,7 @@ export default function DealRegistrationPortal() {
           <CardBody>
             <ul className="list-disc pl-6 space-y-1 text-sm text-gray-700">
               <li>Registrations must be for projects or purchases expected within the next <strong>60 days</strong>.</li>
-              <li><strong>Evidence is mandatory</strong>: upload an email, quote, or photo, or provide a verifiable link.</li>
+              <li><strong>Evidence is mandatory</strong>: upload an email, quote, or photo.</li>
               <li>Approved registrations are locked to the submitting reseller for <strong>60 days</strong> from submission unless extended by Aptella.</li>
               <li>Duplicates for the same customer, solution, and timeframe may be rejected or merged at Aptella’s discretion.</li>
               <li>Use of this portal implies consent to store submitted business contact data for deal management.</li>
@@ -538,16 +545,6 @@ function AdminPanel({ items, rawItems, setItems, currencyFilter, setCurrencyFilt
           {evidenceFor && (
             <div className="space-y-4">
               <div>
-                <div className="font-medium mb-1">Links</div>
-                {(evidenceFor.evidenceLinks||[]).length ? (
-                  <ul className="list-disc pl-6 text-sm">
-                    {evidenceFor.evidenceLinks.map((l,i)=>(
-                      <li key={i}><a className="text-sky-700 underline" href={l} target="_blank" rel="noreferrer">{l}</a></li>
-                    ))}
-                  </ul>
-                ) : <div className="text-sm text-gray-500">No links provided.</div>}
-              </div>
-              <div>
                 <div className="font-medium mb-1">Uploaded files</div>
                 {(evidenceFor.evidenceFiles||[]).length ? (
                   <ul className="list-disc pl-6 text-sm">
@@ -572,14 +569,16 @@ function AdminPanel({ items, rawItems, setItems, currencyFilter, setCurrencyFilt
 
 function SubmissionForm({ onSave, items, onSyncOne }) {
   const [form, setForm] = useState({
+    resellerCountry: "Singapore",
+    resellerLocation: "Singapore",
     resellerName: "",
     resellerContact: "",
     resellerEmail: "",
     resellerPhone: "",
     customerName: "",
-    customerLocation: "Jakarta, Indonesia",
-    city: "Jakarta",
-    country: "Indonesia",
+    customerLocation: "",
+    city: "",
+    country: "",
     lat: DEFAULT_LAT,
     lng: DEFAULT_LNG,
     industry: "",
@@ -594,15 +593,17 @@ function SubmissionForm({ onSave, items, onSyncOne }) {
     notes: "",
     evidenceLinks: [],
     evidenceFiles: [],
-    emailEvidence: true, // NEW: email attachments to Aptella via GAS
+    emailEvidence: true,
     confidential: false,
     remindersOptIn: false,
     accept: false,
   });
   const [errors, setErrors] = useState({});
+  const isID = form.resellerCountry === 'Indonesia';
   const [dupWarning, setDupWarning] = useState("");
 
   useEffect(() => { setForm((f) => ({ ...f, probability: PROB_BY_STAGE[f.stage] ?? f.probability })); }, [form.stage]);
+  useEffect(() => { const cfg = COUNTRY_CONFIG[form.resellerCountry]; if (cfg) setForm(f=>({ ...f, currency: cfg.currency, resellerLocation: cfg.capital })); }, [form.resellerCountry]);
 
   function handleChange(e) { const { name, value, type, checked } = e.target; setForm({ ...form, [name]: type === 'checkbox' ? checked : value }); }
   function handleMultiToggle(listName, option) { setForm((f) => { const set = new Set(f[listName]); if (set.has(option)) set.delete(option); else set.add(option); return { ...f, [listName]: Array.from(set) }; }); }
@@ -632,7 +633,7 @@ function SubmissionForm({ onSave, items, onSyncOne }) {
     if (!form.solution) e.solution = "Required";
     if (!form.value || Number(form.value) <= 0) e.value = "Enter a positive amount";
     if (!form.expectedCloseDate || !withinNext60Days(form.expectedCloseDate)) e.expectedCloseDate = "Must be within the next 60 days";
-    const hasEvidence = (form.evidenceFiles && form.evidenceFiles.length > 0) || (form.evidenceLinks && form.evidenceLinks.length > 0);
+    const hasEvidence = (form.evidenceFiles && form.evidenceFiles.length > 0);
     if (!hasEvidence) e.evidence = "Evidence (file or link) is required";
     if (!form.accept) e.accept = "You must accept the terms";
     setErrors(e);
@@ -729,6 +730,27 @@ function SubmissionForm({ onSave, items, onSyncOne }) {
       <CardHeader title="Register Upcoming Deal (within 60 days)" subtitle="Provide details below. Fields marked * are mandatory." />
       <CardBody>
         <form onSubmit={submit} className="grid gap-6">
+          <div className="grid md:grid-cols-3 gap-4">
+            <div className="grid gap-2">
+              <Label htmlFor="resellerCountry" required>{isID ? 'Negara Anda' : 'Reseller Country'}</Label>
+              <Select id="resellerCountry" name="resellerCountry" value={form.resellerCountry} onChange={e=>setForm(f=>({...f, resellerCountry: e.target.value }))}>
+                <option>Indonesia</option>
+                <option>Malaysia</option>
+                <option>Philippines</option>
+                <option>Singapore</option>
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="resellerLocation" required>{isID ? 'Lokasi Reseller' : 'Reseller Location'}</Label>
+              <Input id="resellerLocation" name="resellerLocation" value={form.resellerLocation} onChange={e=>setForm(f=>({...f, resellerLocation: e.target.value }))} placeholder="e.g., Jakarta" />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="currency">{isID ? 'Mata Uang' : 'Currency'}</Label>
+              <Select id="currency" name="currency" value={form.currency} onChange={e=>setForm(f=>({...f, currency: e.target.value }))}>
+                {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
+              </Select>
+            </div>
+          </div>
           {dupWarning && (<div className="rounded-xl border border-yellow-200 bg-yellow-50 text-yellow-900 p-4 text-sm">{dupWarning}</div>)}
 
           <div className="grid md:grid-cols-2 gap-4">
@@ -755,25 +777,24 @@ function SubmissionForm({ onSave, items, onSyncOne }) {
 
           <div className="grid md:grid-cols-2 gap-4">
             <div className="grid gap-2">
-              <Label htmlFor="customerName" required>Customer name</Label>
+              <Label htmlFor="customerName" required>{isID ? 'Nama Pelanggan' : 'Customer name'}</Label>
               <Input id="customerName" name="customerName" value={form.customerName} onChange={handleChange} placeholder="End customer / project owner" />
               {errors.customerName && <p className="text-xs text-red-600">{errors.customerName}</p>}
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="customerLocation" required>Customer location</Label>
-              <Input id="customerLocation" name="customerLocation" value={form.customerLocation} onChange={e=>{ const v=e.target.value; setForm(f=>({...f, customerLocation:v, country: countryFromLocation(v)})); }} placeholder="Jakarta, Indonesia" />
-              {errors.customerLocation && <p className="text-xs text-red-600">{errors.customerLocation}</p>}
+              <Label htmlFor="resellerLocation" required>Reseller location</Label>
+              <Input id="resellerLocation" name="resellerLocation" value={form.resellerLocation} onChange={e=>setForm(f=>({...f, resellerLocation:e.target.value}))} placeholder="Jakarta" />
             </div>
           </div>
 
           <div className="grid md:grid-cols-3 gap-4">
             <div className="grid gap-2">
-              <Label htmlFor="city" required>City</Label>
+              <Label htmlFor="city" required>{isID ? 'Kota Pelanggan' : 'Customer City'}</Label>
               <Input id="city" name="city" value={form.city||""} onChange={e=>{ const v=e.target.value; setForm(f=>({...f, city:v, customerLocation:`${v || ''}${f.country?`, ${f.country}`:''}`})); }} placeholder="Jakarta" />
               {errors.city && <p className="text-xs text-red-600">{errors.city}</p>}
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="country" required>Country</Label>
+              <Label htmlFor="country" required>{isID ? 'Negara Pelanggan' : 'Customer Country'}</Label>
               <Select id="country" name="country" value={form.country||""} onChange={e=>{ const v=e.target.value; setForm(f=>({...f, country:v, customerLocation:`${f.city?f.city:''}${v?`, ${v}`:''}`})); }}>
                 <option value="">Select country</option>
                 <option>Indonesia</option>
@@ -823,7 +844,7 @@ function SubmissionForm({ onSave, items, onSyncOne }) {
               </Select>
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="currency">Currency</Label>
+              <Label htmlFor="currency">{isID ? 'Mata Uang' : 'Currency'}</Label>
               <Select id="currency" name="currency" value={form.currency} onChange={handleChange}>
                 {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
               </Select>
@@ -865,21 +886,14 @@ function SubmissionForm({ onSave, items, onSyncOne }) {
           </div>
 
           <div className="grid gap-2">
-            <Label>Evidence (required)</Label>
+            <Label>{isID ? 'Bukti (wajib)' : 'Evidence (required)'}</Label>
             <div className="grid md:grid-cols-3 gap-3">
               <div className="md:col-span-2">
                 <input id="evidenceFiles" type="file" multiple onChange={handleFiles} className="block w-full text-sm file:mr-4 file:rounded-lg file:border-0 file:bg-sky-50 file:px-3 file:py-2 file:text-sky-700" />
                 {form.evidenceFiles?.length>0 && (<div className="mt-2 text-xs text-gray-600">{form.evidenceFiles.length} file(s) selected.</div>)}
               </div>
-              <div className="flex items-center md:justify-end">
-                <button type="button" onClick={addEvidenceLink} className={`px-3 py-2 rounded-xl text-white text-sm ${BRAND.primaryBtn}`}>Add link</button>
-              </div>
+              
             </div>
-            {form.evidenceLinks?.length>0 && (
-              <ul className="list-disc pl-6 text-sm text-gray-700">
-                {form.evidenceLinks.map((l,i)=> <li key={i}><a href={l} target="_blank" className="text-sky-700 underline" rel="noreferrer">{l}</a></li>)}
-              </ul>
-            )}
             <label className="flex items-center gap-2 text-sm mt-1">
               <input type="checkbox" checked={!!form.emailEvidence} onChange={e=>setForm(f=>({...f, emailEvidence: e.target.checked}))} />
               Email attached files to Aptella ({APTELLA_EVIDENCE_EMAIL}) via secure Apps Script
@@ -909,7 +923,7 @@ function SubmissionForm({ onSave, items, onSyncOne }) {
           {errors.accept && <p className="text-xs text-red-600 -mt-3">{errors.accept}</p>}
 
           <div className="flex items-center gap-3">
-            <button type="submit" className={`px-4 py-2 rounded-xl text-white ${BRAND.primaryBtn}`}>Submit Registration</button>
+            <button type="submit" className={`px-4 py-2 rounded-xl text-white ${BRAND.primaryBtn}`}>{form.resellerCountry==='Indonesia' ? 'Kirim Pendaftaran' : 'Submit Registration'}</button>
             <button type="button" onClick={reset} className="px-4 py-2 rounded-xl bg-gray-200">Reset</button>
           </div>
         </form>
