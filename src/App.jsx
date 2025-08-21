@@ -86,11 +86,20 @@ const PROB_BY_STAGE = __G.PROB_BY_STAGE;
 const SUPPORT_OPTIONS = __G.SUPPORT_OPTIONS;
 const XGRIDS_SOLUTIONS = __G.XGRIDS_SOLUTIONS;
 const APTELLA_EVIDENCE_EMAIL = __G.APTELLA_EVIDENCE_EMAIL;
+// Google Apps Script endpoint (Sheets sync, list, FX)
+const GOOGLE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbw3O_GnYcTx4bRYdFD2vCSs26L_Gzl2ZIZd18dyJmZAEE442hvhqp7j1C4W6cFX_DWM/exec";
 
 // --- Lightweight UI primitives & config shims (so the app always renders) ---
+const ADMIN_PASSWORD = (typeof window !== 'undefined' && window.APTELLA_ADMIN_PASSWORD) || 'Aptella2025!';
+const LOGO_SRC = (typeof window !== 'undefined' && window.APTELLA_LOGO_URL) || ((typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.BASE_URL) ? (import.meta.env.BASE_URL + 'aptella-logo.png') : 'aptella-logo.png');
+
 const BRAND = {
-  primaryBtn: 'bg-sky-700 hover:bg-sky-800',
-  text: 'text-slate-800',
+  navy: '#0e3446',
+  navyDark: '#0b2938',
+  orange: '#f0a03a',
+  bg: 'bg-[#f7fafc]',
+  primaryBtn: 'bg-[#0e3446] hover:bg-[#0b2938]',
+  text: 'text-[#0e3446]',
   border: 'border-slate-200'
 };
 
@@ -184,7 +193,7 @@ function AdminPanel({
 };
 
   // ---------- Apps Script integration
-  const hasGAS = (typeof GOOGLE_APPS_SCRIPT_URL !== 'https://script.google.com/macros/s/AKfycbw3O_GnYcTx4bRYdFD2vCSs26L_Gzl2ZIZd18dyJmZAEE442hvhqp7j1C4W6cFX_DWM/exec' && GOOGLE_APPS_SCRIPT_URL);
+  const hasGAS = (typeof GOOGLE_APPS_SCRIPT_URL !== 'undefined' && GOOGLE_APPS_SCRIPT_URL);
   const pullAll = async () => {
     if (!hasGAS) { setAdminError('Apps Script URL not configured'); return; }
     try {
@@ -934,14 +943,54 @@ function ResellerUpdates({ items, setItems }){
 
 
 
+// ---- Brand styles injection ----
+function BrandTheme(){
+  return (
+    <style>{`
+      :root{ --aptella-navy:#0e3446; --aptella-navy-dark:#0b2938; --aptella-orange:#f0a03a; }
+      body{ background:#f7fafc; color:#0f172a; }
+      .brand-nav{ background:#fff; border-bottom:1px solid #e5e7eb; }
+      .brand-title{ color:var(--aptella-navy); font-weight:700; letter-spacing:.2px; }
+      .brand-link{ color:var(--aptella-navy); opacity:.85 }
+      .brand-link:hover{ opacity:1 }
+    `}</style>
+  );
+}
+
+// ---- Admin Login gate ----
+function AdminLogin({ onOk }){
+  const [pw, setPw] = useState('');
+  const [err, setErr] = useState('');
+  function submit(e){
+    e.preventDefault();
+    if (pw === ADMIN_PASSWORD){ localStorage.setItem('aptella_admin_ok','1'); onOk && onOk(); }
+    else setErr('Incorrect password');
+  }
+  return (
+    <Card>
+      <CardHeader title="Admin Sign-in" subtitle="Enter the Aptella admin password to continue." />
+      <CardBody>
+        <form onSubmit={submit} className="flex flex-col sm:flex-row gap-3 items-start">
+          <Input type="password" placeholder="Admin password" value={pw} onChange={e=>setPw(e.target.value)} className="sm:w-72" />
+          <button type="submit" className={`px-4 py-2 rounded-xl text-white ${BRAND.primaryBtn}`}>Enter</button>
+          {err && <div className="text-sm text-red-600 ml-1">{err}</div>}
+        </form>
+        <p className="text-xs text-gray-500 mt-2">Forgot? Contact your Aptella administrator.</p>
+      </CardBody>
+    </Card>
+  );
+}
+
 // ---- Root: Aptella Reseller Portal (safe default export) ----
 function AptellaRoot() {
   const [items, setItems] = useState([]);
   const [tab, setTab] = useState('reseller'); // 'reseller' | 'admin'
   const [search, setSearch] = useState('');
   const [currencyFilter, setCurrencyFilter] = useState('All');
+  const [adminAuthed, setAdminAuthed] = useState(()=> (typeof localStorage!=='undefined' && localStorage.getItem('aptella_admin_ok')==='1'));
 
   const safeURL = (typeof GOOGLE_APPS_SCRIPT_URL !== 'undefined') ? GOOGLE_APPS_SCRIPT_URL : '';
+  const requireAdminGate = tab === 'admin' && !adminAuthed;
 
   const syncOne = async (row) => {
     if (!safeURL) return;
@@ -954,40 +1003,54 @@ function AptellaRoot() {
   const syncMany = async (rows=[]) => { for (const r of rows) { await syncOne(r); } };
 
   return (
-    <div className="p-4 max-w-7xl mx-auto">
-      <div className="flex items-center justify-between">
-        <div className="text-xl font-semibold">Aptella Reseller Deal Registration</div>
-        <div className="flex gap-2">
-          <button className={`px-3 py-2 rounded-lg ${tab==='reseller' ? 'bg-sky-700 text-white' : 'bg-gray-100'}`} onClick={()=>setTab('reseller')}>Reseller</button>
-          <button className={`px-3 py-2 rounded-lg ${tab==='admin' ? 'bg-sky-700 text-white' : 'bg-gray-100'}`} onClick={()=>setTab('admin')}>Admin</button>
+    <div className="min-h-screen">
+      <BrandTheme />
+      <header className="brand-nav">
+        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <img src={LOGO_SRC} alt="Aptella" className="h-8 w-auto" onError={(e)=>{e.currentTarget.style.display='none';}}/>
+            <span className="brand-title">Reseller Deal Registration</span>
+          </div>
+          <nav className="flex items-center gap-2">
+            <button className={`px-3 py-2 rounded-lg ${tab==='reseller' ? 'bg-[#0e3446] text-white' : 'bg-gray-100 text-[#0e3446]'}`} onClick={()=>setTab('reseller')}>Reseller</button>
+            <button className={`px-3 py-2 rounded-lg ${tab==='admin' ? 'bg-[#0e3446] text-white' : 'bg-gray-100 text-[#0e3446]'}`} onClick={()=>setTab('admin')}>Admin</button>
+            {adminAuthed && (
+              <button title="Sign out of Admin" onClick={()=>{ localStorage.removeItem('aptella_admin_ok'); setAdminAuthed(false); setTab('reseller'); }} className="px-3 py-2 rounded-lg bg-gray-100 text-[#0e3446]">Sign out</button>
+            )}
+          </nav>
         </div>
-      </div>
+      </header>
 
-      <div className="mt-4">
-        {tab === 'reseller' ? (
-          (typeof SubmissionForm === 'function') ? (
-            <SubmissionForm items={items} setItems={setItems} onSave={(r)=>setItems(prev=>[r, ...prev])} onSyncOne={syncOne} />
-          ) : (
-            <div className="text-sm text-gray-500">SubmissionForm component not found.</div>
-          )
+      <main className="max-w-7xl mx-auto px-4 py-6">
+        {requireAdminGate ? (
+          <AdminLogin onOk={()=> setAdminAuthed(true)} />
         ) : (
-          (typeof AdminPanel === 'function') ? (
-            <AdminPanel
-              items={items}
-              rawItems={items}
-              setItems={setItems}
-              currencyFilter={currencyFilter}
-              setCurrencyFilter={setCurrencyFilter}
-              search={search}
-              setSearch={setSearch}
-              onSyncOne={syncOne}
-              onSyncMany={syncMany}
-            />
+          tab === 'reseller' ? (
+            (typeof SubmissionForm === 'function') ? (
+              <SubmissionForm items={items} setItems={setItems} onSave={(r)=>setItems(prev=>[r, ...prev])} onSyncOne={syncOne} />
+            ) : (
+              <div className="text-sm text-gray-500">SubmissionForm component not found.</div>
+            )
           ) : (
-            <div className="text-sm text-gray-500">AdminPanel component not found.</div>
+            (typeof AdminPanel === 'function') ? (
+              <AdminPanel
+                items={items}
+                rawItems={items}
+                setItems={setItems}
+                currencyFilter={currencyFilter}
+                setCurrencyFilter={setCurrencyFilter}
+                search={search}
+                setSearch={setSearch}
+                onSyncOne={syncOne}
+                onSyncMany={syncMany}
+                appsScriptUrl={safeURL}
+              />
+            ) : (
+              <div className="text-sm text-gray-500">AdminPanel component not found.</div>
+            )
           )
         )}
-      </div>
+      </main>
     </div>
   );
 }
