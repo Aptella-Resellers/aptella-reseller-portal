@@ -682,7 +682,15 @@ function StatsBar({ items, totalsByCurrency }) {
   );
 }
 
-function AdminPanel({ items, rawItems, setItems, currencyFilter, setCurrencyFilter, search, setSearch, onSyncMany, onSyncOne }) {
+function AdminPanel($1) {
+  // Ensure Admin state exists (prevents ReferenceError: ratesAUD is not defined)
+  const [ratesAUD, setRatesAUD] = useState({ AUD:1, SGD:1.07, MYR:0.33, PHP:0.027, IDR:0.000095 });
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [savingFx, setSavingFx] = useState(false);
+  const [adminError, setAdminError] = useState("");
+  // Ensure rawItems defined even if parent omitted it
+  rawItems = Array.isArray(rawItems) ? rawItems : (Array.isArray(items) ? items : []);
+
   // Ensure rawItems is defined to avoid ReferenceError in downstream code
   rawItems = Array.isArray(rawItems) ? rawItems : (Array.isArray(items) ? items : []);
 
