@@ -1,5 +1,75 @@
 import React, { useEffect, useMemo, useState } from "react";
 
+// --- Portal utilities & constants (idempotent; define only if missing) ---
+(() => {
+  const G = (typeof window !== 'undefined' ? window : globalThis);
+  G.todayLocalISO ??= function todayLocalISO(){
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2,'0');
+    const dd = String(d.getDate()).padStart(2,'0');
+    return `${y}-${m}-${dd}`;
+  };
+  G.addDays ??= function addDays(dateISO, days){
+    const d = new Date(dateISO);
+    d.setDate(d.getDate() + Number(days || 0));
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2,'0');
+    const dd = String(d.getDate()).padStart(2,'0');
+    return `${y}-${m}-${dd}`;
+  };
+  G.withinNext60Days ??= function withinNext60Days(dateISO){
+    if (!dateISO) return false;
+    const today = new Date(G.todayLocalISO());
+    const target = new Date(dateISO);
+    const diffDays = (target - today) / (1000*60*60*24);
+    return diffDays >= 0 && diffDays <= 60;
+  };
+  G.daysUntil ??= function daysUntil(dateISO){
+    if (!dateISO) return 0;
+    const today = new Date(G.todayLocalISO());
+    const target = new Date(dateISO);
+    return Math.round((target - today) / (1000*60*60*24));
+  };
+  G.uid ??= function uid(){ return Math.random().toString(36).slice(2) + Date.now().toString(36); };
+  G.countryFromLocation ??= function countryFromLocation(loc){
+    if (!loc) return '';
+    const parts = String(loc).split(',').map(s => s.trim());
+    return parts[parts.length - 1] || '';
+  };
+
+  // Defaults centered on Jakarta, ID
+  G.DEFAULT_LAT ??= -6.2088;
+  G.DEFAULT_LNG ??= 106.8456;
+
+  G.CURRENCIES ??= ['SGD','IDR','MYR','PHP','AUD','USD'];
+  G.STAGES ??= [
+    { key: 'qualified', label: 'Qualified' },
+    { key: 'proposal', label: 'Proposal' },
+    { key: 'negotiation', label: 'Negotiation' },
+    { key: 'won', label: 'Won' },
+    { key: 'lost', label: 'Lost' },
+  ];
+  G.PROB_BY_STAGE ??= { qualified: 35, proposal: 55, negotiation: 70, won: 100, lost: 0 };
+  G.SUPPORT_OPTIONS ??= [
+    'Pre-sales engineer',
+    'Demo / loan unit',
+    'Pricing exception',
+    'Marketing materials',
+    'Partner training',
+    'On-site customer visit',
+    'Extended lock request',
+  ];
+  // Xgrids list (pruned as requested)
+  G.XGRIDS_SOLUTIONS ??= [
+    'Xgrids L2 PRO',
+    'Xgrids K1',
+    'Xgrids PortalCam',
+    'Xgrids Drone Kit',
+  ];
+  G.APTELLA_EVIDENCE_EMAIL ??= 'evidence@aptella.com';
+})();
+
 // --- Admin → Settings drawer for FX rates (definition ensured) ---
 function AdminSettings({ open, onClose, ratesAUD = {}, onSave, saving }) {
   const [local, setLocal] = React.useState(ratesAUD || {});
@@ -507,6 +577,8 @@ function ResellerUpdates({ items, setItems }){
     </Card>
   );
 }
+
+
 // --- Ensure a single default export for Vite entry (src/main.jsx expects default) ---
 // Prefer an existing root component if present; otherwise render a safe fallback.
 // Using typeof guards avoids ReferenceErrors even if symbols are not declared.
