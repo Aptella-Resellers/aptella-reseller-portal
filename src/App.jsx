@@ -176,8 +176,7 @@ function AdminPanel({
     const val = String(x[k] ?? '').replace(/\n/g, ' ').replace(/"/g,'""');
     return `"${val}"`;
   }).join(',')).join('\n');
-  const blob = new Blob([head+'
-'+body], {type:'text/csv'});
+  const blob = new Blob([head+'\n'+body], {type:'text/csv'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = `aptella-registrations-${todayLocalISO()}.csv`;
