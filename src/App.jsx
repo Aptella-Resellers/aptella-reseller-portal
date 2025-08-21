@@ -732,6 +732,8 @@ function AdminPanel({ items, rawItems, setItems, currencyFilter, setCurrencyFilt
 
         <div className="flex items-center justify-between mt-2">
           <h3 className="text-lg font-semibold">Opportunities Map</h3>
+        <AdminSettings open={settingsOpen} onClose={()=> setSettingsOpen(false)} ratesAUD={ratesAUD} onSave={saveFxRates} saving={savingFx} />
+        {adminError && <div className="mt-2 text-sm text-red-700 bg-red-50 border border-red-200 px-3 py-2 rounded-lg">{adminError}</div>}
           <button onClick={pullAll} className={`px-3 py-1.5 rounded-lg text-white ${BRAND.primaryBtn}`}>Refresh from Sheets</button>
         </div>
         <AdminGeoMap items={(items || []).filter(x => {
