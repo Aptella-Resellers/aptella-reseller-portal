@@ -89,6 +89,16 @@ const APTELLA_EVIDENCE_EMAIL = __G.APTELLA_EVIDENCE_EMAIL;
 // Google Apps Script endpoint (Sheets sync, list, FX)
 const GOOGLE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbw3O_GnYcTx4bRYdFD2vCSs26L_Gzl2ZIZd18dyJmZAEE442hvhqp7j1C4W6cFX_DWM/exec";
 
+// Canonical headers used for CSV export and Apps Script initialization
+const SHEET_HEADERS = [
+  'id','submittedAt',
+  'resellerCountry','resellerLocation','resellerName','resellerContact','resellerEmail','resellerPhone',
+  'customerName','customerLocation','city','country','lat','lng',
+  'industry','currency','value','solution','stage','probability','expectedCloseDate',
+  'status','lockExpiry','syncedAt','confidential','remindersOptIn',
+  'supports','competitors','notes','evidenceLinks','updates'
+];
+
 // --- Lightweight UI primitives & config shims (so the app always renders) ---
 const ADMIN_PASSWORD = (typeof window !== 'undefined' && window.APTELLA_ADMIN_PASSWORD) || 'Aptella2025!';
 const LOGO_SRC = (typeof window !== 'undefined' && window.APTELLA_LOGO_URL) || ((typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.BASE_URL) ? (import.meta.env.BASE_URL + 'aptella-logo.png') : 'aptella-logo.png');
@@ -224,6 +234,22 @@ function AdminPanel({
       setAdminError(String(e?.message || e));
     } finally { setSavingFx(false); }
   };
+  // ---------- One-click Apps Script setup (sheet + headers)
+  const initSheet = async () => {
+    if (!hasGAS) { setAdminError('Apps Script URL not configured'); return; }
+    try {
+      setAdminError('');
+      const form = new URLSearchParams();
+      form.set('payload', JSON.stringify({ sheetName: 'registration', headers: SHEET_HEADERS }));
+      const res = await fetch(`${GOOGLE_APPS_SCRIPT_URL}?action=init`, { method: 'POST', body: form });
+      const text = await res.text();
+      let json = null; try { json = JSON.parse(text); } catch {}
+      if (!res.ok || json?.ok === false) throw new Error(json?.error || `HTTP ${res.status} ${res.statusText}`);
+      alert('Google Sheet initialized (registration + headers).');
+    } catch (e) {
+      setAdminError(String(e?.message || e));
+    }
+  };
 
   // ---------- Filtering
   const countries = useMemo(() => {
@@ -338,6 +364,7 @@ function AdminPanel({
             <button onClick={()=>exportCSV(visible)} className={`px-3 py-2 rounded-xl text-white text-sm ${BRAND.primaryBtn}`}>Export CSV</button>
             <button onClick={()=>onSyncMany && onSyncMany(visible)} className={`px-3 py-2 rounded-xl text-white text-sm ${BRAND.primaryBtn}`}>Sync Visible</button>
             <button onClick={()=>setSettingsOpen(true)} className="px-3 py-2 rounded-xl bg-gray-100 text-sm">Settings</button>
+            <button onClick={initSheet} className="px-3 py-2 rounded-xl bg-gray-100 text-sm">Setup Sheet</button>
             <button onClick={pullAll} className={`px-3 py-2 rounded-xl text-white text-sm ${BRAND.primaryBtn}`}>Refresh from Sheets</button>
           </div>
         }
@@ -993,14 +1020,15 @@ function AptellaRoot() {
   const requireAdminGate = tab === 'admin' && !adminAuthed;
 
   const syncOne = async (row) => {
-    const url = (typeof GOOGLE_APPS_SCRIPT_URL !== 'undefined' && GOOGLE_APPS_SCRIPT_URL) ? `${GOOGLE_APPS_SCRIPT_URL}?action=submit` : '';
+    const url = (typeof GOOGLE_APPS_SCRIPT_URL !== 'undefined' && GOOGLE_APPS_SCRIPT_URL)
+      ? `${GOOGLE_APPS_SCRIPT_URL}?action=submit`
+      : '';
     if (!url) return { ok:false, reason: 'Google Apps Script URL missing' };
     try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(row)
-      });
+      // Use form-encoded body to avoid CORS preflight on Apps Script
+      const form = new URLSearchParams();
+      form.set('payload', JSON.stringify(row));
+      const res = await fetch(url, { method: 'POST', body: form });
       const text = await res.text();
       let json = null; try { json = JSON.parse(text); } catch {}
       if (!res.ok || (json && json.ok === false)) {
