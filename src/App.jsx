@@ -184,7 +184,7 @@ function AdminPanel({
 };
 
   // ---------- Apps Script integration
-  const hasGAS = (typeof GOOGLE_APPS_SCRIPT_URL !== 'undefined' && GOOGLE_APPS_SCRIPT_URL);
+  const hasGAS = (typeof GOOGLE_APPS_SCRIPT_URL !== 'https://script.google.com/macros/s/AKfycbw3O_GnYcTx4bRYdFD2vCSs26L_Gzl2ZIZd18dyJmZAEE442hvhqp7j1C4W6cFX_DWM/exec' && GOOGLE_APPS_SCRIPT_URL);
   const pullAll = async () => {
     if (!hasGAS) { setAdminError('Apps Script URL not configured'); return; }
     try {
