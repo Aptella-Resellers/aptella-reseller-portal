@@ -285,7 +285,7 @@ function AdminMap({ items = [] }) {
 }
 
 // Using public/ logo path so build succeeds even if asset is missing at src/assets
-const LOGO_URL = new URL('/aptella-logo.png', window.location.href).href;
+const LOGO_URL = new URL('aptella-logo.png', window.location.href).href;
 
 // Simple error boundary so blank-page errors render visibly
 class ErrorCatcher extends React.Component {
@@ -911,8 +911,10 @@ function AdminPanel({ items, rawItems, setItems, currencyFilter, setCurrencyFilt
               </div>
               <div className="flex flex-wrap gap-2">
                 <button onClick={()=>mailto(APTELLA_EVIDENCE_EMAIL, `Evidence for ${evidenceFor.id}`, `Links:
-${(evidenceFor.evidenceLinks||[]).join('
-')}
+${(evidenceFor.evidenceLinks||[]).join('\n')}
+
+Customer: ${evidenceFor.customerName}
+Reseller: ${evidenceFor.resellerName}`)}
 
 Customer: ${evidenceFor.customerName}
 Reseller: ${evidenceFor.resellerName}`)} className={`px-3 py-2 rounded-xl text-white text-sm ${BRAND.primaryBtn}`}>Email links to Aptella</button>
