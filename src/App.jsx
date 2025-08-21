@@ -116,8 +116,16 @@ function AdminGeoMap({ items = [], ratesAUD = { AUD:1, SGD:1.07, MYR:0.33, PHP:0
     const circles = circlesGroupRef.current || L.layerGroup().addTo(map);
     circles.clearLayers();
 
-    const clusters = clusterGroupRef.current || L.markerClusterGroup();
-    clusters.clearLayers();
+    const supportsCluster = typeof L.markerClusterGroup === 'function';
+    let clusters = clusterGroupRef.current;
+    if (supportsCluster) {
+      clusters = clusters || L.markerClusterGroup();
+      clusters.clearLayers();
+      if (!clusterGroupRef.current) {
+        clusterGroupRef.current = clusters;
+        map.addLayer(clusters);
+      }
+    }
 
     const groups = {};
     (items || []).forEach((x) => {
@@ -157,7 +165,7 @@ function AdminGeoMap({ items = [], ratesAUD = { AUD:1, SGD:1.07, MYR:0.33, PHP:0
         const totalsHtml = Object.entries(g.totals).map(([k,v]) => `• ${k} ${new Intl.NumberFormat().format(v)}`).join('<br/>');
         const popup = `<strong>${g.city || 'Unknown'}${g.country ? `, ${g.country}` : ''}</strong><br/>Entries: ${g.count}<br/>Total value:<br/>${totalsHtml}<br/><em>AUD (sizing): ${new Intl.NumberFormat().format(Math.round(aud))}</em>`;
         m.bindPopup(popup);
-        clusters.addLayer(m);
+        (typeof L.markerClusterGroup === 'function' ? clusters.addLayer(m) : m.addTo(map));
         const radius = 4000 * Math.sqrt(g.count);
         L.circle([g.lat, g.lng], { radius, color: '#0b2b3c', fillColor: '#0b2b3c', fillOpacity: 0.12 }).addTo(circles);
       });
@@ -674,7 +682,10 @@ function StatsBar({ items, totalsByCurrency }) {
   );
 }
 
-function AdminPanel($1) {
+function AdminPanel({ items, rawItems, setItems, currencyFilter, setCurrencyFilter, search, setSearch, onSyncMany, onSyncOne }) {
+  // Ensure rawItems is defined to avoid ReferenceError in downstream code
+  rawItems = Array.isArray(rawItems) ? rawItems : (Array.isArray(items) ? items : []);
+
    // ANCHOR_RATESAUD
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [savingFx, setSavingFx] = useState(false);
