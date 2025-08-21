@@ -1,4 +1,114 @@
 import React, { useEffect, useMemo, useState } from "react";
+
+// --- AdminMap (Leaflet loaded on-demand; no build-time dependency)
+function AdminMap({ items = [] }) {
+  const ref = React.useRef(null);
+  const mapRef = React.useRef(null);
+  const LRef = React.useRef(null);
+  const circlesGroupRef = React.useRef(null);
+
+  const CAPITALS = {
+    Indonesia: { city: 'Jakarta', lat: -6.2088, lng: 106.8456 },
+    Malaysia: { city: 'Kuala Lumpur', lat: 3.139, lng: 101.6869 },
+    Philippines: { city: 'Manila', lat: 14.5995, lng: 120.9842 },
+    Singapore: { city: 'Singapore', lat: 1.3521, lng: 103.8198 },
+  };
+
+  React.useEffect(() => {
+    if (!ref.current || mapRef.current) return;
+    // Inject Leaflet CSS once
+    if (!document.querySelector('link[data-leaflet]')) {
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+      link.setAttribute('data-leaflet', '1');
+      document.head.appendChild(link);
+    }
+    // Load Leaflet via plain script tag to avoid ESM CDN transformation issues
+    const ensureLeaflet = () => new Promise((resolve, reject) => {
+      if (window.L) return resolve(window.L);
+      const s = document.createElement('script');
+      s.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+      s.async = true;
+      s.onload = () => resolve(window.L);
+      s.onerror = reject;
+      document.head.appendChild(s);
+    });
+    ensureLeaflet()
+      .then((L) => {
+        LRef.current = L;
+        mapRef.current = L.map(ref.current).setView([1.35, 103.82], 5);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '&copy; OpenStreetMap',
+        }).addTo(mapRef.current);
+        // Dedicated group for circles
+        circlesGroupRef.current = L.layerGroup().addTo(mapRef.current);
+      })
+      .catch((err) => console.error('Leaflet load failed', err));
+  }, []);
+
+  React.useEffect(() => {
+    const map = mapRef.current;
+    const L = LRef.current;
+    if (!map || !L) return;
+
+    // Use a dedicated layer group for circles
+    let groupLayer = circlesGroupRef.current;
+    if (!groupLayer) {
+      groupLayer = L.layerGroup().addTo(map);
+      circlesGroupRef.current = groupLayer;
+    }
+    groupLayer.clearLayers();
+
+    const groups = {};
+    (items || []).forEach((x) => {
+      const city = (x.customerCity || x.city || '').trim();
+      const country = (x.customerCountry || x.country || '').trim();
+      if (!city && !country) return;
+      const key = `${city}|${country}`;
+      if (!groups[key]) groups[key] = { city, country, lat: null, lng: null, count: 0, totals: {} };
+      groups[key].count += 1;
+      const cur = (x.currency || '').trim() || '—';
+      const val = Number(x.value) || 0;
+      groups[key].totals[cur] = (groups[key].totals[cur] || 0) + val;
+      const lat = Number(x.lat);
+      const lng = Number(x.lng);
+      if (Number.isFinite(lat) && Number.isFinite(lng) && groups[key].lat == null) {
+        groups[key].lat = lat;
+        groups[key].lng = lng;
+      }
+    });
+
+    // Fallback to capitals
+    Object.values(groups).forEach((g) => {
+      if (g.lat == null || g.lng == null) {
+        const cap = CAPITALS[g.country];
+        if (cap) {
+          g.lat = cap.lat;
+          g.lng = cap.lng;
+          if (!g.city) g.city = cap.city;
+        }
+      }
+    });
+
+    // Render circles
+    Object.values(groups)
+      .filter((g) => Number.isFinite(g.lat) && Number.isFinite(g.lng))
+      .forEach((g) => {
+        const radius = 5000 * Math.sqrt(g.count);
+        const totalsHtml = Object.entries(g.totals)
+          .map(([k, v]) => `• ${k} ${new Intl.NumberFormat().format(v)}`)
+          .join('<br/>');
+        const html = `<strong>${g.city || 'Unknown'}${g.country ? `, ${g.country}` : ''}</strong><br/>Entries: ${g.count}<br/>Total value:<br/>${totalsHtml}`;
+        L.circle([g.lat, g.lng], { radius, color: '#0b2b3c', fillColor: '#0b2b3c', fillOpacity: 0.25 })
+          .bindPopup(html)
+          .addTo(groupLayer);
+      });
+  }, [items]);
+
+  return <div ref={ref} style={{ height: 480, borderRadius: 12, overflow: 'hidden' }} />;
+}
+
 // Using public/ logo path so build succeeds even if asset is missing at src/assets
 const LOGO_URL = new URL('aptella-logo.png', window.location.href).href;
 
@@ -81,10 +191,7 @@ const XGRIDS_SOLUTIONS = [
   "Xgrids L2 PRO",
   "Xgrids K1",
   "Xgrids PortalCam",
-  "Xgrids Drone Kit",
-  "Navvis VLX2",
-  "Navvis VLX3",
-  "Navvis MLX"
+  "Xgrids Drone Kit"
 ];
 
 const COUNTRY_CONFIG = {
@@ -401,6 +508,20 @@ function StatsBar({ items, totalsByCurrency }) {
 }
 
 function AdminPanel({ items, rawItems, setItems, currencyFilter, setCurrencyFilter, search, setSearch, onSyncMany, onSyncOne }) {
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch(`${GOOGLE_APPS_SCRIPT_URL}?action=list`, { cache: 'no-store' });
+        const json = await res.json();
+        if (json && json.ok && Array.isArray(json.data)) {
+          setItems(json.data);
+        }
+      } catch (e) {
+        console.error('Admin pullAll failed', e);
+      }
+    })();
+  }, []);
+
   const [stageFilter, setStageFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [countryFilter, setCountryFilter] = useState("all");
@@ -470,6 +591,8 @@ function AdminPanel({ items, rawItems, setItems, currencyFilter, setCurrencyFilt
           ) : (<div />)}
         </div>
 
+        <h3 className="text-lg font-semibold mt-2">Opportunities Map</h3>
+        <AdminMap items={items} />
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm">
             <thead>
