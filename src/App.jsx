@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
-import aptellaLogo from "./assets/aptella-logo.png";
+// Using public/ logo path so build succeeds even if asset is missing at src/assets
+const LOGO_URL = new URL('aptella-logo.png', window.location.href).href;
 
 // Simple error boundary so blank-page errors render visibly
 class ErrorCatcher extends React.Component {
@@ -272,7 +273,7 @@ export default function DealRegistrationPortal() {
       <header className="sticky top-0 z-10 backdrop-blur bg-white/80 border-b">
         <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <img src={aptellaLogo} alt="Aptella" className="h-10" />
+            <img src={LOGO_URL} alt="Aptella" className="h-10" />
             <div>
               <div className="flex items-baseline gap-2">
                 <h1 className="text-2xl font-semibold tracking-tight">Aptella</h1>
