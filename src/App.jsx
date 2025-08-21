@@ -167,24 +167,24 @@ function AdminPanel({
     return new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(v);
   };
   const exportCSV = (rows) => {
-    const cols = [
-      'submittedAt','resellerName','resellerContact','resellerEmail','customerName',
-      'country','city','customerLocation','solution','currency','value','stage','status','expectedCloseDate','lockExpiry'
-    ];
-    const head = cols.join(',');
-    const body = (rows||[]).map(x => cols.map(k => {
-      const val = String(x[k] ?? '').replace(/
+  const cols = [
+    'submittedAt','resellerName','resellerContact','resellerEmail','customerName',
+    'country','city','customerLocation','solution','currency','value','stage','status','expectedCloseDate','lockExpiry'
+  ];
+  const head = cols.join(',');
+  const body = (rows||[]).map(x => cols.map(k => {
+    const val = String(x[k] ?? '').replace(/
 /g, ' ').replace(/"/g,'""');
-      return `"${val}"`;
-    }).join(',')).join('
+    return `"${val}"`;
+  }).join(',')).join('
 ');
-    const blob = new Blob([head+'
+  const blob = new Blob([head+'
 '+body], {type:'text/csv'});
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `aptella-registrations-${todayLocalISO()}.csv`;
-    a.click();
-  };
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `aptella-registrations-${todayLocalISO()}.csv`;
+  a.click();
+};
 
   // ---------- Apps Script integration
   const hasGAS = (typeof GOOGLE_APPS_SCRIPT_URL !== 'undefined' && GOOGLE_APPS_SCRIPT_URL);
