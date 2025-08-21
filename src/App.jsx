@@ -1,5 +1,131 @@
 import React, { useEffect, useMemo, useState } from "react";
 
+// --- AdminGeoMap (Leaflet + MarkerCluster, AUD sizing) ---
+function AdminGeoMap({ items = [], ratesAUD = { AUD:1, SGD:1.07, MYR:0.33, PHP:0.027, IDR:0.000095 } }) {
+  const ref = React.useRef(null);
+  const mapRef = React.useRef(null);
+  const LRef = React.useRef(null);
+  const circlesGroupRef = React.useRef(null);
+  const clusterGroupRef = React.useRef(null);
+
+  const CAPITALS = {
+    Indonesia: { city: 'Jakarta', lat: -6.2088, lng: 106.8456 },
+    Malaysia: { city: 'Kuala Lumpur', lat: 3.139, lng: 101.6869 },
+    Philippines: { city: 'Manila', lat: 14.5995, lng: 120.9842 },
+    Singapore: { city: 'Singapore', lat: 1.3521, lng: 103.8198 },
+  };
+
+  React.useEffect(() => {
+    if (!ref.current || mapRef.current) return;
+    // CSS once
+    if (!document.querySelector('link[data-leaflet]')) {
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+      link.setAttribute('data-leaflet', '1');
+      document.head.appendChild(link);
+    }
+    if (!document.querySelector('link[data-lmc]')) {
+      const lmc1 = document.createElement('link');
+      lmc1.rel = 'stylesheet';
+      lmc1.href = 'https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css';
+      lmc1.setAttribute('data-lmc', '1');
+      document.head.appendChild(lmc1);
+      const lmc2 = document.createElement('link');
+      lmc2.rel = 'stylesheet';
+      lmc2.href = 'https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css';
+      lmc2.setAttribute('data-lmc', '1');
+      document.head.appendChild(lmc2);
+    }
+    const ensureLeaflet = () => new Promise((resolve, reject) => {
+      if (window.L && window.L.MarkerClusterGroup) return resolve(window.L);
+      const s = document.createElement('script');
+      s.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+      s.async = true;
+      s.onload = () => {
+        const s2 = document.createElement('script');
+        s2.src = 'https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js';
+        s2.async = true;
+        s2.onload = () => resolve(window.L);
+        s2.onerror = reject;
+        document.head.appendChild(s2);
+      };
+      s.onerror = reject;
+      document.head.appendChild(s);
+    });
+    ensureLeaflet()
+      .then((L) => {
+        LRef.current = L;
+        mapRef.current = L.map(ref.current).setView([1.35, 103.82], 5);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '&copy; OpenStreetMap',
+        }).addTo(mapRef.current);
+        circlesGroupRef.current = L.layerGroup().addTo(mapRef.current);
+        clusterGroupRef.current = L.markerClusterGroup();
+        mapRef.current.addLayer(clusterGroupRef.current);
+      })
+      .catch((err) => console.error('Leaflet load failed', err));
+  }, []);
+
+  React.useEffect(() => {
+    const map = mapRef.current;
+    const L = LRef.current;
+    if (!map || !L) return;
+
+    const circles = circlesGroupRef.current || L.layerGroup().addTo(map);
+    circles.clearLayers();
+
+    const clusters = clusterGroupRef.current || L.markerClusterGroup();
+    clusters.clearLayers();
+
+    const groups = {};
+    (items || []).forEach((x) => {
+      const city = (x.customerCity || x.city || '').trim();
+      const country = (x.customerCountry || x.country || '').trim();
+      if (!city && !country) return;
+      const key = `${city}|${country}`;
+      if (!groups[key]) groups[key] = { city, country, lat: null, lng: null, count: 0, totals: {}, aud: 0 };
+      groups[key].count += 1;
+      const cur = (x.currency || '').trim() || '—';
+      const val = Number(x.value) || 0;
+      groups[key].totals[cur] = (groups[key].totals[cur] || 0) + val;
+      const rate = Number(ratesAUD[cur]) || 0; // to AUD
+      groups[key].aud += val * rate;
+      const lat = Number(x.lat);
+      const lng = Number(x.lng);
+      if (Number.isFinite(lat) && Number.isFinite(lng) && groups[key].lat == null) {
+        groups[key].lat = lat; groups[key].lng = lng;
+      }
+    });
+
+    Object.values(groups).forEach((g) => {
+      if (g.lat == null || g.lng == null) {
+        const cap = CAPITALS[g.country];
+        if (cap) { g.lat = cap.lat; g.lng = cap.lng; if (!g.city) g.city = cap.city; }
+      }
+    });
+
+    Object.values(groups)
+      .filter((g) => Number.isFinite(g.lat) && Number.isFinite(g.lng))
+      .forEach((g) => {
+        const aud = Math.max(0, g.aud);
+        const size = Math.max(24, Math.min(96, Math.sqrt(aud) / 50));
+        const html = `<div style="width:${size}px;height:${size}px;line-height:${size}px;border-radius:50%;background:rgba(11,43,60,0.18);border:2px solid #0b2b3c;text-align:center;font-weight:600;">${g.count}</div>`;
+        const icon = L.divIcon({ html, className: 'aptella-bubble', iconSize: [size, size] });
+        const m = L.marker([g.lat, g.lng], { icon });
+        const totalsHtml = Object.entries(g.totals).map(([k,v]) => `• ${k} ${new Intl.NumberFormat().format(v)}`).join('<br/>');
+        const popup = `<strong>${g.city || 'Unknown'}${g.country ? `, ${g.country}` : ''}</strong><br/>Entries: ${g.count}<br/>Total value:<br/>${totalsHtml}<br/><em>AUD (sizing): ${new Intl.NumberFormat().format(Math.round(aud))}</em>`;
+        m.bindPopup(popup);
+        clusters.addLayer(m);
+        const radius = 4000 * Math.sqrt(g.count);
+        L.circle([g.lat, g.lng], { radius, color: '#0b2b3c', fillColor: '#0b2b3c', fillOpacity: 0.12 }).addTo(circles);
+      });
+  }, [items, ratesAUD]);
+
+  return <div ref={ref} style={{ height: 480, borderRadius: 12, overflow: 'hidden' }} />;
+}
+
+
 // --- AdminMap (Leaflet loaded on-demand; no build-time dependency)
 function AdminMap({ items = [] }) {
   const ref = React.useRef(null);
@@ -508,6 +634,19 @@ function StatsBar({ items, totalsByCurrency }) {
 }
 
 function AdminPanel({ items, rawItems, setItems, currencyFilter, setCurrencyFilter, search, setSearch, onSyncMany, onSyncOne }) {
+  const [ratesAUD, setRatesAUD] = useState({ AUD:1, SGD:1.07, MYR:0.33, PHP:0.027, IDR:0.000095 });
+  const pullAll = async () => {
+    try {
+      const res = await fetch(`${GOOGLE_APPS_SCRIPT_URL}?action=list`, { cache: 'no-store' });
+      const json = await res.json();
+      if (json && json.ok && Array.isArray(json.data)) {
+        setItems(json.data);
+        if (json.meta && json.meta.ratesAUD) setRatesAUD(json.meta.ratesAUD);
+      }
+    } catch (e) { console.error('Admin pullAll failed', e); }
+  };
+  useEffect(() => { pullAll(); }, []);
+
   React.useEffect(() => {
     (async () => {
       try {
@@ -591,8 +730,15 @@ function AdminPanel({ items, rawItems, setItems, currencyFilter, setCurrencyFilt
           ) : (<div />)}
         </div>
 
-        <h3 className="text-lg font-semibold mt-2">Opportunities Map</h3>
-        <AdminMap items={items} />
+        <div className="flex items-center justify-between mt-2">
+          <h3 className="text-lg font-semibold">Opportunities Map</h3>
+          <button onClick={pullAll} className={`px-3 py-1.5 rounded-lg text-white ${BRAND.primaryBtn}`}>Refresh from Sheets</button>
+        </div>
+        <AdminGeoMap items={(items || []).filter(x => {
+          const okSearch = !search || JSON.stringify(x).toLowerCase().includes(search.toLowerCase());
+          const okCur = !currencyFilter || String(x.currency || '').toLowerCase() === String(currencyFilter).toLowerCase();
+          return okSearch && okCur;
+        })} ratesAUD={ratesAUD} />
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm">
             <thead>
