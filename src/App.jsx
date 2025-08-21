@@ -70,6 +70,23 @@ import React, { useEffect, useMemo, useState } from "react";
   G.APTELLA_EVIDENCE_EMAIL ??= 'evidence@aptella.com';
 })();
 
+// Create module-scope aliases for globals so ESM code can reference them safely
+const __G = (typeof window !== 'undefined' ? window : globalThis);
+const addDays = __G.addDays;
+const todayLocalISO = __G.todayLocalISO;
+const withinNext60Days = __G.withinNext60Days;
+const daysUntil = __G.daysUntil;
+const uid = __G.uid;
+const countryFromLocation = __G.countryFromLocation;
+const DEFAULT_LAT = __G.DEFAULT_LAT;
+const DEFAULT_LNG = __G.DEFAULT_LNG;
+const CURRENCIES = __G.CURRENCIES;
+const STAGES = __G.STAGES;
+const PROB_BY_STAGE = __G.PROB_BY_STAGE;
+const SUPPORT_OPTIONS = __G.SUPPORT_OPTIONS;
+const XGRIDS_SOLUTIONS = __G.XGRIDS_SOLUTIONS;
+const APTELLA_EVIDENCE_EMAIL = __G.APTELLA_EVIDENCE_EMAIL;
+
 // --- Admin → Settings drawer for FX rates (definition ensured) ---
 function AdminSettings({ open, onClose, ratesAUD = {}, onSave, saving }) {
   const [local, setLocal] = React.useState(ratesAUD || {});
