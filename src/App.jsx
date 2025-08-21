@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
 
 // --- Portal utilities & constants (idempotent; define only if missing) ---
 (() => {
@@ -140,51 +140,292 @@ function CardBody({ children }){
 }
 
 // Minimal AdminPanel so Admin tab never crashes
-function AdminPanel({ items = [] }){
-  const rowTone = (x) => x?.status === 'approved' ? 'bg-green-50'
-    : (x?.status === 'rejected' || x?.stage === 'lost') ? 'bg-red-50'
-    : (x?.status === 'pending') ? 'bg-blue-50' : '';
+function AdminPanel({
+  items = [],
+  rawItems = [],
+  setItems = () => {},
+  currencyFilter = 'All',
+  setCurrencyFilter = () => {},
+  search = '',
+  setSearch = () => {},
+  onSyncMany,
+  onSyncOne,
+}) {
+  // ---------- Local state
+  const [stageFilter, setStageFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [countryFilter, setCountryFilter] = useState('all');
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [savingFx, setSavingFx] = useState(false);
+  const [adminError, setAdminError] = useState('');
+  const [ratesAUD, setRatesAUD] = useState({ AUD:1, SGD:1.07, MYR:0.33, PHP:0.027, IDR:0.000095 });
+
+  // ---------- Helpers
+  const toCurrency = (n) => {
+    const v = Number(n || 0);
+    if (!Number.isFinite(v)) return '';
+    return new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(v);
+  };
+  const exportCSV = (rows) => {
+    const cols = [
+      'submittedAt','resellerName','resellerContact','resellerEmail','customerName',
+      'country','city','customerLocation','solution','currency','value','stage','status','expectedCloseDate','lockExpiry'
+    ];
+    const head = cols.join(',');
+    const body = (rows||[]).map(x => cols.map(k => {
+      const val = (x[k] ?? '').toString().replace(/
+/g,' ').replace(/"/g,'""');
+      return `"${val}"`;
+    }).join(',')).join('
+');
+    const blob = new Blob([head+'
+'+body], {type:'text/csv'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `aptella-registrations-${todayLocalISO()}.csv`;
+    a.click();
+  };
+
+  // ---------- Apps Script integration
+  const hasGAS = (typeof GOOGLE_APPS_SCRIPT_URL !== 'undefined' && GOOGLE_APPS_SCRIPT_URL);
+  const pullAll = async () => {
+    if (!hasGAS) { setAdminError('Apps Script URL not configured'); return; }
+    try {
+      setAdminError('');
+      const res = await fetch(`${GOOGLE_APPS_SCRIPT_URL}?action=list`, { cache: 'no-cache' });
+      const json = await res.json();
+      if (!json?.ok) throw new Error(json?.error || 'List failed');
+      if (Array.isArray(json.data)) setItems(json.data);
+      if (json.meta?.ratesAUD) setRatesAUD(json.meta.ratesAUD);
+    } catch (e) {
+      setAdminError(String(e?.message || e));
+    }
+  };
+  const saveFxRates = async (newRates) => {
+    if (!hasGAS) { setRatesAUD(newRates); setSettingsOpen(false); return; }
+    try {
+      setSavingFx(true); setAdminError('');
+      const res = await fetch(`${GOOGLE_APPS_SCRIPT_URL}?action=fx`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ratesAUD: newRates })
+      });
+      const json = await res.json();
+      if (!json?.ok) throw new Error(json?.error || 'FX save failed');
+      setRatesAUD(newRates);
+      setSettingsOpen(false);
+      await pullAll();
+    } catch (e) {
+      setAdminError(String(e?.message || e));
+    } finally { setSavingFx(false); }
+  };
+
+  // ---------- Filtering
+  const countries = useMemo(() => {
+    const set = new Set();
+    (rawItems || items || []).forEach(r => r?.country && set.add(r.country));
+    return Array.from(set).sort();
+  }, [rawItems, items]);
+
+  const parentFiltered = useMemo(() => (items || []).filter(x => {
+    const okCur = !currencyFilter || currencyFilter === 'All' || String(x.currency||'').toLowerCase() === String(currencyFilter).toLowerCase();
+    const okSearch = !search || JSON.stringify(x).toLowerCase().includes(search.toLowerCase());
+    return okCur && okSearch;
+  }), [items, currencyFilter, search]);
+
+  const visible = useMemo(() => parentFiltered.filter(x => {
+    const okStage = stageFilter === 'all' || x.stage === stageFilter;
+    const okStatus = statusFilter === 'all' || x.status === statusFilter;
+    const okCountry = countryFilter === 'all' || x.country === countryFilter;
+    return okStage && okStatus && okCountry;
+  }), [parentFiltered, stageFilter, statusFilter, countryFilter]);
+
+  const rowTone = (x) => {
+    const approaching = x.status === 'approved' && daysUntil(x.lockExpiry) <= 7 && daysUntil(x.lockExpiry) >= 0;
+    if (approaching) return 'orange';
+    if (x.status === 'approved') return 'green';
+    if (x.status === 'rejected' || x.stage === 'lost') return 'red';
+    if (x.status === 'pending') return 'blue';
+    return 'gray';
+  };
+  const toneToRow = { green: 'bg-green-50', red: 'bg-red-50', blue: 'bg-blue-50', orange: 'bg-orange-50', gray: '' };
+
+  // ---------- Map (Leaflet CDN, no module imports)
+  function useLeaflet() {
+    const [ready, setReady] = useState(!!(window && window.L));
+    useEffect(() => {
+      if (ready) return;
+      const head = document.head;
+      const hasCSS = !!document.querySelector('link[data-leaflet]');
+      if (!hasCSS) {
+        const link = document.createElement('link');
+        link.setAttribute('data-leaflet','1');
+        link.rel = 'stylesheet';
+        link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+        head.appendChild(link);
+      }
+      const hasJS = !!document.querySelector('script[data-leaflet]');
+      if (!hasJS) {
+        const script = document.createElement('script');
+        script.setAttribute('data-leaflet','1');
+        script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+        script.async = true;
+        script.onload = () => setReady(true);
+        script.onerror = () => setReady(false);
+        head.appendChild(script);
+      } else {
+        setReady(!!window.L);
+      }
+    }, [ready]);
+    return ready && window.L ? window.L : null;
+  }
+
+  function AdminGeoMap({ rows, ratesAUD }){
+    const L = useLeaflet();
+    const mapRef = React.useRef(null);
+    const mapObj = React.useRef(null);
+    const layerRef = React.useRef(null);
+
+    useEffect(() => {
+      if (!L) return; // not ready yet
+      if (!mapObj.current && mapRef.current) {
+        const m = L.map(mapRef.current).setView([DEFAULT_LAT, DEFAULT_LNG], 4);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap' }).addTo(m);
+        mapObj.current = m;
+        layerRef.current = L.layerGroup().addTo(m);
+      }
+    }, [L]);
+
+    useEffect(() => {
+      if (!L || !mapObj.current || !layerRef.current) return;
+      const g = layerRef.current;
+      g.clearLayers();
+      const rowsWithGeo = (rows || []).filter(r => Number.isFinite(Number(r.lat)) && Number.isFinite(Number(r.lng)));
+      rowsWithGeo.forEach(r => {
+        const lat = Number(r.lat), lng = Number(r.lng);
+        let aud = Number(r.value || 0);
+        const fx = ratesAUD[String(r.currency||'').toUpperCase()];
+        if (Number.isFinite(fx)) aud = aud * fx; // values to AUD
+        const tone = rowTone(r);
+        const color = tone==='green'? '#16a34a' : tone==='red'? '#dc2626' : tone==='blue'? '#2563eb' : tone==='orange'? '#f59e0b' : '#6b7280';
+        const marker = L.circleMarker([lat, lng], { radius: Math.max(5, Math.log10(1+aud) * 2.5), color, weight: 2, fillOpacity: 0.25 }).addTo(g);
+        const html = `<div style="font-weight:600">${r.customerName || '(Confidential)'}</div>
+          <div>${r.city||''}${r.country?`, ${r.country}`:''} · ${r.solution||''}</div>
+          <div>${r.currency||''} ${toCurrency(r.value)} · Status: ${r.status||'pending'}</div>`;
+        marker.bindPopup(html);
+      });
+    }, [L, rows, ratesAUD]);
+
+    return <div ref={mapRef} style={{height:'380px'}} className="rounded-xl border mt-2" />;
+  }
+
   return (
     <Card>
-      <CardHeader title="Admin – Registrations" subtitle={`Total: ${items.length}`} />
+      <CardHeader
+        title="Admin – Registrations"
+        right={
+          <div className="flex items-center gap-2">
+            <input className="border rounded-lg px-3 py-2 text-sm" placeholder="Search…" value={search} onChange={e=>setSearch(e.target.value)} />
+            <select className="border rounded-lg px-3 py-2 text-sm" value={currencyFilter} onChange={e=>setCurrencyFilter(e.target.value)}>
+              <option value="All">All</option>
+              {CURRENCIES.map(c => <option key={c}>{c}</option>)}
+            </select>
+            <button onClick={()=>exportCSV(visible)} className={`px-3 py-2 rounded-xl text-white text-sm ${BRAND.primaryBtn}`}>Export CSV</button>
+            <button onClick={()=>onSyncMany && onSyncMany(visible)} className={`px-3 py-2 rounded-xl text-white text-sm ${BRAND.primaryBtn}`}>Sync Visible</button>
+            <button onClick={()=>setSettingsOpen(true)} className="px-3 py-2 rounded-xl bg-gray-100 text-sm">Settings</button>
+            <button onClick={pullAll} className={`px-3 py-2 rounded-xl text-white text-sm ${BRAND.primaryBtn}`}>Refresh from Sheets</button>
+          </div>
+        }
+      />
       <CardBody>
-        <div className="overflow-x-auto">
+        {adminError && <div className="mb-3 text-sm text-red-700 bg-red-50 border border-red-200 px-3 py-2 rounded-lg">{adminError}</div>}
+
+        <div className="grid md:grid-cols-4 gap-3 mb-3">
+          <div className="grid gap-1">
+            <Label>Stage</Label>
+            <Select value={stageFilter} onChange={e=>setStageFilter(e.target.value)}>
+              <option value="all">All</option>
+              {STAGES.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
+            </Select>
+          </div>
+          <div className="grid gap-1">
+            <Label>Status</Label>
+            <Select value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}>
+              <option value="all">All</option>
+              <option value="pending">Pending</option>
+              <option value="approved">Approved</option>
+              <option value="rejected">Rejected</option>
+            </Select>
+          </div>
+          <div className="grid gap-1">
+            <Label>Country</Label>
+            <Select value={countryFilter} onChange={e=>setCountryFilter(e.target.value)}>
+              <option value="all">All</option>
+              {countries.map(c => <option key={c} value={c}>{c}</option>)}
+            </Select>
+          </div>
+          <div className="grid gap-1">
+            <Label>Currency</Label>
+            <Select value={currencyFilter} onChange={e=>setCurrencyFilter(e.target.value)}>
+              <option value="All">All</option>
+              {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
+            </Select>
+          </div>
+        </div>
+
+        <h3 className="text-lg font-semibold">Opportunities Map</h3>
+        <AdminGeoMap rows={visible} ratesAUD={ratesAUD} />
+
+        <div className="overflow-x-auto mt-4">
           <table className="min-w-full text-sm">
             <thead>
               <tr className="bg-gray-100 text-gray-700">
-                <th className="p-2 text-left">Submitted</th>
-                <th className="p-2 text-left">Reseller</th>
-                <th className="p-2 text-left">Customer</th>
-                <th className="p-2 text-left">Country</th>
-                <th className="p-2 text-left">Solution</th>
-                <th className="p-2 text-left">Value</th>
-                <th className="p-2 text-left">Status</th>
+                <th className="p-3 text-left">Submitted</th>
+                <th className="p-3 text-left">Reseller</th>
+                <th className="p-3 text-left">Customer</th>
+                <th className="p-3 text-left">Country</th>
+                <th className="p-3 text-left">Solution</th>
+                <th className="p-3 text-left">Value</th>
+                <th className="p-3 text-left">Stage</th>
+                <th className="p-3 text-left">Status</th>
               </tr>
             </thead>
             <tbody>
-              {items.map(x => (
-                <tr key={x.id || Math.random()} className={`border-b ${rowTone(x)}`}>
-                  <td className="p-2 whitespace-nowrap">{x.submittedAt || '-'}</td>
-                  <td className="p-2">{x.resellerName || '-'}</td>
-                  <td className="p-2">{x.customerName || '-'}</td>
-                  <td className="p-2">{x.country || '-'}</td>
-                  <td className="p-2">{x.solution || '-'}</td>
-                  <td className="p-2 whitespace-nowrap">{x.currency || ''} {x.value || ''}</td>
-                  <td className="p-2">{x.status || 'pending'}</td>
+              {visible.map(x => (
+                <tr key={x.id || Math.random()} className={`border-b ${toneToRow[rowTone(x)]}`}>
+                  <td className="p-3 whitespace-nowrap">{x.submittedAt || '-'}</td>
+                  <td className="p-3">
+                    <div className="font-medium">{x.resellerName || '-'}</div>
+                    <div className="text-xs text-gray-500">{x.resellerContact || ''} · {x.resellerEmail || ''}</div>
+                  </td>
+                  <td className="p-3">
+                    <div className="font-medium">{x.confidential ? '(Confidential)' : (x.customerName || '-')}</div>
+                    <div className="text-xs text-gray-500">{x.customerLocation || ''}</div>
+                  </td>
+                  <td className="p-3">{x.country || '-'}</td>
+                  <td className="p-3">{x.solution || '-'}</td>
+                  <td className="p-3 whitespace-nowrap">{x.currency || ''} {toCurrency(x.value)}</td>
+                  <td className="p-3">{(STAGES.find(s=>s.key===x.stage)||{}).label || x.stage || '-'}</td>
+                  <td className="p-3">
+                    {x.status === 'pending' && <span className="px-2 py-1 rounded bg-blue-100 text-blue-800">Pending</span>}
+                    {x.status === 'approved' && <span className="px-2 py-1 rounded bg-green-100 text-green-800">Approved</span>}
+                    {x.status === 'rejected' && <span className="px-2 py-1 rounded bg-red-100 text-red-800">Rejected</span>}
+                  </td>
                 </tr>
               ))}
-              {items.length === 0 && (
-                <tr><td colSpan={7} className="p-4 text-center text-gray-500">No submissions yet.</td></tr>
+              {visible.length === 0 && (
+                <tr><td colSpan={8} className="p-6 text-center text-gray-500">No registrations match your filters.</td></tr>
               )}
             </tbody>
           </table>
         </div>
+
+        <AdminSettings open={settingsOpen} onClose={()=>setSettingsOpen(false)} ratesAUD={ratesAUD} onSave={saveFxRates} saving={savingFx} />
       </CardBody>
     </Card>
   );
 }
 
-// --- Admin → Settings drawer for FX rates (definition ensured) ---
+// --- Admin → Settings drawer for FX rates (definition ensured) --- (definition ensured) ---
 function AdminSettings({ open, onClose, ratesAUD = {}, onSave, saving }) {
   const [local, setLocal] = React.useState(ratesAUD || {});
   React.useEffect(() => { setLocal(ratesAUD || {}); }, [ratesAUD, open]);
