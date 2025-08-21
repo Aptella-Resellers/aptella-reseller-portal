@@ -675,51 +675,14 @@ function StatsBar({ items, totalsByCurrency }) {
 }
 
 function AdminPanel($1) {
-  const [ratesAUD, setRatesAUD] = useState({ AUD:1, SGD:1.07, MYR:0.33, PHP:0.027, IDR:0.000095 });
+   // ANCHOR_RATESAUD
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [savingFx, setSavingFx] = useState(false);
   const [adminError, setAdminError] = useState("");
-  const pullAll = async () => {
-    try {
-      setAdminError("");
-      const res = await fetch(`${GOOGLE_APPS_SCRIPT_URL}?action=list`, { cache: 'no-cache' });
-      const json = await res.json();
-      if (json && json.ok && Array.isArray(json.data)) {
-        setItems(json.data);
-        if (json.meta && json.meta.ratesAUD) setRatesAUD(json.meta.ratesAUD);
-      } else {
-        throw new Error(json && json.error || 'List failed');
-      }
-    } catch (e) { setAdminError(String(e)); }
-  };
-  const saveFxRates = async (newRates) => {
-    try {
-      setSavingFx(true); setAdminError("");
-      const res = await fetch(`${GOOGLE_APPS_SCRIPT_URL}?action=fx`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ratesAUD: newRates })
-      });
-      const json = await res.json();
-      if (!json || !json.ok) throw new Error(json && json.error || 'FX save failed');
-      setRatesAUD(newRates);
-      setSettingsOpen(false);
-      await pullAll();
-    } catch (e) { setAdminError(String(e)); }
-    finally { setSavingFx(false); }
-  };
+  
   useEffect(() => { pullAll(); }, []);
 
-  const [ratesAUD, setRatesAUD] = useState({ AUD:1, SGD:1.07, MYR:0.33, PHP:0.027, IDR:0.000095 });
-  const pullAll = async () => {
-    try {
-      const res = await fetch(`${GOOGLE_APPS_SCRIPT_URL}?action=list`, { cache: 'no-store' });
-      const json = await res.json();
-      if (json && json.ok && Array.isArray(json.data)) {
-        setItems(json.data);
-        if (json.meta && json.meta.ratesAUD) setRatesAUD(json.meta.ratesAUD);
-      }
-    } catch (e) { console.error('Admin pullAll failed', e); }
-  };
+  
   useEffect(() => { pullAll(); }, []);
 
   React.useEffect(() => {
