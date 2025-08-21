@@ -285,7 +285,7 @@ function AdminMap({ items = [] }) {
 }
 
 // Using public/ logo path so build succeeds even if asset is missing at src/assets
-const LOGO_URL = new URL('aptella-logo.png', window.location.href).href;
+const LOGO_URL = new URL('/aptella-logo.png', window.location.href).href;
 
 // Simple error boundary so blank-page errors render visibly
 class ErrorCatcher extends React.Component {
@@ -682,63 +682,83 @@ function StatsBar({ items, totalsByCurrency }) {
   );
 }
 
-function AdminPanel($1) {
-  // Ensure Admin state exists (prevents ReferenceError: ratesAUD is not defined)
+function AdminPanel({ items, rawItems, setItems, currencyFilter, setCurrencyFilter, search, setSearch, onSyncMany, onSyncOne }) {
+  // --- Admin state (single source; avoid duplicate declarations) ---
   const [ratesAUD, setRatesAUD] = useState({ AUD:1, SGD:1.07, MYR:0.33, PHP:0.027, IDR:0.000095 });
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [savingFx, setSavingFx] = useState(false);
   const [adminError, setAdminError] = useState("");
-  // Ensure rawItems defined even if parent omitted it
-  rawItems = Array.isArray(rawItems) ? rawItems : (Array.isArray(items) ? items : []);
 
-  // Ensure rawItems is defined to avoid ReferenceError in downstream code
-  rawItems = Array.isArray(rawItems) ? rawItems : (Array.isArray(items) ? items : []);
+  // Safe backing arrays
+  const baseItems = Array.isArray(items) ? items : [];
+  const allItems = Array.isArray(rawItems) ? rawItems : baseItems;
 
-   // ANCHOR_RATESAUD
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [savingFx, setSavingFx] = useState(false);
-  const [adminError, setAdminError] = useState("");
-  
-  useEffect(() => { pullAll(); }, []);
-
-  
-  useEffect(() => { pullAll(); }, []);
-
-  React.useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch(`${GOOGLE_APPS_SCRIPT_URL}?action=list`, { cache: 'no-store' });
-        const json = await res.json();
-        if (json && json.ok && Array.isArray(json.data)) {
-          setItems(json.data);
-        }
-      } catch (e) {
-        console.error('Admin pullAll failed', e);
-      }
-    })();
-  }, []);
-
+  // Local filters
   const [stageFilter, setStageFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [countryFilter, setCountryFilter] = useState("all");
-  const [evidenceFor, setEvidenceFor] = useState(null); // record
+  const [evidenceFor, setEvidenceFor] = useState(null);
 
+  // Pull all rows + FX
+  const pullAll = async () => {
+    try {
+      setAdminError("");
+      const res = await fetch(`${GOOGLE_APPS_SCRIPT_URL}?action=list`, { cache: 'no-cache' });
+      const json = await res.json();
+      if (json?.ok && Array.isArray(json.data)) {
+        setItems(json.data);
+        if (json.meta?.ratesAUD) setRatesAUD(json.meta.ratesAUD);
+      } else {
+        throw new Error(json?.error || 'List failed');
+      }
+    } catch (e) {
+      setAdminError(String(e?.message || e));
+    }
+  };
+  useEffect(() => { pullAll(); }, []);
+
+  // Save FX table to GAS
+  const saveFxRates = async (newRates) => {
+    try {
+      setSavingFx(true); setAdminError("");
+      const res = await fetch(`${GOOGLE_APPS_SCRIPT_URL}?action=fx`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ratesAUD: newRates })
+      });
+      const json = await res.json();
+      if (!json?.ok) throw new Error(json?.error || 'FX save failed');
+      setRatesAUD(newRates);
+      setSettingsOpen(false);
+      await pullAll();
+    } catch (e) {
+      setAdminError(String(e?.message || e));
+    } finally {
+      setSavingFx(false);
+    }
+  };
+
+  // Country list for filter
   const countries = useMemo(() => {
     const set = new Set();
-    (rawItems||[]).forEach(r => set.add(r.country));
-    return Array.from(set).filter(Boolean).sort();
-  }, [rawItems]);
+    (allItems || []).forEach(r => r?.country && set.add(r.country));
+    return Array.from(set).sort();
+  }, [allItems]);
 
-  const visible = useMemo(() => items.filter(x => {
-    const okStage = stageFilter === "all" || x.stage === stageFilter;
-    const okStatus = statusFilter === "all" || x.status === statusFilter;
-    const ctry = x.country;
-    const okCountry = countryFilter === "all" || ctry === countryFilter;
+  // Apply local filters on top of parent-provided items (which already respect currency/search)
+  const visible = useMemo(() => baseItems.filter(x => {
+    const okStage = stageFilter === 'all' || x.stage === stageFilter;
+    const okStatus = statusFilter === 'all' || x.status === statusFilter;
+    const okCountry = countryFilter === 'all' || x.country === countryFilter;
     return okStage && okStatus && okCountry;
-  }), [items, stageFilter, statusFilter, countryFilter]);
+  }), [baseItems, stageFilter, statusFilter, countryFilter]);
 
-  function setStatus(id, status) { setItems(rawItems.map(x => x.id === id ? { ...x, status, lockExpiry: status === 'approved' ? addDays(x.submittedAt, 60) : x.lockExpiry } : x)); }
-  function remove(id) { if (!confirm("Delete this registration? This cannot be undone.")) return; setItems(rawItems.filter(x => x.id !== id)); }
+  function setStatus(id, status) {
+    setItems(allItems.map(x => x.id === id ? { ...x, status, lockExpiry: status === 'approved' ? addDays(x.submittedAt, 60) : x.lockExpiry } : x));
+  }
+  function remove(id) {
+    if (!confirm('Delete this registration? This cannot be undone.')) return;
+    setItems(allItems.filter(x => x.id !== id));
+  }
 
   function rowTone(x){
     const approaching = x.status === 'approved' && daysUntil(x.lockExpiry) <= 7 && daysUntil(x.lockExpiry) >= 0;
@@ -757,7 +777,7 @@ function AdminPanel($1) {
         right={
           <div className="flex items-center gap-2">
             <button onClick={()=>exportCSV(visible)} className={`px-3 py-2 rounded-xl text-white text-sm ${BRAND.primaryBtn}`}>Export CSV</button>
-            <button onClick={()=>onSyncMany(visible)} className={`px-3 py-2 rounded-xl text-white text-sm ${BRAND.primaryBtn}`}>Sync Visible to Google Sheets</button>
+            <button onClick={()=>onSyncMany && onSyncMany(visible)} className={`px-3 py-2 rounded-xl text-white text-sm ${BRAND.primaryBtn}`}>Sync Visible to Google Sheets</button>
           </div>
         }
       />
@@ -789,17 +809,22 @@ function AdminPanel($1) {
 
         <div className="flex items-center justify-between mt-2">
           <h3 className="text-lg font-semibold">Opportunities Map</h3>
+          <div className="flex items-center gap-2">
+            <button onClick={pullAll} className={`px-3 py-1.5 rounded-lg text-white ${BRAND.primaryBtn}`}>Refresh from Sheets</button>
+            <button onClick={()=> setSettingsOpen(true)} className="px-3 py-1.5 rounded-lg bg-gray-100">Settings</button>
+          </div>
+        </div>
         {typeof AdminSettings === 'function' && (
           <AdminSettings open={settingsOpen} onClose={()=> setSettingsOpen(false)} ratesAUD={ratesAUD} onSave={saveFxRates} saving={savingFx} />
         )}
         {adminError && <div className="mt-2 text-sm text-red-700 bg-red-50 border border-red-200 px-3 py-2 rounded-lg">{adminError}</div>}
-          <button onClick={pullAll} className={`px-3 py-1.5 rounded-lg text-white ${BRAND.primaryBtn}`}>Refresh from Sheets</button>
-        </div>
-        <AdminGeoMap items={(items || []).filter(x => {
+
+        <AdminGeoMap items={baseItems.filter(x => {
           const okSearch = !search || JSON.stringify(x).toLowerCase().includes(search.toLowerCase());
           const okCur = !currencyFilter || String(x.currency || '').toLowerCase() === String(currencyFilter).toLowerCase();
           return okSearch && okCur;
         })} ratesAUD={ratesAUD} />
+
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm">
             <thead>
@@ -885,9 +910,18 @@ function AdminPanel($1) {
                 <p className="text-xs text-gray-500 mt-1">New submissions can automatically email attachments to Aptella if the reseller opts in.</p>
               </div>
               <div className="flex flex-wrap gap-2">
-                <button onClick={()=>mailto(APTELLA_EVIDENCE_EMAIL, `Evidence for ${evidenceFor.id}`, `Links:\n${(evidenceFor.evidenceLinks||[]).join('\n')}\n\nCustomer: ${evidenceFor.customerName}\nReseller: ${evidenceFor.resellerName}`)} className={`px-3 py-2 rounded-xl text-white text-sm ${BRAND.primaryBtn}`}>Email links to Aptella</button>
+                <button onClick={()=>mailto(APTELLA_EVIDENCE_EMAIL, `Evidence for ${evidenceFor.id}`, `Links:
+${(evidenceFor.evidenceLinks||[]).join('
+')}
+
+Customer: ${evidenceFor.customerName}
+Reseller: ${evidenceFor.resellerName}`)} className={`px-3 py-2 rounded-xl text-white text-sm ${BRAND.primaryBtn}`}>Email links to Aptella</button>
                 {evidenceFor.resellerEmail && (
-                  <button onClick={()=>mailto(evidenceFor.resellerEmail, `Request files for registration ${evidenceFor.id}`, `Hi ${evidenceFor.resellerContact||''},\n\nPlease reply with the missing evidence files for your registration ${evidenceFor.id}.\nCustomer: ${evidenceFor.customerName}\nThanks!`)} className="px-3 py-2 rounded-xl bg-gray-200 text-sm">Request files from reseller</button>
+                  <button onClick={()=>mailto(evidenceFor.resellerEmail, `Request files for registration ${evidenceFor.id}`, `Hi ${evidenceFor.resellerContact||''},
+
+Please reply with the missing evidence files for your registration ${evidenceFor.id}.
+Customer: ${evidenceFor.customerName}
+Thanks!`)} className="px-3 py-2 rounded-xl bg-gray-200 text-sm">Request files from reseller</button>
                 )}
               </div>
             </div>
@@ -897,6 +931,7 @@ function AdminPanel($1) {
     </Card>
   );
 }
+
 
 function SubmissionForm({ onSave, items, onSyncOne, onLocaleChange }) {
   const [form, setForm] = useState({
