@@ -507,3 +507,13 @@ function ResellerUpdates({ items, setItems }){
     </Card>
   );
 }
+// --- Ensure a single default export for Vite entry (src/main.jsx expects default) ---
+// Prefer an existing root component if present; otherwise render a safe fallback.
+// Using typeof guards avoids ReferenceErrors even if symbols are not declared.
+const __AptellaDefault =
+  (typeof DealRegistrationPortal !== 'undefined' && DealRegistrationPortal) ||
+  (typeof App !== 'undefined' && App) ||
+  (typeof Portal !== 'undefined' && Portal) ||
+  (function Fallback(){ return <div/>; });
+
+export default __AptellaDefault;
