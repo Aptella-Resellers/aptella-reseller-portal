@@ -596,13 +596,65 @@ function ResellerUpdates({ items, setItems }){
 }
 
 
-// --- Ensure a single default export for Vite entry (src/main.jsx expects default) ---
-// Prefer an existing root component if present; otherwise render a safe fallback.
-// Using typeof guards avoids ReferenceErrors even if symbols are not declared.
-const __AptellaDefault =
-  (typeof DealRegistrationPortal !== 'undefined' && DealRegistrationPortal) ||
-  (typeof App !== 'undefined' && App) ||
-  (typeof Portal !== 'undefined' && Portal) ||
-  (function Fallback(){ return <div/>; });
 
-export default __AptellaDefault;
+
+
+// ---- Root: Aptella Reseller Portal (safe default export) ----
+function AptellaRoot() {
+  const [items, setItems] = useState([]);
+  const [tab, setTab] = useState('reseller'); // 'reseller' | 'admin'
+  const [search, setSearch] = useState('');
+  const [currencyFilter, setCurrencyFilter] = useState('All');
+
+  const safeURL = (typeof GOOGLE_APPS_SCRIPT_URL !== 'undefined') ? GOOGLE_APPS_SCRIPT_URL : '';
+
+  const syncOne = async (row) => {
+    if (!safeURL) return;
+    try {
+      const res = await fetch(safeURL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(row) });
+      await res.json().catch(()=>null);
+      setItems(prev => prev.map(r => r.id === row.id ? { ...r, syncedAt: todayLocalISO ? todayLocalISO() : new Date().toISOString().slice(0,10) } : r));
+    } catch (e) { console.error('syncOne failed', e); }
+  };
+  const syncMany = async (rows=[]) => { for (const r of rows) { await syncOne(r); } };
+
+  return (
+    <div className="p-4 max-w-7xl mx-auto">
+      <div className="flex items-center justify-between">
+        <div className="text-xl font-semibold">Aptella Reseller Deal Registration</div>
+        <div className="flex gap-2">
+          <button className={`px-3 py-2 rounded-lg ${tab==='reseller' ? 'bg-sky-700 text-white' : 'bg-gray-100'}`} onClick={()=>setTab('reseller')}>Reseller</button>
+          <button className={`px-3 py-2 rounded-lg ${tab==='admin' ? 'bg-sky-700 text-white' : 'bg-gray-100'}`} onClick={()=>setTab('admin')}>Admin</button>
+        </div>
+      </div>
+
+      <div className="mt-4">
+        {tab === 'reseller' ? (
+          (typeof SubmissionForm === 'function') ? (
+            <SubmissionForm items={items} setItems={setItems} />
+          ) : (
+            <div className="text-sm text-gray-500">SubmissionForm component not found.</div>
+          )
+        ) : (
+          (typeof AdminPanel === 'function') ? (
+            <AdminPanel
+              items={items}
+              rawItems={items}
+              setItems={setItems}
+              currencyFilter={currencyFilter}
+              setCurrencyFilter={setCurrencyFilter}
+              search={search}
+              setSearch={setSearch}
+              onSyncOne={syncOne}
+              onSyncMany={syncMany}
+            />
+          ) : (
+            <div className="text-sm text-gray-500">AdminPanel component not found.</div>
+          )
+        )}
+      </div>
+    </div>
+  );
+}
+
+export default AptellaRoot;
