@@ -173,8 +173,8 @@ function AdminPanel({
     ];
     const head = cols.join(',');
     const body = (rows||[]).map(x => cols.map(k => {
-      const val = (x[k] ?? '').toString().replace(/
-/g,' ').replace(/"/g,'""');
+      const val = String(x[k] ?? '').replace(/
+/g, ' ').replace(/"/g,'""');
       return `"${val}"`;
     }).join(',')).join('
 ');
