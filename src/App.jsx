@@ -217,6 +217,7 @@ export default function DealRegistrationPortal() {
   const [mode, setMode] = useState("reseller"); // 'reseller' | 'admin'
   const [currencyFilter, setCurrencyFilter] = useState("All");
   const [search, setSearch] = useState("");
+  const [uiLocale, setUiLocale] = useState('en');
   const [items, setItems] = useState(() => {
     try { const raw = localStorage.getItem(STORAGE_KEY); return raw ? JSON.parse(raw) : []; } catch (e) { return []; }
   });
@@ -300,7 +301,7 @@ export default function DealRegistrationPortal() {
       <ErrorCatcher>
         <main className="max-w-7xl mx-auto p-4 grid gap-6">
         {mode === "reseller" ? (
-          <SubmissionForm onSave={(rec)=>setItems([rec, ...items])} items={items} onSyncOne={syncOne} />
+          <SubmissionForm onSave={(rec)=>setItems([rec, ...items])} items={items} onSyncOne={syncOne} onLocaleChange={(loc)=>setUiLocale(loc)} />
         ) : (
           <AdminGate>
             {/* Stats visible in Admin only */}
@@ -320,14 +321,14 @@ export default function DealRegistrationPortal() {
         )}
 
         <Card>
-          <CardHeader title="Deal Registration Rules" subtitle="Please read before submitting. (Aptella)" />
+          <CardHeader title={uiLocale==='id' ? 'Aturan Registrasi Deal' : 'Deal Registration Rules'} subtitle={uiLocale==='id' ? 'Harap dibaca sebelum mengirim. (Aptella)' : 'Please read before submitting. (Aptella)'} />
           <CardBody>
             <ul className="list-disc pl-6 space-y-1 text-sm text-gray-700">
-              <li>Registrations must be for projects or purchases expected within the next <strong>60 days</strong>.</li>
-              <li><strong>Evidence is mandatory</strong>: upload an email, quote, or photo.</li>
-              <li>Approved registrations are locked to the submitting reseller for <strong>60 days</strong> from submission unless extended by Aptella.</li>
-              <li>Duplicates for the same customer, solution, and timeframe may be rejected or merged at Aptella’s discretion.</li>
-              <li>Use of this portal implies consent to store submitted business contact data for deal management.</li>
+              <li>{uiLocale==='id' ? <>Registrasi harus untuk proyek atau pembelian yang diperkirakan dalam <strong>60 hari</strong> ke depan.</> : <>Registrations must be for projects or purchases expected within the next <strong>60 days</strong>.</>}</li>
+              <li>{uiLocale==='id' ? <><strong>Bukti wajib</strong>: unggah email, penawaran, atau foto.</> : <><strong>Evidence is mandatory</strong>: upload an email, quote, or photo.</>}</li>
+              <li>{uiLocale==='id' ? <>Registrasi yang disetujui dikunci untuk reseller pengaju selama <strong>60 hari</strong> sejak pengajuan kecuali diperpanjang oleh Aptella.</> : <>Approved registrations are locked to the submitting reseller for <strong>60 days</strong> from submission unless extended by Aptella.</>}</li>
+              <li>{uiLocale==='id' ? <>Duplikasi untuk pelanggan, solusi, dan rentang waktu yang sama dapat ditolak atau digabungkan sesuai kebijakan Aptella.</> : <>Duplicates for the same customer, solution, and timeframe may be rejected or merged at Aptella’s discretion.</>}</li>
+              <li>{uiLocale==='id' ? <>Penggunaan portal ini berarti menyetujui penyimpanan data kontak bisnis yang dikirim untuk pengelolaan deal.</> : <>Use of this portal implies consent to store submitted business contact data for deal management.</>}</li>
             </ul>
           </CardBody>
         </Card>
@@ -567,7 +568,7 @@ function AdminPanel({ items, rawItems, setItems, currencyFilter, setCurrencyFilt
   );
 }
 
-function SubmissionForm({ onSave, items, onSyncOne }) {
+function SubmissionForm({ onSave, items, onSyncOne, onLocaleChange }) {
   const [form, setForm] = useState({
     resellerCountry: "Singapore",
     resellerLocation: "Singapore",
@@ -600,9 +601,19 @@ function SubmissionForm({ onSave, items, onSyncOne }) {
   });
   const [errors, setErrors] = useState({});
   const isID = form.resellerCountry === 'Indonesia';
+  const SUPPORT_OPTIONS_ID = {
+    'Pre-sales engineer': 'Insinyur pra-penjualan',
+    'Demo / loan unit': 'Unit demo / pinjaman',
+    'Pricing exception': 'Pengecualian harga',
+    'Marketing materials': 'Materi pemasaran',
+    'Partner training': 'Pelatihan mitra',
+    'On-site customer visit': 'Kunjungan ke lokasi pelanggan',
+    'Extended lock request': 'Permintaan perpanjangan lock'
+  };
   const [dupWarning, setDupWarning] = useState("");
 
   useEffect(() => { setForm((f) => ({ ...f, probability: PROB_BY_STAGE[f.stage] ?? f.probability })); }, [form.stage]);
+  useEffect(() => { if (typeof onLocaleChange === 'function') onLocaleChange(form.resellerCountry === 'Indonesia' ? 'id' : 'en'); }, [form.resellerCountry, onLocaleChange]);
   useEffect(() => { const cfg = COUNTRY_CONFIG[form.resellerCountry]; if (cfg) setForm(f=>({ ...f, currency: cfg.currency, resellerLocation: cfg.capital })); }, [form.resellerCountry]);
 
   function handleChange(e) { const { name, value, type, checked } = e.target; setForm({ ...form, [name]: type === 'checkbox' ? checked : value }); }
@@ -760,7 +771,7 @@ function SubmissionForm({ onSave, items, onSyncOne }) {
               {errors.resellerName && <p className="text-xs text-red-600">{errors.resellerName}</p>}
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="resellerContact" required>Primary contact</Label>
+              <Label htmlFor="resellerContact" required>{isID ? 'Kontak Utama' : 'Primary contact'}</Label>
               <Input id="resellerContact" name="resellerContact" value={form.resellerContact} onChange={handleChange} placeholder="Full name" />
               {errors.resellerContact && <p className="text-xs text-red-600">{errors.resellerContact}</p>}
             </div>
@@ -782,7 +793,7 @@ function SubmissionForm({ onSave, items, onSyncOne }) {
               {errors.customerName && <p className="text-xs text-red-600">{errors.customerName}</p>}
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="resellerLocation" required>Reseller location</Label>
+              <Label htmlFor="resellerLocation" required>{isID ? 'Lokasi Reseller' : 'Reseller location'}</Label>
               <Input id="resellerLocation" name="resellerLocation" value={form.resellerLocation} onChange={e=>setForm(f=>({...f, resellerLocation:e.target.value}))} placeholder="Jakarta" />
             </div>
           </div>
@@ -805,13 +816,13 @@ function SubmissionForm({ onSave, items, onSyncOne }) {
               {errors.country && <p className="text-xs text-red-600">{errors.country}</p>}
             </div>
             <div className="grid gap-2">
-              <Label>Map option (paste lat, lng or click helper)</Label>
+              <Label>{isID ? 'Opsi peta (tempel lat, lng atau klik pembantu)' : 'Map option (paste lat, lng or click helper)'}</Label>
               <div className="flex gap-2">
                 <Input placeholder="lat" value={form.lat??""} onChange={e=>setForm(f=>({...f, lat: Number(e.target.value)}))} />
                 <Input placeholder="lng" value={form.lng??""} onChange={e=>setForm(f=>({...f, lng: Number(e.target.value)}))} />
                 <a className={`px-3 py-2 rounded-xl text-white text-sm ${BRAND.primaryBtn}`} href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((form.city||"")+","+(form.country||""))}`} target="_blank">Open Map</a>
               </div>
-              <p className="text-xs text-gray-500">Tip: use the link to pick a point, copy coordinates back here.</p>
+              <p className="text-xs text-gray-500">{isID ? 'Tip: gunakan tautan untuk memilih titik, salin koordinat kembali ke sini.' : 'Tip: use the link to pick a point, copy coordinates back here.'}</p>
             </div>
           </div>
 
@@ -829,7 +840,7 @@ function SubmissionForm({ onSave, items, onSyncOne }) {
               {errors.solution && <p className="text-xs text-red-600">{errors.solution}</p>}
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="expectedCloseDate" required>Expected close date</Label>
+              <Label htmlFor="expectedCloseDate" required>{isID ? 'Perkiraan tanggal penutupan' : 'Expected close date'}</Label>
               <Input id="expectedCloseDate" name="expectedCloseDate" type="date" value={form.expectedCloseDate} onChange={handleChange} />
               {errors.expectedCloseDate && <p className="text-xs text-red-600">{errors.expectedCloseDate}</p>}
             </div>
@@ -837,7 +848,7 @@ function SubmissionForm({ onSave, items, onSyncOne }) {
 
           <div className="grid md:grid-cols-3 gap-4">
             <div className="grid gap-2">
-              <Label htmlFor="industry">Industry</Label>
+              <Label htmlFor="industry">{isID ? 'Industri' : 'Industry'}</Label>
               <Select id="industry" name="industry" value={form.industry} onChange={handleChange}>
                 <option value="">Select industry</option>
                 {INDUSTRIES.map(i => <option key={i} value={i}>{i}</option>)}
@@ -850,7 +861,7 @@ function SubmissionForm({ onSave, items, onSyncOne }) {
               </Select>
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="value" required>Deal value</Label>
+              <Label htmlFor="value" required>{isID ? 'Nilai transaksi' : 'Deal value'}</Label>
               <Input id="value" name="value" type="number" step="0.01" min="0" value={form.value} onChange={handleChange} placeholder="e.g., 25000" />
               {errors.value && <p className="text-xs text-red-600">{errors.value}</p>}
             </div>
@@ -858,17 +869,17 @@ function SubmissionForm({ onSave, items, onSyncOne }) {
 
           <div className="grid md:grid-cols-3 gap-4">
             <div className="grid gap-2">
-              <Label htmlFor="stage">Sales stage</Label>
+              <Label htmlFor="stage">{isID ? 'Tahap penjualan' : 'Sales stage'}</Label>
               <Select id="stage" name="stage" value={form.stage} onChange={handleChange}>
                 {STAGES.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
               </Select>
             </div>
             <div className="grid gap-2">
-              <Label>Probability (%)</Label>
+              <Label>{isID ? 'Probabilitas (%)' : 'Probability (%)'}</Label>
               <Input type="number" min="0" max="100" value={form.probability} onChange={(e)=>setForm({...form, probability: Number(e.target.value)})} />
             </div>
             <div className="grid gap-2">
-              <Label>Competitors</Label>
+              <Label>{isID ? 'Pesaing' : 'Competitors'}</Label>
               <Input placeholder="Comma-separated (optional)" value={(form.competitors||[]).join(", ")} onChange={(e)=>setForm({...form, competitors: e.target.value.split(",").map(s=>s.trim()).filter(Boolean)})} />
             </div>
           </div>
@@ -877,9 +888,9 @@ function SubmissionForm({ onSave, items, onSyncOne }) {
             <Label>Support requested</Label>
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
               {SUPPORT_OPTIONS.map(opt => (
-                <label key={opt} className="flex items-center gap-2 text-sm">
+                <label key={isID ? (SUPPORT_OPTIONS_ID[opt] || opt) : opt} className="flex items-center gap-2 text-sm">
                   <input type="checkbox" checked={form.supports.includes(opt)} onChange={()=>handleMultiToggle('supports', opt)} />
-                  {opt}
+                  {isID ? (SUPPORT_OPTIONS_ID[opt] || opt) : opt}
                 </label>
               ))}
             </div>
@@ -896,7 +907,7 @@ function SubmissionForm({ onSave, items, onSyncOne }) {
             </div>
             <label className="flex items-center gap-2 text-sm mt-1">
               <input type="checkbox" checked={!!form.emailEvidence} onChange={e=>setForm(f=>({...f, emailEvidence: e.target.checked}))} />
-              Email attached files to Aptella ({APTELLA_EVIDENCE_EMAIL}) via secure Apps Script
+              {isID ? `Kirim file terlampir ke Aptella (${APTELLA_EVIDENCE_EMAIL}) melalui Apps Script aman` : `Email attached files to Aptella (${APTELLA_EVIDENCE_EMAIL}) via secure Apps Script`}
             </label>
             {errors.evidence && <p className="text-xs text-red-600">{errors.evidence}</p>}
           </div>
@@ -909,15 +920,15 @@ function SubmissionForm({ onSave, items, onSyncOne }) {
           <div className="flex flex-col sm:flex-row sm:items-center gap-4">
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" name="confidential" checked={!!form.confidential} onChange={e=>setForm(f=>({...f, confidential: e.target.checked}))} />
-              Mark customer name confidential to other resellers
+              {isID ? 'Tandai nama pelanggan rahasia bagi reseller lain' : 'Mark customer name confidential to other resellers'}
             </label>
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" name="remindersOptIn" checked={!!form.remindersOptIn} onChange={e=>setForm(f=>({...f, remindersOptIn: e.target.checked}))} />
-              Send me reminders for updates
+              {isID ? 'Kirimi saya pengingat untuk pembaruan' : 'Send me reminders for updates'}
             </label>
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" name="accept" checked={!!form.accept} onChange={e=>setForm(f=>({...f, accept: e.target.checked}))} />
-              I confirm details are accurate and consent to data storage for deal management
+              {isID ? 'Saya mengonfirmasi detail akurat dan setuju penyimpanan data untuk pengelolaan deal' : 'I confirm details are accurate and consent to data storage for deal management'}
             </label>
           </div>
           {errors.accept && <p className="text-xs text-red-600 -mt-3">{errors.accept}</p>}
