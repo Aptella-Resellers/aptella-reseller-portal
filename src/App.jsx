@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import aptellaLogo from "./assets/aptella-logo.png";
 
 // Simple error boundary so blank-page errors render visibly
 class ErrorCatcher extends React.Component {
@@ -28,7 +29,7 @@ class ErrorCatcher extends React.Component {
 //
 
 // -------------------------- Config ---------------------------
-const GOOGLE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbw3O_GnYcTx4bRYdFD2vCSs26L_Gzl2ZIZd18dyJmZAEE442hvhqp7j1C4W6cFX_DWM/exec"; // ← GAS Web App URL
+const GOOGLE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwp6JmvlrSG8pmqNlRPZkQzcqm7JWgh6cBQZgzzkJ_enQ5ZRr_RfjDxjlqnn_RaHMUw/exec"; // ← GAS Web App URL
 const GOOGLE_SHEET_VIEW_URL = "";
 const __IMPORT_META__ = { env: {} }; // shim to avoid '__IMPORT_META__' parse errors   // ← optional viewer link
 const BASE_PATH = (() => {
@@ -37,11 +38,11 @@ const BASE_PATH = (() => {
   const p = window.location.pathname;
   return p.endsWith('/') ? p : p + '/';
 })();
-const LOGO_URL = BASE_PATH + "aptella-logo.png"; // Put your logo file in /public as aptella-logo.png
+// LOGO_URL removed — using imported asset aptellaLogo // Put your logo file in /public as aptella-logo.png
 
 // Admin gate (frontend-only; for strong security use real auth)
 const ADMIN_PASSWORD = "Aptella2025!";
-const APTELLA_EVIDENCE_EMAIL = "admin.asia@aptella.com";
+const APTELLA_EVIDENCE_EMAIL = "evidence@aptella.com";
 
 const BRAND = {
   primaryBtn: "bg-[#0b2b3c] hover:bg-[#092331] focus:ring-[#f5a11a]",
@@ -271,7 +272,7 @@ export default function DealRegistrationPortal() {
       <header className="sticky top-0 z-10 backdrop-blur bg-white/80 border-b">
         <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <img src={LOGO_URL} alt="Aptella" className="h-10" />
+            <img src={aptellaLogo} alt="Aptella" className="h-10" />
             <div>
               <div className="flex items-baseline gap-2">
                 <h1 className="text-2xl font-semibold tracking-tight">Aptella</h1>
