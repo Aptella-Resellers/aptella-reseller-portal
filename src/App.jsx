@@ -993,12 +993,24 @@ function AptellaRoot() {
   const requireAdminGate = tab === 'admin' && !adminAuthed;
 
   const syncOne = async (row) => {
-    if (!safeURL) return;
+    const url = (typeof GOOGLE_APPS_SCRIPT_URL !== 'undefined' && GOOGLE_APPS_SCRIPT_URL) ? `${GOOGLE_APPS_SCRIPT_URL}?action=submit` : '';
+    if (!url) return { ok:false, reason: 'Google Apps Script URL missing' };
     try {
-      const res = await fetch(safeURL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(row) });
-      await res.json().catch(()=>null);
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(row)
+      });
+      const text = await res.text();
+      let json = null; try { json = JSON.parse(text); } catch {}
+      if (!res.ok || (json && json.ok === false)) {
+        return { ok:false, reason: (json && json.error) ? json.error : `HTTP ${res.status} ${res.statusText}: ${text.slice(0,200)}` };
+      }
       setItems(prev => prev.map(r => r.id === row.id ? { ...r, syncedAt: todayLocalISO ? todayLocalISO() : new Date().toISOString().slice(0,10) } : r));
-    } catch (e) { console.error('syncOne failed', e); }
+      return { ok:true, data: json || {} };
+    } catch (e) {
+      return { ok:false, reason: e?.message || String(e) };
+    }
   };
   const syncMany = async (rows=[]) => { for (const r of rows) { await syncOne(r); } };
 
