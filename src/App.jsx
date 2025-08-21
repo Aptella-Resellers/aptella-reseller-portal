@@ -87,6 +87,103 @@ const SUPPORT_OPTIONS = __G.SUPPORT_OPTIONS;
 const XGRIDS_SOLUTIONS = __G.XGRIDS_SOLUTIONS;
 const APTELLA_EVIDENCE_EMAIL = __G.APTELLA_EVIDENCE_EMAIL;
 
+// --- Lightweight UI primitives & config shims (so the app always renders) ---
+const BRAND = {
+  primaryBtn: 'bg-sky-700 hover:bg-sky-800',
+  text: 'text-slate-800',
+  border: 'border-slate-200'
+};
+
+const COUNTRY_CONFIG = {
+  Indonesia:  { currency: 'IDR', capital: 'Jakarta' },
+  Malaysia:   { currency: 'MYR', capital: 'Kuala Lumpur' },
+  Philippines:{ currency: 'PHP', capital: 'Manila' },
+  Singapore:  { currency: 'SGD', capital: 'Singapore' }
+};
+
+const INDUSTRIES = [
+  'Construction','Oil & Gas','Utilities','Telecom','Transport',
+  'Mining','Government','Education','Manufacturing','Other'
+];
+
+function Label({ htmlFor, required, children }){
+  return (<label htmlFor={htmlFor} className="text-sm font-medium">{children}{required && <span className="text-red-600"> *</span>}</label>);
+}
+function Input(props){
+  const { className='', ...rest } = props;
+  return <input className={`border rounded-lg px-3 py-2 text-sm w-full ${className}`} {...rest} />;
+}
+function Select(props){
+  const { className='', children, ...rest } = props;
+  return <select className={`border rounded-lg px-3 py-2 text-sm w-full ${className}`} {...rest}>{children}</select>;
+}
+function Textarea(props){
+  const { className='', ...rest } = props;
+  return <textarea className={`border rounded-lg px-3 py-2 text-sm w-full ${className}`} {...rest} />;
+}
+function Card({ children }){
+  return <div className="bg-white border rounded-2xl shadow-sm overflow-hidden">{children}</div>;
+}
+function CardHeader({ title, subtitle, right }){
+  return (
+    <div className="px-4 py-3 border-b bg-gray-50 flex items-center justify-between">
+      <div>
+        <div className="font-semibold">{title}</div>
+        {subtitle && <div className="text-xs text-gray-500">{subtitle}</div>}
+      </div>
+      {right}
+    </div>
+  );
+}
+function CardBody({ children }){
+  return <div className="p-4">{children}</div>;
+}
+
+// Minimal AdminPanel so Admin tab never crashes
+function AdminPanel({ items = [] }){
+  const rowTone = (x) => x?.status === 'approved' ? 'bg-green-50'
+    : (x?.status === 'rejected' || x?.stage === 'lost') ? 'bg-red-50'
+    : (x?.status === 'pending') ? 'bg-blue-50' : '';
+  return (
+    <Card>
+      <CardHeader title="Admin – Registrations" subtitle={`Total: ${items.length}`} />
+      <CardBody>
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-sm">
+            <thead>
+              <tr className="bg-gray-100 text-gray-700">
+                <th className="p-2 text-left">Submitted</th>
+                <th className="p-2 text-left">Reseller</th>
+                <th className="p-2 text-left">Customer</th>
+                <th className="p-2 text-left">Country</th>
+                <th className="p-2 text-left">Solution</th>
+                <th className="p-2 text-left">Value</th>
+                <th className="p-2 text-left">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map(x => (
+                <tr key={x.id || Math.random()} className={`border-b ${rowTone(x)}`}>
+                  <td className="p-2 whitespace-nowrap">{x.submittedAt || '-'}</td>
+                  <td className="p-2">{x.resellerName || '-'}</td>
+                  <td className="p-2">{x.customerName || '-'}</td>
+                  <td className="p-2">{x.country || '-'}</td>
+                  <td className="p-2">{x.solution || '-'}</td>
+                  <td className="p-2 whitespace-nowrap">{x.currency || ''} {x.value || ''}</td>
+                  <td className="p-2">{x.status || 'pending'}</td>
+                </tr>
+              ))}
+              {items.length === 0 && (
+                <tr><td colSpan={7} className="p-4 text-center text-gray-500">No submissions yet.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </CardBody>
+    </Card>
+  );
+}
+
 // --- Admin → Settings drawer for FX rates (definition ensured) ---
 function AdminSettings({ open, onClose, ratesAUD = {}, onSave, saving }) {
   const [local, setLocal] = React.useState(ratesAUD || {});
@@ -631,7 +728,7 @@ function AptellaRoot() {
       <div className="mt-4">
         {tab === 'reseller' ? (
           (typeof SubmissionForm === 'function') ? (
-            <SubmissionForm items={items} setItems={setItems} />
+            <SubmissionForm items={items} setItems={setItems} onSave={(r)=>setItems(prev=>[r, ...prev])} onSyncOne={syncOne} />
           ) : (
             <div className="text-sm text-gray-500">SubmissionForm component not found.</div>
           )
