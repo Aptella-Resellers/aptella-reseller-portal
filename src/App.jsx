@@ -199,7 +199,7 @@ function AdminPanel(props){ const { items = [], rawItems = [], setItems, onSyncM
         </div>
         <div className="mt-4 flex justify-end gap-2">
           <button onClick={onClose} className="px-3 py-1.5 rounded-lg bg-gray-100">Cancel</button>
-          <button disabled={saving} onClick={()=> onSave(local)} className={`px-3 py-1.5 rounded-lg text-white ${BRAND?.primaryBtn || 'bg-slate-800'}`}>{saving? 'Saving…' : 'Save'}</button>
+          <button disabled={saving} onClick={()=> onSave(local)} className={"px-3 py-1.5 rounded-lg text-white " + (BRAND?.primaryBtn || "")}>{saving? 'Saving…' : 'Save'}</button>
         </div>
       </div>
     </div>
@@ -458,7 +458,7 @@ function SubmissionForm({ onSave, items, onSyncOne, onLocaleChange }) {
               <div className="flex gap-2">
                 <Input placeholder="lat" value={form.lat??""} onChange={e=>setForm(f=>({...f, lat: Number(e.target.value)}))} />
                 <Input placeholder="lng" value={form.lng??""} onChange={e=>setForm(f=>({...f, lng: Number(e.target.value)}))} />
-                <a className={`px-3 py-2 rounded-xl text-white text-sm ${BRAND.primaryBtn}`} href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((form.city||"")+","+(form.country||""))}`} target="_blank">Open Map</a>
+                <a className={"px-3 py-2 rounded-xl text-white text-sm " + (BRAND?.primaryBtn || "")} href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((form.city||"")+","+(form.country||""))}`} target="_blank">Open Map</a>
               </div>
               <p className="text-xs text-gray-500">{isID ? 'Tip: gunakan tautan untuk memilih titik, salin koordinat kembali ke sini.' : 'Tip: use the link to pick a point, copy coordinates back here.'}</p>
             </div>
@@ -572,7 +572,7 @@ function SubmissionForm({ onSave, items, onSyncOne, onLocaleChange }) {
           {errors.accept && <p className="text-xs text-red-600 -mt-3">{errors.accept}</p>}
 
           <div className="flex items-center gap-3">
-            <button type="submit" className={`px-4 py-2 rounded-xl text-white ${BRAND.primaryBtn}`}>{form.resellerCountry==='Indonesia' ? 'Kirim Pendaftaran' : 'Submit Registration'}</button>
+            <button type="submit" className={"px-4 py-2 rounded-xl text-white " + (BRAND?.primaryBtn || "")}>{form.resellerCountry==='Indonesia' ? 'Kirim Pendaftaran' : 'Submit Registration'}</button>
             <button type="button" onClick={reset} className="px-4 py-2 rounded-xl bg-gray-200">Reset</button>
           </div>
         </form>
@@ -658,7 +658,7 @@ function ResellerUpdates({ items, setItems }){
                       </div>
                     </td>
                     <td className="p-3 space-x-2">
-                      <button onClick={()=>addUpdate(x.id)} className={`px-2.5 py-1.5 rounded-lg text-white ${BRAND.primaryBtn}`}>Add Update</button>
+                      <button onClick={()=>addUpdate(x.id)} className={"px-2.5 py-1.5 rounded-lg text-white " + (BRAND?.primaryBtn || "")}>Add Update</button>
                       <label className="text-xs inline-flex items-center gap-2 ml-2">
                         <input type="checkbox" checked={!!x.remindersOptIn} onChange={e=>toggleReminders(x.id, e.target.checked)} /> Reminders
                       </label>
@@ -707,7 +707,7 @@ function AdminLogin({ onOk }){
       <CardBody>
         <form onSubmit={submit} className="flex flex-col sm:flex-row gap-3 items-start">
           <Input type="password" placeholder="Admin password" value={pw} onChange={e=>setPw(e.target.value)} className="sm:w-72" />
-          <button type="submit" className={`px-4 py-2 rounded-xl text-white ${BRAND.primaryBtn}`}>Enter</button>
+          <button type="submit" className={"px-4 py-2 rounded-xl text-white " + (BRAND?.primaryBtn || "")}>Enter</button>
           {err && <div className="text-sm text-red-600 ml-1">{err}</div>}
         </form>
         <p className="text-xs text-gray-500 mt-2">Forgot? Contact your Aptella administrator.</p>
