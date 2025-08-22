@@ -200,107 +200,171 @@ function AdminSettings({ open, onClose, ratesAUD = {}, onSave, saving }) {
 function AdminPanel(props){
   const { items = [], rawItems = [], setItems, onSyncMany } = props || {};
   const [settingsOpen, setSettingsOpen] = React.useState(false);
-  const visible = (items && items.length ? items : (rawItems||[]));
+  const [countryFilter, setCountryFilter] = React.useState('All');
 
-  // Dynamic Leaflet loader (UMD build)
+  // Build list of countries for filter
+  const allRows = (items && items.length ? items : (rawItems || []));
+  const countryList = React.useMemo(function(){
+    var set = new Set();
+    (allRows || []).forEach(function(r){ if (r && r.country) set.add(String(r.country)); });
+    return ['All'].concat(Array.from(set).sort());
+  }, [JSON.stringify(allRows)]);
+
+  const filtered = React.useMemo(function(){
+    if (!countryFilter || countryFilter === 'All') return allRows;
+    return (allRows || []).filter(function(r){ return String(r.country||'') === countryFilter; });
+  }, [countryFilter, JSON.stringify(allRows)]);
+
+  // ---------- Leaflet + Cluster loader (no bundler deps) ----------
+  function ensureTag(tagName, attrs){
+    var tag = document.querySelector(tagName + '[data-managed="aptella"]');
+    if (!tag) { tag = document.createElement(tagName); tag.setAttribute('data-managed','aptella'); document.head.appendChild(tag); }
+    Object.keys(attrs||{}).forEach(function(k){ tag.setAttribute(k, attrs[k]); });
+    return tag;
+  }
   function loadLeaflet(){
     return new Promise(function(resolve, reject){
       if (typeof window !== 'undefined' && window.L && window.L.map) return resolve(window.L);
-      var css = document.querySelector('link[data-leaflet]');
-      if (!css) {
-        css = document.createElement('link');
-        css.rel = 'stylesheet';
-        css.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-        css.setAttribute('data-leaflet','1');
-        document.head.appendChild(css);
-      }
-      var scr = document.querySelector('script[data-leaflet]');
-      if (scr && scr.getAttribute('data-loaded') === '1') return resolve(window.L);
-      if (!scr) {
-        scr = document.createElement('script');
-        scr.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
-        scr.async = true;
-        scr.setAttribute('data-leaflet','1');
-        scr.onload = function(){ scr.setAttribute('data-loaded','1'); resolve(window.L); };
-        scr.onerror = function(){ reject(new Error('Leaflet failed to load')); };
-        document.body.appendChild(scr);
+      ensureTag('link', { rel:'stylesheet', href:'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css' });
+      var s = document.querySelector('script[src*="leaflet@1.9.4/dist/leaflet.js"]');
+      if (s && s.getAttribute('data-loaded')==='1') return resolve(window.L);
+      if (!s) {
+        s = document.createElement('script');
+        s.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+        s.async = true;
+        s.onload = function(){ s.setAttribute('data-loaded','1'); resolve(window.L); };
+        s.onerror = function(){ reject(new Error('Leaflet failed to load')); };
+        document.body.appendChild(s);
       } else {
-        scr.addEventListener('load', function(){ resolve(window.L); });
-        scr.addEventListener('error', function(){ reject(new Error('Leaflet failed to load')); });
+        s.addEventListener('load', function(){ resolve(window.L); });
+        s.addEventListener('error', function(){ reject(new Error('Leaflet failed to load')); });
+      }
+    });
+  }
+  function loadCluster(){
+    return new Promise(function(resolve){
+      if (typeof window !== 'undefined' && window.L && window.L.MarkerClusterGroup) return resolve(window.L);
+      ensureTag('link', { rel:'stylesheet', href:'https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css' });
+      ensureTag('link', { rel:'stylesheet', href:'https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css' });
+      var s = document.querySelector('script[src*="leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"]');
+      if (s && s.getAttribute('data-loaded')==='1') return resolve(window.L);
+      if (!s) {
+        s = document.createElement('script');
+        s.src = 'https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js';
+        s.async = true;
+        s.onload = function(){ s.setAttribute('data-loaded','1'); resolve(window.L); };
+        document.body.appendChild(s);
+      } else {
+        s.addEventListener('load', function(){ resolve(window.L); });
       }
     });
   }
 
   const mapRef = React.useRef(null);
-  const markersRef = React.useRef(null);
+  const groupRef = React.useRef(null); // cluster group
 
-  function updateMarkers(Lib, rows){
-    if (!markersRef.current || !mapRef.current) return;
-    markersRef.current.clearLayers();
-    var bounds = [];
-    (rows || []).forEach(function(r){
-      var lat = Number(r.lat), lng = Number(r.lng);
-      if (isFinite(lat) && isFinite(lng)) {
-        var color = (r.status === 'approved') ? 'green' : ((r.status === 'lost' || r.status === 'closed') ? 'red' : ((r.status === 'pending' || !r.status) ? 'blue' : 'orange'));
-        var marker = Lib.circleMarker([lat,lng], { radius: 6, color: color, fillColor: color, fillOpacity: 0.8 });
-        var popup = '<div><div><strong>' + (r.customerName || '') + '</strong></div><div>' + ((r.city||'') + (r.country?(', ' + r.country):'')) + '</div><div>' + (r.solution || '') + '</div><div>Value: ' + (r.currency || '') + ' ' + (r.value || '') + '</div></div>';
-        marker.bindPopup(popup);
-        marker.addTo(markersRef.current);
-        bounds.push([lat,lng]);
-      }
-    });
-    if (bounds.length) {
-      mapRef.current.fitBounds(bounds, { padding: [30,30] });
+  function statusColor(row){
+    var st = String(row && row.status ? row.status : '').toLowerCase();
+    if (st === 'approved' || st === 'accepted') return 'green';
+    if (st === 'lost' || st === 'closed') return 'red';
+    var days = null;
+    try { if (row && row.lockExpiry) { days = daysUntil(row.lockExpiry); } } catch(_){}
+    if (days === null && row && row.expectedCloseDate) {
+      try { days = daysUntil(row.expectedCloseDate); } catch(_){}
     }
+    if (typeof days === 'number' && days >= 0 && days <= 7) return 'orange';
+    return 'blue'; // pending/not yet approved
+  }
+
+  function updateMarkers(lib, rows){
+    if (!mapRef.current || !groupRef.current) return;
+    groupRef.current.clearLayers();
+    var bounds = [];
+    (rows||[]).forEach(function(r){
+      var lat = Number(r.lat), lng = Number(r.lng);
+      if (!isFinite(lat) || !isFinite(lng)) return;
+      var color = statusColor(r);
+      var m = lib.circleMarker([lat,lng], { radius: 7, color: color, fillColor: color, fillOpacity: 0.85, weight: 1 });
+      var cityCountry = (r.city ? r.city : '') + (r.country ? (', ' + r.country) : '');
+      var popup = '<div style="min-width:220px">' +
+        '<div><strong>' + (r.customerName || '') + '</strong></div>' +
+        '<div>' + cityCountry + '</div>' +
+        '<div>' + (r.solution || '') + '</div>' +
+        '<div>Value: ' + (r.currency || '') + ' ' + (r.value || '') + '</div>' +
+        '</div>';
+      m.bindPopup(popup);
+      groupRef.current.addLayer(m);
+      bounds.push([lat,lng]);
+    });
+    if (bounds.length) { mapRef.current.fitBounds(bounds, { padding:[30,30] }); }
   }
 
   React.useEffect(function(){
-    loadLeaflet().then(function(Lib){
-      var el = document.getElementById('admin-map');
-      if (!el) return;
-      if (!mapRef.current) {
-        var m = Lib.map(el).setView([DEFAULT_LAT, DEFAULT_LNG], 5);
-        Lib.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap contributors' }).addTo(m);
-        markersRef.current = Lib.layerGroup().addTo(m);
-        mapRef.current = m;
-      }
-      updateMarkers(Lib, visible);
-    }).catch(function(err){ console.error('Map init error', err); });
+    Promise.resolve()
+      .then(loadLeaflet)
+      .then(loadCluster)
+      .then(function(L){
+        var el = document.getElementById('admin-map');
+        if (!el) return;
+        if (!mapRef.current) {
+          var m = L.map(el).setView([DEFAULT_LAT, DEFAULT_LNG], 5);
+          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap contributors' }).addTo(m);
+          var cluster = L.markerClusterGroup();
+          cluster.addTo(m);
+          mapRef.current = m;
+          groupRef.current = cluster;
+        }
+        updateMarkers(L, filtered);
+      })
+      .catch(function(err){ console.error('Map init error', err); });
   }, []);
 
   React.useEffect(function(){
-    if (typeof window !== 'undefined' && window.L && mapRef.current) {
-      updateMarkers(window.L, visible);
+    if (typeof window !== 'undefined' && window.L && mapRef.current && groupRef.current) {
+      updateMarkers(window.L, filtered);
     }
-  }, [JSON.stringify(visible)]);
+  }, [countryFilter, JSON.stringify(filtered)]);
 
+  // ---------- Refresh from Sheets ----------
   const handleRefresh = async function(){
     try{
       var base = (typeof GOOGLE_APPS_SCRIPT_URL !== 'undefined' && GOOGLE_APPS_SCRIPT_URL) ? GOOGLE_APPS_SCRIPT_URL : '';
-      if (!base) { alert('Google Apps Script URL missing'); return; }
-      var r = await fetch(base + '?action=list');
-      var j = await r.json();
-      if (j && j.ok && Array.isArray(j.data)) { if (typeof setItems === 'function') setItems(j.data); }
-      else { console.warn('List error', j); alert('Refresh failed: ' + (j && j.error ? j.error : 'invalid response')); }
-    } catch(e) { console.error('Refresh failed', e); alert('Refresh failed: ' + (e && e.message ? e.message : String(e))); }
+      if (!base) { alert('Refresh failed: Google Apps Script URL missing'); return; }
+      var res = await fetch(base + '?action=list');
+      var text = await res.text();
+      var j = null; try { j = JSON.parse(text); } catch(_){}
+      if (j && j.ok && Array.isArray(j.data)) {
+        if (typeof setItems === 'function') setItems(j.data);
+        return;
+      }
+      // Some backends return ok:false with error; try to salvage data
+      if (j && Array.isArray(j.data)) { if (typeof setItems === 'function') setItems(j.data); }
+      var reason = (j && j.error) ? j.error : ('HTTP ' + res.status + ' ' + res.statusText + ': ' + text.slice(0,200));
+      alert('Refresh failed: ' + reason);
+    } catch(e) {
+      alert('Refresh failed: ' + (e && e.message ? e.message : String(e)) );
+    }
   };
 
   return (
     <>
       <div className="sticky top-2 z-30 bg-white/80 backdrop-blur rounded-xl border p-3 mb-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-3">
             <span className="text-sm text-gray-500">Admin Tools</span>
+            <select value={countryFilter} onChange={function(e){ setCountryFilter(e.target.value); }} className="px-3 py-2 rounded-lg border">
+              {countryList.map(function(c){ return <option key={c} value={c}>{c}</option>; })}
+            </select>
           </div>
           <div className="flex items-center gap-2">
             <button onClick={handleRefresh} className={"px-3 py-2 rounded-lg text-white " + (BRAND && BRAND.primaryBtn ? BRAND.primaryBtn : '')}>Refresh</button>
-            <button onClick={function(){ if (typeof exportCSV === 'function') exportCSV(visible); }} className="px-3 py-2 rounded-lg bg-gray-100">Export CSV</button>
-            <button onClick={function(){ if (typeof onSyncMany === 'function') onSyncMany(visible); }} className="px-3 py-2 rounded-lg bg-gray-100">Sync Visible</button>
+            <button onClick={function(){ if (typeof exportCSV === 'function') exportCSV(filtered); }} className="px-3 py-2 rounded-lg bg-gray-100">Export CSV</button>
+            <button onClick={function(){ if (typeof onSyncMany === 'function') onSyncMany(filtered); }} className="px-3 py-2 rounded-lg bg-gray-100">Sync Visible</button>
             <button onClick={function(){ setSettingsOpen(true); }} className="px-3 py-2 rounded-lg bg-[#f58220] text-white">Settings</button>
           </div>
         </div>
       </div>
-      <div id="admin-map" className="w-full rounded-xl border overflow-hidden" style={{height:'420px'}}></div>
+      <div id="admin-map" className="w-full rounded-xl border overflow-hidden" style={{height:'480px'}}></div>
       <AdminSettings open={settingsOpen} onClose={function(){ setSettingsOpen(false); }} ratesAUD={{}} onSave={function(){}} saving={false} />
     </>
   );
