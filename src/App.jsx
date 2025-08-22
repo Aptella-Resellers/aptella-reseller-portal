@@ -200,16 +200,91 @@ function AdminSettings({ open, onClose, ratesAUD = {}, onSave, saving }) {
 function AdminPanel(props){
   const { items = [], rawItems = [], setItems, onSyncMany } = props || {};
   const [settingsOpen, setSettingsOpen] = React.useState(false);
-  const handleRefresh = async ()=>{
-    try{
-      const base = (typeof GOOGLE_APPS_SCRIPT_URL !== 'undefined' && GOOGLE_APPS_SCRIPT_URL) ? GOOGLE_APPS_SCRIPT_URL : '';
-      if(!base) return;
-      const r = await fetch(base+'?action=list');
-      const j = await r.json();
-      if (j && j.ok && Array.isArray(j.data)) { if (typeof setItems === 'function') setItems(j.data); }
-    }catch(e){ console.error('Refresh failed', e); }
-  };
   const visible = (items && items.length ? items : (rawItems||[]));
+
+  // Dynamic Leaflet loader (UMD build)
+  function loadLeaflet(){
+    return new Promise(function(resolve, reject){
+      if (typeof window !== 'undefined' && window.L && window.L.map) return resolve(window.L);
+      var css = document.querySelector('link[data-leaflet]');
+      if (!css) {
+        css = document.createElement('link');
+        css.rel = 'stylesheet';
+        css.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+        css.setAttribute('data-leaflet','1');
+        document.head.appendChild(css);
+      }
+      var scr = document.querySelector('script[data-leaflet]');
+      if (scr && scr.getAttribute('data-loaded') === '1') return resolve(window.L);
+      if (!scr) {
+        scr = document.createElement('script');
+        scr.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+        scr.async = true;
+        scr.setAttribute('data-leaflet','1');
+        scr.onload = function(){ scr.setAttribute('data-loaded','1'); resolve(window.L); };
+        scr.onerror = function(){ reject(new Error('Leaflet failed to load')); };
+        document.body.appendChild(scr);
+      } else {
+        scr.addEventListener('load', function(){ resolve(window.L); });
+        scr.addEventListener('error', function(){ reject(new Error('Leaflet failed to load')); });
+      }
+    });
+  }
+
+  const mapRef = React.useRef(null);
+  const markersRef = React.useRef(null);
+
+  function updateMarkers(Lib, rows){
+    if (!markersRef.current || !mapRef.current) return;
+    markersRef.current.clearLayers();
+    var bounds = [];
+    (rows || []).forEach(function(r){
+      var lat = Number(r.lat), lng = Number(r.lng);
+      if (isFinite(lat) && isFinite(lng)) {
+        var color = (r.status === 'approved') ? 'green' : ((r.status === 'lost' || r.status === 'closed') ? 'red' : ((r.status === 'pending' || !r.status) ? 'blue' : 'orange'));
+        var marker = Lib.circleMarker([lat,lng], { radius: 6, color: color, fillColor: color, fillOpacity: 0.8 });
+        var popup = '<div><div><strong>' + (r.customerName || '') + '</strong></div><div>' + ((r.city||'') + (r.country?(', ' + r.country):'')) + '</div><div>' + (r.solution || '') + '</div><div>Value: ' + (r.currency || '') + ' ' + (r.value || '') + '</div></div>';
+        marker.bindPopup(popup);
+        marker.addTo(markersRef.current);
+        bounds.push([lat,lng]);
+      }
+    });
+    if (bounds.length) {
+      mapRef.current.fitBounds(bounds, { padding: [30,30] });
+    }
+  }
+
+  React.useEffect(function(){
+    loadLeaflet().then(function(Lib){
+      var el = document.getElementById('admin-map');
+      if (!el) return;
+      if (!mapRef.current) {
+        var m = Lib.map(el).setView([DEFAULT_LAT, DEFAULT_LNG], 5);
+        Lib.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap contributors' }).addTo(m);
+        markersRef.current = Lib.layerGroup().addTo(m);
+        mapRef.current = m;
+      }
+      updateMarkers(Lib, visible);
+    }).catch(function(err){ console.error('Map init error', err); });
+  }, []);
+
+  React.useEffect(function(){
+    if (typeof window !== 'undefined' && window.L && mapRef.current) {
+      updateMarkers(window.L, visible);
+    }
+  }, [JSON.stringify(visible)]);
+
+  const handleRefresh = async function(){
+    try{
+      var base = (typeof GOOGLE_APPS_SCRIPT_URL !== 'undefined' && GOOGLE_APPS_SCRIPT_URL) ? GOOGLE_APPS_SCRIPT_URL : '';
+      if (!base) { alert('Google Apps Script URL missing'); return; }
+      var r = await fetch(base + '?action=list');
+      var j = await r.json();
+      if (j && j.ok && Array.isArray(j.data)) { if (typeof setItems === 'function') setItems(j.data); }
+      else { console.warn('List error', j); alert('Refresh failed: ' + (j && j.error ? j.error : 'invalid response')); }
+    } catch(e) { console.error('Refresh failed', e); alert('Refresh failed: ' + (e && e.message ? e.message : String(e))); }
+  };
+
   return (
     <>
       <div className="sticky top-2 z-30 bg-white/80 backdrop-blur rounded-xl border p-3 mb-3">
@@ -218,15 +293,15 @@ function AdminPanel(props){
             <span className="text-sm text-gray-500">Admin Tools</span>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={handleRefresh} className={"px-3 py-2 rounded-lg text-white " + (BRAND?.primaryBtn || "")}>Refresh</button>
-            <button onClick={() => (typeof exportCSV === 'function' ? exportCSV(visible) : null)} className="px-3 py-2 rounded-lg bg-gray-100">Export CSV</button>
-            <button onClick={() => (typeof onSyncMany === 'function' ? onSyncMany(visible) : null)} className="px-3 py-2 rounded-lg bg-gray-100">Sync Visible</button>
-            <button onClick={()=>setSettingsOpen(true)} className="px-3 py-2 rounded-lg bg-[#f58220] text-white">Settings</button>
+            <button onClick={handleRefresh} className={"px-3 py-2 rounded-lg text-white " + (BRAND && BRAND.primaryBtn ? BRAND.primaryBtn : '')}>Refresh</button>
+            <button onClick={function(){ if (typeof exportCSV === 'function') exportCSV(visible); }} className="px-3 py-2 rounded-lg bg-gray-100">Export CSV</button>
+            <button onClick={function(){ if (typeof onSyncMany === 'function') onSyncMany(visible); }} className="px-3 py-2 rounded-lg bg-gray-100">Sync Visible</button>
+            <button onClick={function(){ setSettingsOpen(true); }} className="px-3 py-2 rounded-lg bg-[#f58220] text-white">Settings</button>
           </div>
         </div>
       </div>
-      <div id="admin-map" className="h-[420px] w-full rounded-xl border overflow-hidden"></div>
-      <AdminSettings open={settingsOpen} onClose={()=>setSettingsOpen(false)} ratesAUD={{}} onSave={()=>{}} saving={false} />
+      <div id="admin-map" className="w-full rounded-xl border overflow-hidden" style={{height:'420px'}}></div>
+      <AdminSettings open={settingsOpen} onClose={function(){ setSettingsOpen(false); }} ratesAUD={{}} onSave={function(){}} saving={false} />
     </>
   );
 }
