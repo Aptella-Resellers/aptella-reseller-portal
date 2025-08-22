@@ -681,14 +681,7 @@ function ResellerUpdates({ items, setItems }){
 // ---- Brand styles injection ----
 function BrandTheme(){
   return (
-    <style>{`
-      :root{ --aptella-navy:#0e3446; --aptella-navy-dark:#0b2938; --aptella-orange:#f0a03a; }
-      body{ background:#f7fafc; color:#0f172a; }
-      .brand-nav{ background:#fff; border-bottom:1px solid #e5e7eb; }
-      .brand-title{ color:var(--aptella-navy); font-weight:700; letter-spacing:.2px; }
-      .brand-link{ color:var(--aptella-navy); opacity:.85 }
-      .brand-link:hover{ opacity:1 }
-    `}</style>
+    <style>{':root{--aptella-navy:#0e3446;--aptella-navy-dark:#0b2938;--aptella-orange:#f0a03a}body{background:#f7fafc;color:#0f172a}.brand-nav{background:#fff;border-bottom:1px solid #e5e7eb}.brand-hero{background:linear-gradient(180deg,#0e3446 0%,#0b2938 100%);color:#fff}.brand-btn{background:#0e3446}.brand-btn:hover{background:#0b2938}'}</style>
   );
 }
 
