@@ -267,7 +267,7 @@ function SubmissionForm({ onSave, items, onSyncOne, onLocaleChange }) {
       x.solution.trim().toLowerCase() === form.solution.trim().toLowerCase() &&
       new Date(x.expectedCloseDate) >= min && new Date(x.expectedCloseDate) <= max
     ));
-    setDupWarning(hit ? `Potential duplicate detected with submission ${hit.id} (${hit.customerName}, ${hit.expectedCloseDate}).` : "");
+    setDupWarning(hit ? ("Potential duplicate detected with submission " + hit.id + " (" + hit.customerName + ", " + hit.expectedCloseDate + ").") : "");
   }, [form.customerName, form.solution, form.expectedCloseDate, items]);
 
   function validate() {
