@@ -752,8 +752,8 @@ function AptellaRoot() {
             <span className="brand-title">Reseller Deal Registration</span>
           </div>
           <nav className="flex items-center gap-2">
-            <button className={`px-3 py-2 rounded-lg ${tab==='reseller' ? 'bg-[#0e3446] text-white' : 'bg-gray-100 text-[#0e3446]'}`} onClick={()=>setTab('reseller')}>Reseller</button>
-            <button className={`px-3 py-2 rounded-lg ${tab==='admin' ? 'bg-[#0e3446] text-white' : 'bg-gray-100 text-[#0e3446]'}`} onClick={()=>setTab('admin')}>Admin</button>
+            <button className={"px-3 py-2 rounded-lg " + (tab==='reseller' ? 'bg-[#0e3446] text-white' : 'bg-gray-100 text-[#0e3446]')} onClick={()=>setTab('reseller')}>Reseller</button>
+            <button className={"px-3 py-2 rounded-lg " + (tab==='admin' ? 'bg-[#0e3446] text-white' : 'bg-gray-100 text-[#0e3446]')} onClick={()=>setTab('admin')}>Admin</button>
             {adminAuthed && (
               <button title="Sign out of Admin" onClick={()=>{ localStorage.removeItem('aptella_admin_ok'); setAdminAuthed(false); setTab('reseller'); }} className="px-3 py-2 rounded-lg bg-gray-100 text-[#0e3446]">Sign out</button>
             )}
