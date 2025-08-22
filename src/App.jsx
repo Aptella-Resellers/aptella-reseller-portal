@@ -355,7 +355,7 @@ function SubmissionForm({ onSave, items, onSyncOne, onLocaleChange }) {
         payloadRecord.emailEvidence = true;
       }
     } catch (err) {
-      alert(`File processing error: ${err.message||err}`);
+      alert("File processing error: " + (err && err.message ? err.message : String(err)) );
       return;
     }
 
@@ -365,9 +365,9 @@ function SubmissionForm({ onSave, items, onSyncOne, onLocaleChange }) {
       try {
         const res = await onSyncOne(payloadRecord);
         if (res?.ok) alert("Submitted and synced to Google Sheets.");
-        else if (GOOGLE_APPS_SCRIPT_URL) alert(`Submitted locally. Google Sheets sync failed: ${res?.reason||'unknown error'}`);
+        else if (GOOGLE_APPS_SCRIPT_URL) alert("Submitted locally. Google Sheets sync failed: " + ((res && res.reason) ? res.reason : "unknown error") );
       } catch (err) {
-        alert(`Submitted locally. Google Sheets sync error: ${err?.message||err}`);
+        alert("Submitted locally. Google Sheets sync error: " + (err && err.message ? err.message : String(err)) );
       }
     }
 
