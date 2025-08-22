@@ -545,7 +545,7 @@ function SubmissionForm({ onSave, items, onSyncOne, onLocaleChange }) {
             </div>
             <label className="flex items-center gap-2 text-sm mt-1">
               <input type="checkbox" checked={!!form.emailEvidence} onChange={e=>setForm(f=>({...f, emailEvidence: e.target.checked}))} />
-              {isID ? `Kirim file terlampir ke Aptella (${APTELLA_EVIDENCE_EMAIL}) melalui Apps Script aman` : `Email attached files to Aptella (${APTELLA_EVIDENCE_EMAIL}) via secure Apps Script`}
+              {isID ? ("Kirim file terlampir ke Aptella (" + APTELLA_EVIDENCE_EMAIL + ") melalui Apps Script aman") : ("Email attached files to Aptella (" + APTELLA_EVIDENCE_EMAIL + ") via secure Apps Script")}
             </label>
             {errors.evidence && <p className="text-xs text-red-600">{errors.evidence}</p>}
           </div>
