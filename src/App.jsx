@@ -458,7 +458,7 @@ function SubmissionForm({ onSave, items, onSyncOne, onLocaleChange }) {
               <div className="flex gap-2">
                 <Input placeholder="lat" value={form.lat??""} onChange={e=>setForm(f=>({...f, lat: Number(e.target.value)}))} />
                 <Input placeholder="lng" value={form.lng??""} onChange={e=>setForm(f=>({...f, lng: Number(e.target.value)}))} />
-                <a className={"px-3 py-2 rounded-xl text-white text-sm " + (BRAND?.primaryBtn || "")} href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((form.city||"")+","+(form.country||""))}`} target="_blank">Open Map</a>
+                <a className={"px-3 py-2 rounded-xl text-white text-sm " + (BRAND?.primaryBtn || "")} href={"https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent((form.city||"") + "," + (form.country||""))} target="_blank">Open Map</a>
               </div>
               <p className="text-xs text-gray-500">{isID ? 'Tip: gunakan tautan untuk memilih titik, salin koordinat kembali ke sini.' : 'Tip: use the link to pick a point, copy coordinates back here.'}</p>
             </div>
