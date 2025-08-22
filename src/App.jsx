@@ -439,12 +439,12 @@ function SubmissionForm({ onSave, items, onSyncOne, onLocaleChange }) {
           <div className="grid md:grid-cols-3 gap-4">
             <div className="grid gap-2">
               <Label htmlFor="city" required>{isID ? 'Kota Pelanggan' : 'Customer City'}</Label>
-              <Input id="city" name="city" value={form.city||""} onChange={e=>{ const v=e.target.value; setForm(f=>({...f, city:v, customerLocation:`${v || ''}${f.country?`, ${f.country}`:''}`})); }} placeholder="Jakarta" />
+              <Input id="city" name="city" value={form.city||""} onChange={e=>{ const v=e.target.value; setForm(f=>({...f, city:v, customerLocation: (v || '') + (f.country ? (', ' + f.country) : '')})); }} placeholder="Jakarta" />
               {errors.city && <p className="text-xs text-red-600">{errors.city}</p>}
             </div>
             <div className="grid gap-2">
               <Label htmlFor="country" required>{isID ? 'Negara Pelanggan' : 'Customer Country'}</Label>
-              <Select id="country" name="country" value={form.country||""} onChange={e=>{ const v=e.target.value; setForm(f=>({...f, country:v, customerLocation:`${f.city?f.city:''}${v?`, ${v}`:''}`})); }}>
+              <Select id="country" name="country" value={form.country||""} onChange={e=>{ const v=e.target.value; setForm(f=>({...f, country:v, customerLocation: (f.city ? f.city : '') + (v ? (', ' + v) : '')})); }}>
                 <option value="">Select country</option>
                 <option>Indonesia</option>
                 <option>Singapore</option>
