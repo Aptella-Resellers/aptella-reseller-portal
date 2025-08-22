@@ -159,17 +159,17 @@ function CardBody({ children }){
 }
 
 // Minimal AdminPanel so Admin tab never crashes
-function AdminPanel($0){$0return (
-<div className=\"sticky top-2 z-30 bg-white/80 backdrop-blur rounded-xl border p-3 mb-3\">
-  <div className=\"flex flex-wrap items-center justify-between gap-3\">
-    <div className=\"flex flex-wrap items-center gap-2\">
-      <span className=\"text-sm text-gray-500\">Admin Tools</span>
+function AdminPanel(props){ const { items = [], rawItems = [], setItems, onSyncMany } = props || {}; const [settingsOpen, setSettingsOpen] = React.useState(false); const handleRefresh = async ()=>{ try{ const base=(typeof GOOGLE_APPS_SCRIPT_URL!=='undefined'&&GOOGLE_APPS_SCRIPT_URL)?GOOGLE_APPS_SCRIPT_URL:''; if(!base) return; const r=await fetch(base+'?action=list'); const j=await r.json(); if(j?.ok && Array.isArray(j.data)) setItems?.(j.data);}catch(e){console.error('Refresh failed',e);} }; const visible = items && items.length ? items : (rawItems||[]); return (
+<div className="sticky top-2 z-30 bg-white/80 backdrop-blur rounded-xl border p-3 mb-3">
+  <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="text-sm text-gray-500">Admin Tools</span>
     </div>
-    <div className=\"flex items-center gap-2\">
+    <div className="flex items-center gap-2">
       <button onClick={handleRefresh} className={\`px-3 py-2 rounded-lg text-white \${BRAND.primaryBtn}\`}>Refresh</button>
-      <button onClick={() => exportCSV(typeof visible !== 'undefined' ? visible : (items || rawItems || []))} className=\"px-3 py-2 rounded-lg bg-gray-100\">Export CSV</button>
-      <button onClick={() => onSyncMany(typeof visible !== 'undefined' ? visible : (items || rawItems || []))} className=\"px-3 py-2 rounded-lg bg-gray-100\">Sync Visible</button>
-      <button onClick={() => setSettingsOpen(true)} className=\"px-3 py-2 rounded-lg bg-[#f58220] text-white\">Settings</button>
+      <button onClick={() => exportCSV(typeof visible !== 'undefined' ? visible : (items || rawItems || []))} className="px-3 py-2 rounded-lg bg-gray-100">Export CSV</button>
+      <button onClick={() => onSyncMany(typeof visible !== 'undefined' ? visible : (items || rawItems || []))} className="px-3 py-2 rounded-lg bg-gray-100">Sync Visible</button>
+      <button onClick={() => setSettingsOpen(true)} className="px-3 py-2 rounded-lg bg-[#f58220] text-white">Settings</button>
     </div>
   </div>
 </div>
