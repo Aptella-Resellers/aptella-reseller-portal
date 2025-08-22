@@ -732,7 +732,7 @@ function AptellaRoot() {
       const text = await res.text();
       let json = null; try { json = JSON.parse(text); } catch {}
       if (!res.ok || (json && json.ok === false)) {
-        return { ok:false, reason: (json && json.error) ? json.error : `HTTP ${res.status} ${res.statusText}: ${text.slice(0,200)}` };
+        return { ok:false, reason: (json && json.error) ? json.error : "HTTP " + res.status + " " + res.statusText + ": " + text.slice(0,200) };
       }
       setItems(prev => prev.map(r => r.id === row.id ? { ...r, syncedAt: todayLocalISO ? todayLocalISO() : new Date().toISOString().slice(0,10) } : r));
       return { ok:true, data: json || {} };
