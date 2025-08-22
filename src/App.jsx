@@ -159,53 +159,39 @@ function CardBody({ children }){
 }
 
 // Minimal AdminPanel so Admin tab never crashes
-function AdminPanel(props){ const { items = [], rawItems = [], setItems, onSyncMany } = props || {}; const [settingsOpen, setSettingsOpen] = React.useState(false); const handleRefresh = async ()=>{ try{ const base=(typeof GOOGLE_APPS_SCRIPT_URL!=='undefined'&&GOOGLE_APPS_SCRIPT_URL)?GOOGLE_APPS_SCRIPT_URL:''; if(!base) return; const r=await fetch(base+'?action=list'); const j=await r.json(); if(j?.ok && Array.isArray(j.data)) setItems?.(j.data);}catch(e){console.error('Refresh failed',e);} }; const visible = items && items.length ? items : (rawItems||[]); return (
-<div className="sticky top-2 z-30 bg-white/80 backdrop-blur rounded-xl border p-3 mb-3">
-  <div className="flex flex-wrap items-center justify-between gap-3">
-    <div className="flex flex-wrap items-center gap-2">
-      <span className="text-sm text-gray-500">Admin Tools</span>
-    </div>
-    <div className="flex items-center gap-2">
-      <button onClick={handleRefresh} className={"px-3 py-2 rounded-lg text-white " + (BRAND?.primaryBtn || "")}>Refresh</button>
-      <button onClick={() => exportCSV(typeof visible !== 'undefined' ? visible : (items || rawItems || []))} className="px-3 py-2 rounded-lg bg-gray-100">Export CSV</button>
-      <button onClick={() => onSyncMany(typeof visible !== 'undefined' ? visible : (items || rawItems || []))} className="px-3 py-2 rounded-lg bg-gray-100">Sync Visible</button>
-      <button onClick={() => setSettingsOpen(true)} className="px-3 py-2 rounded-lg bg-[#f58220] text-white">Settings</button>
-    </div>
-  </div>
-</div>
-<div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center">
-      <div className="bg-white rounded-2xl shadow-xl w-[min(680px,95vw)] p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold">FX Rates to AUD</h3>
-          <button onClick={onClose} className="px-2 py-1 rounded-lg bg-gray-100">Close</button>
-        </div>
-        <div className="space-y-2 max-h-[60vh] overflow-auto">
-          <div className="grid grid-cols-3 gap-2 text-sm font-medium">
-            <div>Currency</div><div>Rate to AUD</div><div></div>
+function AdminPanel(props){
+  const { items = [], rawItems = [], setItems, onSyncMany } = props || {};
+  const [settingsOpen, setSettingsOpen] = React.useState(false);
+  const handleRefresh = async ()=>{
+    try{
+      const base = (typeof GOOGLE_APPS_SCRIPT_URL !== 'undefined' && GOOGLE_APPS_SCRIPT_URL) ? GOOGLE_APPS_SCRIPT_URL : '';
+      if(!base) return;
+      const r = await fetch(base+'?action=list');
+      const j = await r.json();
+      if (j && j.ok && Array.isArray(j.data)) { if (typeof setItems === 'function') setItems(j.data); }
+    }catch(e){ console.error('Refresh failed', e); }
+  };
+  const visible = (items && items.length ? items : (rawItems||[]));
+  return (
+    <>
+      <div className="sticky top-2 z-30 bg-white/80 backdrop-blur rounded-xl border p-3 mb-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm text-gray-500">Admin Tools</span>
           </div>
-          {entries.map(([cur,val]) => (
-            <div key={cur} className="grid grid-cols-3 gap-2 items-center">
-              <input className="border rounded-md px-2 py-1 uppercase" value={cur}
-                onChange={(e)=>{
-                  const newCur = e.target.value.toUpperCase();
-                  setLocal(prev=>{ const {[cur]:_, ...rest}=prev; return {...rest, [newCur]: val}; });
-                }} />
-              <input className="border rounded-md px-2 py-1" type="number" step="0.000001" value={val}
-                onChange={(e)=> setLocal(prev=> ({ ...prev, [cur]: Number(e.target.value) }))} />
-              <button className="text-red-600 text-sm" onClick={()=> setLocal(prev=>{ const cp={...prev}; delete cp[cur]; return cp; })}>Remove</button>
-            </div>
-          ))}
-          <button className="text-sm px-3 py-1 rounded-md bg-gray-100" onClick={()=> setLocal(prev=> ({ ...prev, USD: prev.USD || 0.67 }))}>Add Row</button>
-        </div>
-        <div className="mt-4 flex justify-end gap-2">
-          <button onClick={onClose} className="px-3 py-1.5 rounded-lg bg-gray-100">Cancel</button>
-          <button disabled={saving} onClick={()=> onSave(local)} className={"px-3 py-1.5 rounded-lg text-white " + (BRAND?.primaryBtn || "")}>{saving? 'Saving…' : 'Save'}</button>
+          <div className="flex items-center gap-2">
+            <button onClick={handleRefresh} className={"px-3 py-2 rounded-lg text-white " + (BRAND?.primaryBtn || "")}>Refresh</button>
+            <button onClick={() => (typeof exportCSV === 'function' ? exportCSV(visible) : null)} className="px-3 py-2 rounded-lg bg-gray-100">Export CSV</button>
+            <button onClick={() => (typeof onSyncMany === 'function' ? onSyncMany(visible) : null)} className="px-3 py-2 rounded-lg bg-gray-100">Sync Visible</button>
+            <button onClick={()=>setSettingsOpen(true)} className="px-3 py-2 rounded-lg bg-[#f58220] text-white">Settings</button>
+          </div>
         </div>
       </div>
-    </div>
+      <div id="admin-map" className="h-[420px] w-full rounded-xl border overflow-hidden"></div>
+      <AdminSettings open={settingsOpen} onClose={()=>setSettingsOpen(false)} ratesAUD={{}} onSave={()=>{}} saving={false} />
+    </>
   );
 }
-
 function SubmissionForm({ onSave, items, onSyncOne, onLocaleChange }) {
   const [form, setForm] = useState({
     resellerCountry: "Singapore",
