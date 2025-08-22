@@ -722,8 +722,7 @@ function AptellaRoot() {
 
   const syncOne = async (row) => {
     const url = (typeof GOOGLE_APPS_SCRIPT_URL !== 'undefined' && GOOGLE_APPS_SCRIPT_URL)
-      ? `${GOOGLE_APPS_SCRIPT_URL}?action=submit`
-      : '';
+      ? (GOOGLE_APPS_SCRIPT_URL + '?action=submit') : '';
     if (!url) return { ok:false, reason: 'Google Apps Script URL missing' };
     try {
       // Use form-encoded body to avoid CORS preflight on Apps Script
