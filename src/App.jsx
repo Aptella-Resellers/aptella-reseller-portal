@@ -598,7 +598,7 @@ function SubmissionForm({ onSave, items, onSyncOne, onLocaleChange }) {
     // Newline replacement & CSV quote escaping tests
     const replaced = ("hello\nworld").replace(/\n/g, " ");
     if (replaced !== "hello world") throw new Error("newline replace failed");
-    const quoted = `"Quoted"`.replace(/"/g,'""');
+    const quoted = '"Quoted"'.replace(/"/g,'""');
     if (quoted !== '""Quoted""') throw new Error("CSV quote escape failed");
     console.log("✅ Self-tests passed");
   } catch (e) {
