@@ -8,7 +8,7 @@ import React, { useEffect, useMemo, useState, useRef } from "react";
     const y = d.getFullYear();
     const m = String(d.getMonth() + 1).padStart(2,'0');
     const dd = String(d.getDate()).padStart(2,'0');
-    return `${y}-${m}-${dd}`;
+    return '${y}-${m}-${dd}';
   };
   G.addDays ??= function addDays(dateISO, days){
     const d = new Date(dateISO);
@@ -16,7 +16,7 @@ import React, { useEffect, useMemo, useState, useRef } from "react";
     const y = d.getFullYear();
     const m = String(d.getMonth() + 1).padStart(2,'0');
     const dd = String(d.getDate()).padStart(2,'0');
-    return `${y}-${m}-${dd}`;
+    return '${y}-${m}-${dd}';
   };
   G.withinNext60Days ??= function withinNext60Days(dateISO){
     if (!dateISO) return false;
@@ -130,15 +130,15 @@ function Label({ htmlFor, required, children }){
 }
 function Input(props){
   const { className='', ...rest } = props;
-  return <input className={`border rounded-lg px-3 py-2 text-sm w-full ${className}`} {...rest} />;
+  return <input className={'border rounded-lg px-3 py-2 text-sm w-full ${className}'} {...rest} />;
 }
 function Select(props){
   const { className='', children, ...rest } = props;
-  return <select className={`border rounded-lg px-3 py-2 text-sm w-full ${className}`} {...rest}>{children}</select>;
+  return <select className={'border rounded-lg px-3 py-2 text-sm w-full ${className}'} {...rest}>{children}</select>;
 }
 function Textarea(props){
   const { className='', ...rest } = props;
-  return <textarea className={`border rounded-lg px-3 py-2 text-sm w-full ${className}`} {...rest} />;
+  return <textarea className={'border rounded-lg px-3 py-2 text-sm w-full ${className}'} {...rest} />;
 }
 function Card({ children }){
   return <div className="bg-white border rounded-2xl shadow-sm overflow-hidden">{children}</div>;
@@ -166,7 +166,7 @@ function AdminPanel(props){ const { items = [], rawItems = [], setItems, onSyncM
       <span className="text-sm text-gray-500">Admin Tools</span>
     </div>
     <div className="flex items-center gap-2">
-      <button onClick={handleRefresh} className={`px-3 py-2 rounded-lg text-white \${BRAND.primaryBtn}\`}>Refresh</button>
+      <button onClick={handleRefresh} className={'px-3 py-2 rounded-lg text-white \${BRAND.primaryBtn}\'}>Refresh</button>
       <button onClick={() => exportCSV(typeof visible !== 'undefined' ? visible : (items || rawItems || []))} className="px-3 py-2 rounded-lg bg-gray-100">Export CSV</button>
       <button onClick={() => onSyncMany(typeof visible !== 'undefined' ? visible : (items || rawItems || []))} className="px-3 py-2 rounded-lg bg-gray-100">Sync Visible</button>
       <button onClick={() => setSettingsOpen(true)} className="px-3 py-2 rounded-lg bg-[#f58220] text-white">Settings</button>
