@@ -166,7 +166,7 @@ function AdminPanel(props){ const { items = [], rawItems = [], setItems, onSyncM
       <span className="text-sm text-gray-500">Admin Tools</span>
     </div>
     <div className="flex items-center gap-2">
-      <button onClick={handleRefresh} className={\`px-3 py-2 rounded-lg text-white \${BRAND.primaryBtn}\`}>Refresh</button>
+      <button onClick={handleRefresh} className={`px-3 py-2 rounded-lg text-white \${BRAND.primaryBtn}\`}>Refresh</button>
       <button onClick={() => exportCSV(typeof visible !== 'undefined' ? visible : (items || rawItems || []))} className="px-3 py-2 rounded-lg bg-gray-100">Export CSV</button>
       <button onClick={() => onSyncMany(typeof visible !== 'undefined' ? visible : (items || rawItems || []))} className="px-3 py-2 rounded-lg bg-gray-100">Sync Visible</button>
       <button onClick={() => setSettingsOpen(true)} className="px-3 py-2 rounded-lg bg-[#f58220] text-white">Settings</button>
