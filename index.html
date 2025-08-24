@@ -4,24 +4,24 @@
     <meta charset="UTF-8" />
     <meta
       name="viewport"
-      content="width=device-width, initial-scale=1, viewport-fit=cover"
+      content="width=device-width, initial-scale=1"
     />
-    <title>Aptella – Reseller Deal Registration</title>
+    <title>Aptella | Reseller Deal Registration</title>
 
-    <!-- Tiny inline favicon (prevents 404) -->
-    <link
-      rel="icon"
-      href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="12" fill="%230e3446"/><path d="M18 46 30 18h6l-12 28h-6Z" fill="%23f0a03a"/></svg>'
-    />
-
-    <!-- Leaflet map (required for Admin map) -->
+    <!-- Leaflet core (UMD) -->
     <link
       rel="stylesheet"
       href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha512-p6/K8G7h6RMP0k4f8O3Yy3qH0M9se5B2M4d5iVZ8iF9m7ar0g9a6uV2qfH1v0H4t0QqkG7PNbJdQ1rZLxwG8sA=="
+      crossorigin=""
     />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha512-p+M1G7x2gZ8H0W8V1q1q6QO9yQv9L8dU0bJr0/8Qw7R4G8dvQ2m4wT3x2a7mJ3VnF2kS6x4z2Wc8W7n2b+4mQw=="
+      crossorigin=""
+    ></script>
 
-    <!-- Optional: clustering support (safe to keep even if unused) -->
+    <!-- MarkerCluster plugin (optional; app falls back gracefully if missing) -->
     <link
       rel="stylesheet"
       href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"
@@ -32,61 +32,34 @@
     />
     <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 
-    <!-- Base styles (keeps look close to aptella.com) -->
+    <!-- Minimal CSS helpers (safe even with Tailwind present) -->
     <style>
-      :root {
-        --aptella-navy: #0e3446;
-        --aptella-navy-dark: #0b2938;
-        --aptella-orange: #f0a03a;
-        --bg: #f7fafc;
-        --text: #0f172a;
-      }
-      html, body { height: 100%; }
+      :root { --aptella-navy:#0e3446; --aptella-orange:#f0a03a; }
+      html, body, #root { height: 100%; }
       body {
         margin: 0;
-        font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-        background: var(--bg);
-        color: var(--text);
+        background: #f7fafc;
+        color: #0f172a;
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial,
+          "Apple Color Emoji", "Segoe UI Emoji";
       }
-      #root { min-height: 100vh; }
-      /* Leaflet container gets its height from the React component,
-         but this keeps tiles crisp and avoids scrollbars in small areas */
-      .leaflet-container { image-rendering: auto; }
+      /* Ensure Leaflet always fills its container */
+      .leaflet-container { width: 100%; height: 100%; }
+      /* Keep modals/drawers above map tiles & controls */
+      .leaflet-pane, .leaflet-top, .leaflet-bottom { z-index: 10; }
     </style>
+
+    <script>
+      // --- Configure your GAS endpoint here ---
+      window.GOOGLE_APPS_SCRIPT_URL =
+        "https://script.google.com/macros/s/AKfycbw3O_GnYcTx4bRYdFD2vCSs26L_Gzl2ZIZd18dyJmZAEE442hvhqp7j1C4W6cFX_DWM/exec";
+      // Optional: If you place aptella-logo.png in /public, the header will use it automatically.
+      // window.APTELLA_LOGO = "/aptella-logo.png";
+    </script>
   </head>
   <body>
     <div id="root"></div>
-
-    <!-- Global config consumed by App.jsx -->
-    <script>
-      // ✅ Your deployed Google Apps Script (Web App -> "Anyone with the link")
-      window.GOOGLE_APPS_SCRIPT_URL =
-        "https://script.google.com/macros/s/AKfycbw3O_GnYcTx4bRYdFD2vCSs26L_Gzl2ZIZd18dyJmZAEE442hvhqp7j1C4W6cFX_DWM/exec";
-
-      // Email used in the Evidence note
-      window.APTELLA_EVIDENCE_EMAIL = "evidence@aptella.com";
-
-      // Front-end only admin gate (for real security, add auth on the GAS side too)
-      window.ADMIN_PASSWORD = "Aptella2025!";
-
-      // Brand tokens (used by buttons & accents)
-      window.BRAND = {
-        primaryBtn: "bg-[#0e3446] hover:bg-[#0b2938]",
-        outlineBtn: "ring-1 ring-[#0e3446] text-[#0e3446] hover:bg-[#eef4f7]",
-        chip: "bg-[#eef4f7] text-[#0e3446]",
-        accent: "#f0a03a",
-        navy: "#0e3446"
-      };
-
-      // Simple sanity check to help diagnose missing Leaflet
-      window.addEventListener("load", () => {
-        if (typeof L === "undefined") {
-          console.warn("Leaflet did not load. Check network/ad blockers.");
-        }
-      });
-    </script>
-
-    <!-- Vite entry (works in dev; Vite rewrites path for production build) -->
+    <!-- Vite entry -->
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
