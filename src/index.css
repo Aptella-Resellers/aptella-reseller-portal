@@ -6,3 +6,28 @@
 /* (optional) a couple of tiny global tweaks */
 html, body { height: 100%; }
 .leaflet-container { image-rendering: auto; } /* keeps map tiles crisp */
+
+/* Keep Leaflet beneath any app modals/drawers */
+.leaflet-pane,
+.leaflet-control,
+.leaflet-top,
+.leaflet-bottom {
+  z-index: 200 !important;
+}
+
+/* Our Settings drawer overlay */
+.ap-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;                /* higher than Leaflet panes */
+  background: rgba(0,0,0,0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ap-modal > .ap-modal-card {
+  width: min(680px, 95vw);
+  border-radius: 1rem;
+  background: #fff;
+  box-shadow: 0 25px 50px -12px rgba(0,0,0,.25);
+}
