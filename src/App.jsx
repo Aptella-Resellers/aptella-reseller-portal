@@ -16,7 +16,7 @@ const BRAND = {
   chipWarn:    "bg-orange-100 text-orange-800",
 };
 
-const ADMIN_PASSWORD = "Aptella2025!";               // simple gate
+const ADMIN_PASSWORD = "Aptella2025!";
 const APTELLA_EVIDENCE_EMAIL = "evidence@aptella.com";
 
 const COUNTRY_CONFIG = {
@@ -56,10 +56,7 @@ function addDays(iso,n){ const d=new Date(iso); d.setDate(d.getDate()+Number(n||
 function daysUntil(iso){ return Math.round((new Date(iso)-new Date(todayISO()))/(1000*60*60*24)); }
 function withinNext60Days(iso){ const d=daysUntil(iso); return d>=0 && d<=60; }
 
-/* ---------- GAS helpers (CORS-safe) ----------
-   No custom headers; body is plain string.
-   GAS reads e.postData.contents.
------------------------------------------------- */
+/* ---------- GAS helpers (CORS-safe) ---------- */
 async function gasGET(params){
   const usp = new URLSearchParams({ ...params, t: Date.now() });
   const res = await fetch(`${GAS_URL}?${usp}`, { method: "GET" });
@@ -71,8 +68,7 @@ async function gasGET(params){
 async function gasPOST(action, payload){
   const res  = await fetch(`${GAS_URL}?action=${encodeURIComponent(action)}&t=${Date.now()}`, {
     method: "POST",
-    // no content-type header on purpose → simple request (no preflight)
-    body: JSON.stringify(payload || {})
+    body: JSON.stringify(payload || {})   // no headers: simple request (no preflight)
   });
   const text = await res.text();
   let json; try { json = JSON.parse(text); } catch { throw new Error(text || "Bad JSON"); }
@@ -154,6 +150,7 @@ function SubmissionForm({ onLocalAdd, onSyncOne }){
     solution:"", stage:"qualified", probability:PROB_BY_STAGE.qualified,
     expectedCloseDate:addDays(todayISO(),14),
     supports:[],
+    competitors:"",
     notes:"",
     emailEvidence:true,
     evidenceFiles:[],
@@ -225,7 +222,7 @@ function SubmissionForm({ onLocalAdd, onSyncOne }){
       probability: Number(form.probability),
       expectedCloseDate: form.expectedCloseDate,
       supports: form.supports.join("; "),
-      competitors: "",
+      competitors: form.competitors || "",
       notes: form.notes,
       evidenceLinks: "",
       updates: "",
@@ -374,14 +371,20 @@ function SubmissionForm({ onLocalAdd, onSyncOne }){
             </div>
           </div>
 
-          <div className="grid gap-2">
-            <Label>Evidence (optional files)</Label>
-            <input type="file" multiple onChange={handleFiles}
-                   className="block w-full text-sm file:mr-4 file:rounded-lg file:border-0 file:bg-sky-50 file:px-3 file:py-2 file:text-sky-700"/>
-            <label className="text-sm inline-flex items-center gap-2 mt-1">
-              <input type="checkbox" checked={!!form.emailEvidence} onChange={e=>setForm(f=>({...f,emailEvidence:e.target.checked}))}/>
-              Email attached files to Aptella ({APTELLA_EVIDENCE_EMAIL}) via secure Apps Script
-            </label>
+          <div className="grid md:grid-cols-2 gap-4">
+            <div className="grid gap-2">
+              <Label>Competitors</Label>
+              <Input name="competitors" value={form.competitors} onChange={handleChange} placeholder="Comma separated (optional)"/>
+            </div>
+            <div className="grid gap-2">
+              <Label>Evidence (optional files)</Label>
+              <input type="file" multiple onChange={handleFiles}
+                     className="block w-full text-sm file:mr-4 file:rounded-lg file:border-0 file:bg-sky-50 file:px-3 file:py-2 file:text-sky-700"/>
+              <label className="text-sm inline-flex items-center gap-2 mt-1">
+                <input type="checkbox" checked={!!form.emailEvidence} onChange={e=>setForm(f=>({...f,emailEvidence:e.target.checked}))}/>
+                Email attached files to Aptella ({APTELLA_EVIDENCE_EMAIL}) via secure Apps Script
+              </label>
+            </div>
           </div>
 
           <div className="grid gap-2">
@@ -427,25 +430,32 @@ function AdminPanel({items,fx,onRefresh,onApprove,onClose,onOpenFx,onExportCSV})
     },0);
   },[items,fx]);
 
-  const mapRef=useRef(null), mapObj=useRef(null), layer=useRef(null);
+  const mapRef=useRef(null), mapObj=useRef(null), group=useRef(null);
   useEffect(()=>{
     if(!mapRef.current || mapObj.current) return;
     const L=window.L; if(!L) return;
     mapObj.current=L.map(mapRef.current).setView([1.3521,103.8198],6);
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"&copy; OpenStreetMap contributors"}).addTo(mapObj.current);
-    layer.current=L.layerGroup().addTo(mapObj.current);
+    // cluster if plugin exists, else layerGroup
+    group.current = L.markerClusterGroup ? L.markerClusterGroup({ showCoverageOnHover:false, disableClusteringAtZoom: 10 }) : L.layerGroup();
+    mapObj.current.addLayer(group.current);
   },[]);
   useEffect(()=>{
-    const L=window.L; if(!L || !mapObj.current || !layer.current) return;
-    layer.current.clearLayers();
+    const L=window.L; if(!L || !mapObj.current || !group.current) return;
+    group.current.clearLayers();
     const bounds=[];
     for(const r of items){
       if(!r.lat || !r.lng) continue;
       const color = r.status==="approved" ? "#16a34a" : (r.status==="closed"||r.status==="lost") ? "#dc2626" :
                     (r.lockExpiry && daysUntil(r.lockExpiry)<=7) ? "#f59e0b" : "#2563eb";
-      const m=L.circleMarker([r.lat,r.lng],{radius:6,color,weight:2,fillOpacity:0.7})
+      const icon = L.divIcon({
+        className:"status-dot",
+        html:`<div style="width:12px;height:12px;border-radius:50%;background:${color};border:2px solid white;box-shadow:0 0 0 1px ${color}"></div>`,
+        iconSize:[12,12]
+      });
+      const m=L.marker([r.lat,r.lng],{icon})
         .bindPopup(`<div style="font-size:12px"><strong>${r.customerName||""}</strong><br/>${r.customerLocation||""}<br/>${r.solution||""}<br/>${r.currency||""} ${r.value||""}</div>`);
-      m.addTo(layer.current); bounds.push([r.lat,r.lng]);
+      group.current.addLayer(m); bounds.push([r.lat,r.lng]);
     }
     if(bounds.length) mapObj.current.fitBounds(bounds,{padding:[30,30]});
   },[items]);
@@ -536,7 +546,7 @@ export default function App(){
   }
 
   function exportCSV(){
-    const cols=["id","submittedAt","resellerCountry","resellerLocation","resellerName","resellerContact","resellerEmail","resellerPhone","customerName","customerLocation","city","country","lat","lng","industry","currency","value","solution","stage","probability","expectedCloseDate","status","lockExpiry","syncedAt","supports","notes","evidenceLinks"];
+    const cols=["id","submittedAt","resellerCountry","resellerLocation","resellerName","resellerContact","resellerEmail","resellerPhone","customerName","customerLocation","city","country","lat","lng","industry","currency","value","solution","stage","probability","expectedCloseDate","status","lockExpiry","syncedAt","confidential","remindersOptIn","supports","competitors","notes","evidenceLinks","updates"];
     const head=cols.join(",");
     const body=(items||[]).map(x=>cols.map(k=>{
       const val=(x[k]==null?"":String(x[k])).replace(/\n/g," ").replace(/"/g,'""');
@@ -568,7 +578,8 @@ export default function App(){
       <div className="border-b bg-white">
         <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <img src="/aptella-logo.png" alt="Aptella" className="h-6" onError={(e)=>{e.currentTarget.style.display="none";}}/>
+            {/* use relative path for GitHub Pages project site */}
+            <img src={"aptella-logo.png"} alt="Aptella" className="h-7"/>
             <div className="text-sm text-slate-500">Master Distributor • Xgrids</div>
           </div>
           <div className="flex items-center gap-2">
