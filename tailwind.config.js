@@ -1,13 +1,16 @@
 /** @type {import('tailwindcss').Config} */
 export default {
-  content: ["./index.html", "./src/**/*.{js,jsx,ts,tsx}"],
+  content: ['./index.html', './src/**/*.{js,jsx,ts,tsx}'],
   theme: {
     extend: {
       colors: {
-        aptella: '#0b2b3c',
-        gold: '#f5a11a',
-      }
-    }
+        aptella: {
+          navy: '#0e3446',
+          'navy-dark': '#0b2938',
+          orange: '#f0a03a',
+        },
+      },
+    },
   },
-  plugins: []
-}
+  plugins: [],
+};
