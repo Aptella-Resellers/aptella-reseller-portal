@@ -4,24 +4,49 @@
     <meta charset="UTF-8" />
     <meta
       name="viewport"
-      content="width=device-width, initial-scale=1"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
     />
-    <title>Aptella | Reseller Deal Registration</title>
+    <meta name="theme-color" content="#0e3446" />
+    <title>Aptella Reseller Portal</title>
+    <meta
+      name="description"
+      content="Aptella • Xgrids Master Distributor — Reseller deal registration and admin portal."
+    />
 
-    <!-- Leaflet core (UMD) -->
+    <!-- Favicon (use the logo in /public to avoid 404 on GitHub Pages) -->
+    <!-- IMPORTANT: keep aptella-logo.png in your /public folder -->
+    <link rel="icon" type="image/png" href="aptella-logo.png" />
+
+    <!-- Inter font (optional but recommended to match Aptella.com feel) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      html,
+      body {
+        font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial,
+          sans-serif;
+        background: #f7fafc;
+        color: #0f172a;
+        margin: 0;
+        padding: 0;
+        min-height: 100%;
+      }
+      /* Ensure Leaflet map sits below any drawers we render */
+      .leaflet-container {
+        z-index: 1;
+      }
+    </style>
+
+    <!-- Leaflet core CSS (UMD) -->
     <link
       rel="stylesheet"
       href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-      integrity="sha512-p6/K8G7h6RMP0k4f8O3Yy3qH0M9se5B2M4d5iVZ8iF9m7ar0g9a6uV2qfH1v0H4t0QqkG7PNbJdQ1rZLxwG8sA=="
-      crossorigin=""
     />
-    <script
-      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-      integrity="sha512-p+M1G7x2gZ8H0W8V1q1q6QO9yQv9L8dU0bJr0/8Qw7R4G8dvQ2m4wT3x2a7mJ3VnF2kS6x4z2Wc8W7n2b+4mQw=="
-      crossorigin=""
-    ></script>
-
-    <!-- MarkerCluster plugin (optional; app falls back gracefully if missing) -->
+    <!-- MarkerCluster CSS (optional but recommended for dense points) -->
     <link
       rel="stylesheet"
       href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"
@@ -30,36 +55,25 @@
       rel="stylesheet"
       href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"
     />
-    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 
-    <!-- Minimal CSS helpers (safe even with Tailwind present) -->
-    <style>
-      :root { --aptella-navy:#0e3446; --aptella-orange:#f0a03a; }
-      html, body, #root { height: 100%; }
-      body {
-        margin: 0;
-        background: #f7fafc;
-        color: #0f172a;
-        font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial,
-          "Apple Color Emoji", "Segoe UI Emoji";
-      }
-      /* Ensure Leaflet always fills its container */
-      .leaflet-container { width: 100%; height: 100%; }
-      /* Keep modals/drawers above map tiles & controls */
-      .leaflet-pane, .leaflet-top, .leaflet-bottom { z-index: 10; }
-    </style>
-
+    <!-- Expose your Google Apps Script endpoint to the app -->
     <script>
-      // --- Configure your GAS endpoint here ---
       window.GOOGLE_APPS_SCRIPT_URL =
         "https://script.google.com/macros/s/AKfycbw3O_GnYcTx4bRYdFD2vCSs26L_Gzl2ZIZd18dyJmZAEE442hvhqp7j1C4W6cFX_DWM/exec";
-      // Optional: If you place aptella-logo.png in /public, the header will use it automatically.
-      // window.APTELLA_LOGO = "/aptella-logo.png";
     </script>
+
+    <!-- Leaflet core JS (UMD global `L`) -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- MarkerCluster plugin (adds `L.markerClusterGroup`) -->
+    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
   </head>
   <body>
+    <noscript>
+      You need to enable JavaScript to run this app.
+    </noscript>
     <div id="root"></div>
-    <!-- Vite entry -->
+
+    <!-- Vite entry (kept the same) -->
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
