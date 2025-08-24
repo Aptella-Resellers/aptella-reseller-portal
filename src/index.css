@@ -1,9 +1,8 @@
+/* src/index.css */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Optional brand tweaks */
-:root {
-  --aptella: #0b2b3c;
-  --gold: #f5a11a;
-}
+/* (optional) a couple of tiny global tweaks */
+html, body { height: 100%; }
+.leaflet-container { image-rendering: auto; } /* keeps map tiles crisp */
