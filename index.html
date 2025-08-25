@@ -2,14 +2,53 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <!-- Uses /public/aptella-logo.png at build time -->
-    <link rel="icon" type="image/png" href="/aptella-logo.png" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Aptella • Reseller Deal Registration</title>
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <title>Aptella – Reseller Deal Registration</title>
+
+    <!-- Brand favicon (optional) -->
+    <link rel="icon" href="/aptella-logo.png" />
+
+    <!-- Leaflet (map) -->
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""
+    />
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+    ></script>
+
+    <!-- Base styles (no Tailwind needed) -->
+    <link rel="stylesheet" href="/src/index.css" />
   </head>
   <body>
+    <!-- Top brand bar -->
+    <header class="brandbar">
+      <div class="brandbar-inner">
+        <img
+          src="/aptella-logo.png"
+          alt="Aptella"
+          class="brand-logo"
+          decoding="async"
+        />
+        <div class="brand-meta">
+          <span>Master Distributor</span>
+          <span class="sep">•</span>
+          <span>Xgrids</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- App root -->
     <div id="root"></div>
-    <!-- NOTE: must be /src/main.jsx (not /aptella-reseller-portal/src/main.jsx) -->
+
+    <!-- Your bundle -->
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
