@@ -1,25 +1,23 @@
 /** @type {import('tailwindcss').Config} */
 export default {
-  content: [
-    './index.html',
-    './src/**/*.{js,jsx,ts,tsx}'
-  ],
+  content: ['./index.html', './src/**/*.{js,jsx,ts,tsx}'],
   theme: {
     extend: {
       colors: {
         aptella: {
           navy: '#0E3446',
-          'navy-dark': '#0B2938',
-          orange: '#F0A03A'
-        }
+          navyDark: '#0B2938',
+          orange: '#F0A03A',
+        },
       },
-      fontFamily: {
-        // swap to your chosen brand font if you load it in index.html
-        sans: ['Inter', 'system-ui', 'Avenir', 'Helvetica', 'Arial', 'sans-serif']
-      }
-    }
+      borderRadius: {
+        xl: '0.75rem',
+        '2xl': '1rem',
+      },
+      boxShadow: {
+        card: '0 6px 20px -4px rgba(14,52,70,0.15)',
+      },
+    },
   },
-  plugins: [
-    require('@tailwindcss/forms')
-  ]
+  plugins: [],
 }
