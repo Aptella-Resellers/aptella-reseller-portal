@@ -6,74 +6,71 @@
       name="viewport"
       content="width=device-width, initial-scale=1, viewport-fit=cover"
     />
-    <meta name="theme-color" content="#0e3446" />
-    <title>Aptella Reseller Portal</title>
-    <meta
-      name="description"
-      content="Aptella • Xgrids Master Distributor — Reseller deal registration and admin portal."
-    />
+    <title>Aptella — Reseller Deal Registration</title>
+    <link rel="icon" href="/aptella-logo.png" />
+    <!-- Tailwind via CDN (keeps your current setup working) -->
+    <script src="https://cdn.tailwindcss.com"></script>
 
-    <!-- Favicon (use the logo in /public to avoid 404 on GitHub Pages) -->
-    <!-- IMPORTANT: keep aptella-logo.png in your /public folder -->
-    <link rel="icon" type="image/png" href="aptella-logo.png" />
-
-    <!-- Inter font (optional but recommended to match Aptella.com feel) -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap"
-      rel="stylesheet"
-    />
+    <!-- Brand polish -->
     <style>
-      html,
-      body {
-        font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial,
-          sans-serif;
-        background: #f7fafc;
-        color: #0f172a;
-        margin: 0;
-        padding: 0;
-        min-height: 100%;
+      :root{
+        --aptella-navy:#0e3446;
+        --aptella-navy-dark:#0b2938;
+        --aptella-orange:#f0a03a;
+        --ink:#0f172a;
+        --muted:#64748b;
+        --bg:#f7fafc;
+        --card:#ffffff;
+        --ring: 0 0 0 3px rgba(14,52,70,.15);
       }
-      /* Ensure Leaflet map sits below any drawers we render */
-      .leaflet-container {
-        z-index: 1;
+      html,body{ background:var(--bg); color:var(--ink); }
+      /* NAV */
+      .nav-wrap{ border-bottom:1px solid rgba(15,23,42,.06); }
+      .nav-inner{ max-width:80rem; margin:0 auto; padding:0.75rem 1rem; }
+      .brand-logo{ height: 44px; }
+      .brand-badge{ color:#94a3b8; font-size:.825rem }
+      /* HERO */
+      .hero{
+        background: linear-gradient(96deg,var(--aptella-navy) 0%, var(--aptella-navy-dark) 100%);
+        color:#fff;
       }
+      .hero-inner{ max-width:80rem; margin:0 auto; padding:1.25rem 1rem 1.75rem; }
+      .hero h1{ font-weight:700; letter-spacing:.2px; }
+      .hero p{ color: rgb(255 255 255 / .75); }
+
+      /* CARDS */
+      .card{ border:1px solid rgba(15,23,42,.08); box-shadow:0 4px 24px -10px rgba(15,23,42,.25) }
+
+      /* Buttons */
+      .btn-primary{ background:var(--aptella-navy); color:#fff; }
+      .btn-primary:hover{ background:var(--aptella-navy-dark); }
+      .btn-ghost{ background:#eef2f7; }
+      .btn-ghost:hover{ background:#e6ebf2; }
+      .btn-warn{ background:var(--aptella-orange); color:#0e2230; }
+
+      /* Required field treatment (Aptella-like grey) */
+      .grid.gap-2:has(> label[aria-required="true"]) input,
+      .grid.gap-2:has(> label[aria-required="true"]) select,
+      .grid.gap-2:has(> label[aria-required="true"]) textarea{
+        background:#f3f4f6; /* soft grey */
+        transition: background .15s ease, box-shadow .15s ease;
+      }
+      .grid.gap-2:has(> label[aria-required="true"]) input:focus,
+      .grid.gap-2:has(> label[aria-required="true"]) select:focus,
+      .grid.gap-2:has(> label[aria-required="true"]) textarea:focus{
+        background:#fff; box-shadow:var(--ring);
+      }
+
+      /* Table polish */
+      table thead th{ font-weight:600; color:#475569 }
+      table tbody td{ color:#0f172a }
+
+      /* Leaflet container rounding*/
+      .leaflet-container{ border-radius:1rem }
     </style>
-
-    <!-- Leaflet core CSS (UMD) -->
-    <link
-      rel="stylesheet"
-      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    />
-    <!-- MarkerCluster CSS (optional but recommended for dense points) -->
-    <link
-      rel="stylesheet"
-      href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"
-    />
-    <link
-      rel="stylesheet"
-      href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"
-    />
-
-    <!-- Expose your Google Apps Script endpoint to the app -->
-    <script>
-      window.GOOGLE_APPS_SCRIPT_URL =
-        "https://script.google.com/macros/s/AKfycbw3O_GnYcTx4bRYdFD2vCSs26L_Gzl2ZIZd18dyJmZAEE442hvhqp7j1C4W6cFX_DWM/exec";
-    </script>
-
-    <!-- Leaflet core JS (UMD global `L`) -->
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <!-- MarkerCluster plugin (adds `L.markerClusterGroup`) -->
-    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
   </head>
   <body>
-    <noscript>
-      You need to enable JavaScript to run this app.
-    </noscript>
     <div id="root"></div>
-
-    <!-- Vite entry (kept the same) -->
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
