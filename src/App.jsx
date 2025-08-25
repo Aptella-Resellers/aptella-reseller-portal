@@ -1,85 +1,34 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 
-/* =========================
+/* ===============================
    CONFIG / CONSTANTS
-   ========================= */
+   =============================== */
 
-const GAS = {
-  // Set this to your published Apps Script "Web app" URL
-  BASE:
-    (typeof GOOGLE_APPS_SCRIPT_URL !== "undefined" && GOOGLE_APPS_SCRIPT_URL) ||
-    "https://script.google.com/macros/s/AKfycbw3O_GnYcTx4bRYdFD2vCSs26L_Gzl2ZIZd18dyJmZAEE442hvhqp7j1C4W6cFX_DWM/exec",
-  list: (b) => `${b}?action=list`,
-  submit: (b) => `${b}?action=submit`,
-  update: (b) => `${b}?action=update`,
-  fxGet: (b) => `${b}?action=fx-get`,
-  fxSet: (b) => `${b}?action=fx-set`,
-};
+const GAS_URL =
+  "https://script.google.com/macros/s/AKfycbw3O_GnYcTx4bRYdFD2vCSs26L_Gzl2ZIZd18dyJmZAEE442hvhqp7j1C4W6cFX_DWM/exec";
 
-const ADMIN_PASSWORD = "Aptella2025!";
+const ADMIN_PASSWORD = "Aptella2025!"; // change if needed
 
-// Brand
 const BRAND = {
   navy: "#0e3446",
-  navyDark: "#0b2938",
   orange: "#f0a03a",
   primaryBtn: "bg-[#0e3446] hover:bg-[#0b2938]",
-  ghostBtn:
-    "bg-white border border-slate-200 hover:bg-slate-50 text-slate-700",
-  pill: "rounded-full px-2.5 py-1 text-xs font-medium",
-  pillPending: "bg-blue-50 text-blue-700 border border-blue-200",
-  pillApproved: "bg-green-50 text-green-700 border border-green-200",
-  pillClosed: "bg-red-50 text-red-700 border border-red-200",
-  pillWarning: "bg-orange-50 text-orange-700 border border-orange-200",
 };
 
-const COUNTRIES = ["Indonesia", "Malaysia", "Philippines", "Singapore"];
-const RES_COUNTRY_OPTIONS = ["Select country", ...COUNTRIES];
-const CURRENCIES = ["AUD", "SGD", "IDR", "MYR", "PHP", "USD"];
-const INDUSTRIES = [
-  "Construction",
-  "Survey / Mapping",
-  "Mining",
-  "Oil & Gas",
-  "Utilities",
-  "Telecom",
-  "Transport / Logistics",
-  "Government",
-  "Education",
-  "Other",
-];
-const SUPPORT_OPTIONS = [
-  "Pre-sales engineer",
-  "Demo / loan unit",
-  "Pricing exception",
-  "Marketing materials",
-  "Partner training",
-  "On-site customer visit",
-  "Extended lock request",
-];
+const COUNTRY_CAPITAL = {
+  Indonesia: { city: "Jakarta", lat: -6.2088, lng: 106.8456, currency: "IDR" },
+  Malaysia: { city: "Kuala Lumpur", lat: 3.139, lng: 101.6869, currency: "MYR" },
+  Philippines: { city: "Manila", lat: 14.5995, lng: 120.9842, currency: "PHP" },
+  Singapore: { city: "Singapore", lat: 1.3521, lng: 103.8198, currency: "SGD" },
+};
+
 const XGRIDS_SOLUTIONS = [
   "Xgrids L2 PRO",
   "Xgrids K1",
   "Xgrids PortalCam",
   "Xgrids Drone Kit",
-  "__OTHER__",
+  "Other (type below)",
 ];
-
-const DEFAULT_RATES_AUD = {
-  AUD: 1,
-  SGD: 1.05,
-  USD: 1.5,
-  MYR: 0.33,
-  PHP: 0.028,
-  IDR: 0.0001,
-};
-
-const CAPITALS = {
-  Indonesia: { lat: -6.2088, lng: 106.8456, city: "Jakarta", currency: "IDR" },
-  Singapore: { lat: 1.3521, lng: 103.8198, city: "Singapore", currency: "SGD" },
-  Malaysia: { lat: 3.139, lng: 101.6869, city: "Kuala Lumpur", currency: "MYR" },
-  Philippines: { lat: 14.5995, lng: 120.9842, city: "Manila", currency: "PHP" },
-};
 
 const STAGES = [
   { key: "qualified", label: "Qualified" },
@@ -88,246 +37,586 @@ const STAGES = [
   { key: "won", label: "Won" },
   { key: "lost", label: "Lost" },
 ];
+
 const PROB_BY_STAGE = { qualified: 35, proposal: 55, negotiation: 70, won: 100, lost: 0 };
 
-const I18N = {
-  en: {
-    resellerCountry: "Reseller Country",
-    selectCountry: "Select country",
-    resellerLocation: "Reseller Location",
-    resellerCompany: "Reseller company",
-    primaryContact: "Primary contact",
-    contactEmail: "Contact email",
-    contactPhone: "Contact phone",
-    customerName: "Customer name",
-    customerCity: "Customer City",
-    customerCountry: "Customer Country",
-    mapOption: "Map option (paste lat,lng or use link)",
-    openMap: "Open Map",
-    solutionOffered: "Solution offered (Xgrids)",
-    selectSolution: "Select an Xgrids solution",
-    otherSolution: "Other solution",
-    learnXgrids: "Learn about Xgrids",
-    expectedClose: "Expected close date",
-    industry: "Industry",
-    dealValue: "Deal value",
-    stage: "Sales stage",
-    probability: "Probability (%)",
-    competitors: "Competitors",
-    supportRequested: "Support requested",
-    evidence: "Evidence (required)",
-    chooseFiles: "Choose files",
-    emailEvidence: `Email attached files to Aptella (admin.asia@aptella.com)`,
-    notes: "Notes",
-    consent:
-      "I confirm details are accurate and consent to data storage for deal management",
-    submit: "Submit Registration",
-    reset: "Reset",
-  },
-  id: {
-    resellerCountry: "Negara Reseller",
-    selectCountry: "Pilih negara",
-    resellerLocation: "Lokasi Reseller",
-    resellerCompany: "Perusahaan reseller",
-    primaryContact: "Kontak utama",
-    contactEmail: "Email kontak",
-    contactPhone: "Telepon kontak",
-    customerName: "Nama pelanggan",
-    customerCity: "Kota Pelanggan",
-    customerCountry: "Negara Pelanggan",
-    mapOption: "Opsi peta (tempel lat,lng atau gunakan tautan)",
-    openMap: "Buka Peta",
-    solutionOffered: "Solusi ditawarkan (Xgrids)",
-    selectSolution: "Pilih solusi Xgrids",
-    otherSolution: "Solusi lainnya",
-    learnXgrids: "Pelajari tentang Xgrids",
-    expectedClose: "Perkiraan tanggal penutupan",
-    industry: "Industri",
-    dealValue: "Nilai transaksi",
-    stage: "Tahap penjualan",
-    probability: "Probabilitas (%)",
-    competitors: "Pesaing",
-    supportRequested: "Dukungan yang diminta",
-    evidence: "Bukti (wajib)",
-    chooseFiles: "Pilih berkas",
-    emailEvidence: `Kirim berkas terlampir ke Aptella (admin.asia@aptella.com)`,
-    notes: "Catatan",
-    consent:
-      "Saya mengonfirmasi detail akurat dan menyetujui penyimpanan data untuk pengelolaan deal",
-    submit: "Kirim Pendaftaran",
-    reset: "Atur ulang",
-  },
-};
+const SUPPORTS = [
+  "Pre-sales engineer",
+  "Demo / loan unit",
+  "Pricing exception",
+  "Marketing materials",
+  "Partner training",
+  "On-site customer visit",
+  "Extended lock request",
+];
 
-/* =========================
+const INDUSTRIES = [
+  "Construction",
+  "Utilities",
+  "Mining",
+  "Transport",
+  "Oil & Gas",
+  "Telecom",
+  "Government",
+  "Other",
+];
+
+const CURRENCIES = ["SGD", "IDR", "MYR", "PHP", "AUD", "USD"];
+
+/* ===============================
    UTILS
-   ========================= */
+   =============================== */
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
-const addDaysISO = (iso, d) => {
-  const x = new Date(iso);
-  x.setDate(x.getDate() + Number(d || 0));
-  return x.toISOString().slice(0, 10);
-};
-const moneyAUD = (v) =>
-  new Intl.NumberFormat("en-AU", {
-    style: "currency",
-    currency: "AUD",
-    maximumFractionDigits: 0,
-  }).format(Number(v || 0));
-
-const fileListToBase64 = async (list, maxMB = 20) => {
-  const files = Array.from(list || []);
-  let total = 0;
-  const items = await Promise.all(
-    files.map(
-      (f) =>
-        new Promise((res, rej) => {
-          const r = new FileReader();
-          r.onload = () => {
-            const s = String(r.result || "");
-            const b64 = s.split(",")[1] || "";
-            total += (b64.length * 3) / 4;
-            res({
-              name: f.name,
-              type: f.type || "application/octet-stream",
-              data: b64,
-            });
-          };
-          r.onerror = rej;
-          r.readAsDataURL(f);
-        })
-    )
-  );
-  if (total > maxMB * 1024 * 1024)
-    throw new Error(`Attachments exceed ${maxMB}MB total.`);
-  return items;
+const addDays = (dateISO, n) => {
+  const d = new Date(dateISO);
+  d.setDate(d.getDate() + Number(n || 0));
+  return d.toISOString().slice(0, 10);
 };
 
-const statusPill = (s) => {
-  const base = BRAND.pill;
-  if (s === "approved" || s === "locked") return `${base} ${BRAND.pillApproved}`;
-  if (s === "closed" || s === "lost") return `${base} ${BRAND.pillClosed}`;
-  if (s === "warning") return `${base} ${BRAND.pillWarning}`;
-  return `${base} ${BRAND.pillPending}`;
+const withinNext60Days = (dateISO) => {
+  if (!dateISO) return false;
+  const today = new Date(todayISO());
+  const target = new Date(dateISO);
+  const diffDays = (target - today) / (1000 * 60 * 60 * 24);
+  return diffDays >= 0 && diffDays <= 60;
 };
 
-/* =========================
-   LEAFLET (CDN)
-   ========================= */
+const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
 
-let leafletP;
-function loadLeaflet() {
-  if (leafletP) return leafletP;
-  leafletP = new Promise((resolve, reject) => {
-    if (window.L && window.L.MarkerClusterGroup) return resolve(window.L);
-    const css1 = document.createElement("link");
-    css1.rel = "stylesheet";
-    css1.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
-    document.head.appendChild(css1);
-    const css2 = document.createElement("link");
-    css2.rel = "stylesheet";
-    css2.href =
-      "https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css";
-    document.head.appendChild(css2);
-    const css3 = document.createElement("link");
-    css3.rel = "stylesheet";
-    css3.href =
-      "https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css";
-    document.head.appendChild(css3);
-
-    const s1 = document.createElement("script");
-    s1.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
-    s1.onload = () => {
-      const s2 = document.createElement("script");
-      s2.src =
-        "https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js";
-      s2.onload = () => resolve(window.L);
-      s2.onerror = reject;
-      document.body.appendChild(s2);
-    };
-    s1.onerror = reject;
-    document.body.appendChild(s1);
-  });
-  return leafletP;
-}
-
-/* =========================
-   SMALL ATOMS
-   ========================= */
-
-function Card({ children, className = "" }) {
-  return <div className={`card rounded-2xl bg-white ${className}`}>{children}</div>;
-}
-function CardHeader({ title, subtitle, right }) {
+function badge(color, text) {
+  const colors = {
+    blue: "bg-blue-50 text-blue-700 border-blue-200",
+    green: "bg-green-50 text-green-700 border-green-200",
+    red: "bg-red-50 text-red-700 border-red-200",
+    orange: "bg-orange-50 text-orange-700 border-orange-200",
+    gray: "bg-gray-50 text-gray-700 border-gray-200",
+  };
   return (
-    <div className="px-5 pt-5 pb-2 flex items-center justify-between">
-      <div>
-        <h3 className="text-lg font-semibold">{title}</h3>
-        {subtitle && <p className="text-sm text-slate-500">{subtitle}</p>}
+    <span className={`inline-block px-2.5 py-0.5 text-xs border rounded-full ${colors[color] || colors.gray}`}>
+      {text}
+    </span>
+  );
+}
+
+/* ===============================
+   NETWORK HELPERS (GAS)
+   =============================== */
+
+async function gasGet(params) {
+  const url = `${GAS_URL}?${new URLSearchParams(params).toString()}`;
+  const res = await fetch(url, { method: "GET" });
+  const text = await res.text();
+  let json = null;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    throw new Error(`Invalid JSON from GAS: ${text.slice(0, 200)}`);
+  }
+  if (!res.ok || json?.ok === false) {
+    throw new Error(json?.error || `HTTP ${res.status} ${res.statusText}`);
+  }
+  return json;
+}
+async function gasPost(action, body) {
+  const url = `${GAS_URL}?action=${encodeURIComponent(action)}`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body || {}),
+  });
+  const text = await res.text();
+  let json = null;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    throw new Error(`Invalid JSON from GAS: ${text.slice(0, 200)}`);
+  }
+  if (!res.ok || json?.ok === false) {
+    throw new Error(json?.error || `HTTP ${res.status} ${res.statusText}`);
+  }
+  return json;
+}
+
+/* ===============================
+   BRAND HEADER
+   =============================== */
+
+function BrandHeader({ tab, setTab, adminAuthed, onSignOut }) {
+  return (
+    <header className="sticky top-0 z-40 bg-white/90 backdrop-blur border-b border-gray-200">
+      <div className="mx-auto max-w-7xl px-4 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <img
+            src="/aptella-reseller-portal/aptella-logo.png"
+            alt="Aptella"
+            className="h-8"
+            onError={(e) => {
+              // fallback for GitHub Pages subpath issues
+              e.currentTarget.src = "/aptella-logo.png";
+            }}
+          />
+          <div className="text-sm text-gray-500">Master Distributor • Xgrids</div>
+        </div>
+        <nav className="flex items-center gap-2">
+          <button
+            className={`px-3 py-1.5 rounded-lg ${
+              tab === "reseller" ? "text-white bg-[#0e3446]" : "bg-gray-100 text-[#0e3446]"
+            }`}
+            onClick={() => setTab("reseller")}
+          >
+            Reseller
+          </button>
+          <button
+            className={`px-3 py-1.5 rounded-lg ${
+              tab === "admin" ? "text-white bg-[#0e3446]" : "bg-gray-100 text-[#0e3446]"
+            }`}
+            onClick={() => setTab("admin")}
+          >
+            Admin
+          </button>
+          {adminAuthed && (
+            <button className="px-3 py-1.5 rounded-lg bg-gray-100" onClick={onSignOut}>
+              Logout
+            </button>
+          )}
+        </nav>
       </div>
-      {right}
+    </header>
+  );
+}
+
+/* ===============================
+   FX SETTINGS MODAL
+   =============================== */
+
+function FxModal({ open, onClose, initialFx, onSave, saving }) {
+  const [rows, setRows] = useState([]);
+
+  useEffect(() => {
+    if (open) setRows(Object.entries(initialFx || {}).map(([k, v]) => [k, v]));
+  }, [open, initialFx]);
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-[999] bg-black/40 flex items-center justify-center">
+      <div className="bg-white rounded-xl shadow-xl w-[min(680px,95vw)] p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold">FX Rates → AUD</h3>
+          <button onClick={onClose} className="px-2 py-1 rounded bg-gray-100">
+            Close
+          </button>
+        </div>
+
+        <div className="space-y-2">
+          {rows.map(([cur, rate], i) => (
+            <div key={i} className="grid grid-cols-3 gap-2 items-center">
+              <input
+                className="border rounded px-2 py-1 uppercase"
+                value={cur}
+                onChange={(e) => {
+                  const next = e.target.value.toUpperCase();
+                  setRows((r) => r.map((row, idx) => (idx === i ? [next, row[1]] : row)));
+                }}
+              />
+              <input
+                className="border rounded px-2 py-1"
+                type="number"
+                step="0.000001"
+                value={rate}
+                onChange={(e) => {
+                  const val = Number(e.target.value);
+                  setRows((r) => r.map((row, idx) => (idx === i ? [row[0], val] : row)));
+                }}
+              />
+              <button
+                className="text-red-600 text-sm"
+                onClick={() => setRows((r) => r.filter((_, idx) => idx !== i))}
+              >
+                Remove
+              </button>
+            </div>
+          ))}
+          <button
+            className="px-3 py-1 rounded bg-gray-100 text-sm"
+            onClick={() => setRows((r) => [...r, ["SGD", 1.05]])}
+          >
+            Add Row
+          </button>
+        </div>
+
+        <div className="mt-4 flex justify-end gap-2">
+          <button onClick={onClose} className="px-3 py-1.5 rounded bg-gray-100">
+            Cancel
+          </button>
+          <button
+            disabled={saving}
+            onClick={() => onSave(Object.fromEntries(rows))}
+            className={`px-3 py-1.5 rounded text-white ${BRAND.primaryBtn}`}
+          >
+            {saving ? "Saving…" : "Save"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
-function CardBody({ children }) {
-  return <div className="px-5 pb-5">{children}</div>;
-}
-function Label({ children, required, ...rest }) {
+
+/* ===============================
+   ADMIN PANEL
+   =============================== */
+
+function AdminPanel({ fx, setFx, rows, setRows }) {
+  const [loading, setLoading] = useState(false);
+  const [fxOpen, setFxOpen] = useState(false);
+  const [fxSaving, setFxSaving] = useState(false);
+
+  // sorting
+  const [sortKey, setSortKey] = useState("submittedAt");
+  const [sortDir, setSortDir] = useState("desc"); // 'asc'|'desc'
+  const [statusFilter, setStatusFilter] = useState("All");
+  const [query, setQuery] = useState("");
+
+  // Leaflet map
+  const mapRef = useRef(null);
+  const mapObjRef = useRef(null);
+
+  // load map once
+  useEffect(() => {
+    let cancelled = false;
+
+    async function boot() {
+      if (mapObjRef.current) return;
+      // load leaflet CSS/JS if not present
+      if (!window.L) {
+        const css = document.createElement("link");
+        css.rel = "stylesheet";
+        css.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+        document.head.appendChild(css);
+        await new Promise((r) => setTimeout(r, 50));
+        await new Promise((resolve, reject) => {
+          const s = document.createElement("script");
+          s.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+          s.onload = resolve;
+          s.onerror = reject;
+          document.body.appendChild(s);
+        });
+      }
+      if (cancelled) return;
+      const L = window.L;
+      const map = L.map(mapRef.current).setView([1.3521, 103.8198], 6);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19,
+        attribution: "&copy; OpenStreetMap",
+      }).addTo(map);
+      mapObjRef.current = map;
+      renderMarkers();
+    }
+
+    boot().catch((e) => console.error("Leaflet load failed", e));
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // re-render markers when rows change
+  useEffect(() => {
+    renderMarkers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, fx]);
+
+  function renderMarkers() {
+    const map = mapObjRef.current;
+    if (!map || !window.L) return;
+    const L = window.L;
+    // clear existing layers except base
+    map.eachLayer((layer) => {
+      if (layer instanceof L.CircleMarker || layer instanceof L.Marker) map.removeLayer(layer);
+    });
+
+    const aud = (row) => {
+      const rate = fx?.[row.currency?.toUpperCase?.() || "AUD"] ?? 1;
+      return Number(row.value || 0) * Number(rate || 1);
+    };
+
+    rows.forEach((r) => {
+      if (!r.lat || !r.lng) return;
+      const v = Math.max(6, Math.sqrt(aud(r)) / 100); // bubble size
+      const color =
+        r.status === "approved"
+          ? "#16a34a"
+          : r.status === "closed"
+          ? "#dc2626"
+          : "#1d4ed8";
+      const marker = L.circleMarker([Number(r.lat), Number(r.lng)], {
+        radius: v,
+        color,
+        weight: 1,
+        fillColor: color,
+        fillOpacity: 0.35,
+      }).addTo(map);
+      marker.bindPopup(
+        `<div style="font-size:12px">
+           <strong>${r.customerName || "Customer"}</strong><br/>
+           ${r.city || ""}${r.country ? ", " + r.country : ""}<br/>
+           ${r.solution || ""}<br/>
+           <em>${r.currency || ""} ${Number(r.value || 0).toLocaleString()}</em>
+         </div>`
+      );
+    });
+  }
+
+  // list from GAS
+  async function refresh() {
+    setLoading(true);
+    try {
+      const data = await gasGet({ action: "list" });
+      setRows(data.rows || []);
+      setFx(data.fx || {});
+    } catch (e) {
+      alert(`Refresh failed: ${e.message}`);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function saveFx(nextFx) {
+    setFxSaving(true);
+    try {
+      await gasPost("fx-set", { fx: nextFx });
+      setFx(nextFx);
+      setFxOpen(false);
+    } catch (e) {
+      alert(`FX save failed: ${e.message}`);
+    } finally {
+      setFxSaving(false);
+    }
+  }
+
+  async function setStatus(id, status) {
+    try {
+      await gasPost("update", { id, status });
+      setRows((prev) => prev.map((r) => (r.id === id ? { ...r, status } : r)));
+    } catch (e) {
+      alert(`Update failed: ${e.message}`);
+    }
+  }
+
+  // filtered/sorted rows
+  const visible = useMemo(() => {
+    let r = rows || [];
+    if (statusFilter !== "All") r = r.filter((x) => (x.status || "pending") === statusFilter);
+    if (query.trim()) {
+      const q = query.trim().toLowerCase();
+      r = r.filter(
+        (x) =>
+          (x.customerName || "").toLowerCase().includes(q) ||
+          (x.customerLocation || "").toLowerCase().includes(q) ||
+          (x.resellerName || "").toLowerCase().includes(q) ||
+          (x.solution || "").toLowerCase().includes(q)
+      );
+    }
+    r = [...r].sort((a, b) => {
+      const dir = sortDir === "asc" ? 1 : -1;
+      const av = a[sortKey] ?? "";
+      const bv = b[sortKey] ?? "";
+      if (sortKey === "value") return dir * (Number(av || 0) - Number(bv || 0));
+      return dir * String(av).localeCompare(String(bv));
+    });
+    return r;
+  }, [rows, statusFilter, query, sortKey, sortDir]);
+
+  const totalAUD = useMemo(() => {
+    const s = visible.reduce((acc, r) => {
+      const rate = fx?.[r.currency?.toUpperCase?.() || "AUD"] ?? 1;
+      return acc + Number(r.value || 0) * Number(rate || 1);
+    }, 0);
+    return s;
+  }, [visible, fx]);
+
+  function headerCell(key, label, widthClass = "") {
+    return (
+      <th
+        className={`p-3 text-left text-[13px] font-semibold text-[#f0a03a] ${widthClass} cursor-pointer`}
+        onClick={() => {
+          if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+          else {
+            setSortKey(key);
+            setSortDir("asc");
+          }
+        }}
+        title="Sort"
+      >
+        {label}
+        {sortKey === key ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
+      </th>
+    );
+  }
+
   return (
-    <label
-      aria-required={required ? "true" : undefined}
-      className="text-sm font-medium text-slate-700"
-      {...rest}
-    >
-      {children} {required && <span className="text-red-500">*</span>}
-    </label>
+    <section className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="grid grid-cols-3 gap-3 text-sm">
+          <div className="px-3 py-2 rounded-xl bg-white border">
+            <div className="text-gray-500">Total registrations</div>
+            <div className="text-lg font-semibold">{rows.length}</div>
+          </div>
+          <div className="px-3 py-2 rounded-xl bg-white border">
+            <div className="text-gray-500">Pending review</div>
+            <div className="text-lg font-semibold">
+              {rows.filter((r) => (r.status || "pending") === "pending").length}
+            </div>
+          </div>
+          <div className="px-3 py-2 rounded-xl bg-white border">
+            <div className="text-gray-500">Total value (AUD)</div>
+            <div className="text-lg font-semibold">A$ {totalAUD.toLocaleString()}</div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={refresh}
+            disabled={loading}
+            className={`px-3 py-2 rounded-lg text-white ${BRAND.primaryBtn}`}
+          >
+            {loading ? "Refreshing…" : "Refresh"}
+          </button>
+          <button
+            onClick={() => setFxOpen(true)}
+            className="px-3 py-2 rounded-lg bg-gray-100"
+          >
+            FX Settings
+          </button>
+        </div>
+      </div>
+
+      <div className="rounded-xl border bg-white overflow-hidden">
+        <div className="p-3 flex flex-wrap items-center gap-3">
+          <input
+            placeholder="Search…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className="border rounded-lg px-3 py-2 w-64"
+          />
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="border rounded-lg px-3 py-2"
+          >
+            <option>All</option>
+            <option>pending</option>
+            <option>approved</option>
+            <option>closed</option>
+          </select>
+        </div>
+
+        <div className="h-[420px]">
+          <div ref={mapRef} className="w-full h-full" />
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-sm">
+            <thead>
+              <tr className="bg-gray-50">
+                {headerCell("submittedAt", "Submitted", "w-[120px]")}
+                {headerCell("customerName", "Customer", "w-[180px]")}
+                {headerCell("customerLocation", "Location", "w-[200px]")}
+                {headerCell("solution", "Solution", "w-[160px]")}
+                {headerCell("value", "Value", "w-[120px]")}
+                {headerCell("stage", "Stage", "w-[120px]")}
+                {headerCell("status", "Status", "w-[120px]")}
+                {headerCell("expectedCloseDate", "Expected Close", "w-[140px]")}
+                <th className="p-3 text-left text-[13px] font-semibold text-[#f0a03a] w-[160px]">
+                  Actions
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {visible.map((r) => (
+                <tr key={r.id} className="border-t">
+                  <td className="p-3">{r.submittedAt || ""}</td>
+                  <td className="p-3">{r.customerName || ""}</td>
+                  <td className="p-3">{r.customerLocation || ""}</td>
+                  <td className="p-3">{r.solution || ""}</td>
+                  <td className="p-3">
+                    {r.currency} {Number(r.value || 0).toLocaleString()}
+                  </td>
+                  <td className="p-3 capitalize">{r.stage || ""}</td>
+                  <td className="p-3">
+                    {(r.status || "pending") === "approved"
+                      ? badge("green", "approved")
+                      : (r.status || "pending") === "closed"
+                      ? badge("red", "closed")
+                      : badge("blue", "pending")}
+                  </td>
+                  <td className="p-3">{r.expectedCloseDate || ""}</td>
+                  <td className="p-3 space-x-2">
+                    <button
+                      className="px-2.5 py-1 rounded bg-green-100 text-green-700"
+                      onClick={() => setStatus(r.id, "approved")}
+                    >
+                      Approve
+                    </button>
+                    <button
+                      className="px-2.5 py-1 rounded bg-red-100 text-red-700"
+                      onClick={() => setStatus(r.id, "closed")}
+                    >
+                      Close
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {visible.length === 0 && (
+                <tr>
+                  <td className="p-3 text-sm text-gray-500" colSpan={9}>
+                    No rows
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <FxModal
+        open={fxOpen}
+        onClose={() => setFxOpen(false)}
+        initialFx={fx}
+        onSave={saveFx}
+        saving={fxSaving}
+      />
+    </section>
   );
 }
-const Input = (p) => (
-  <input
-    {...p}
-    className={`border rounded-lg px-3 py-2 w-full ${p.className || ""}`}
-  />
-);
-const Select = (p) => (
-  <select
-    {...p}
-    className={`border rounded-lg px-3 py-2 w-full ${p.className || ""}`}
-  />
-);
-const Textarea = (p) => (
-  <textarea
-    {...p}
-    className={`border rounded-lg px-3 py-2 w-full ${p.className || ""}`}
-  />
-);
 
-/* =========================
+/* ===============================
    SUBMISSION FORM
-   ========================= */
+   =============================== */
 
-function SubmissionForm({ onSavedLocal }) {
+function SubmissionForm({ onSubmitted }) {
   const [form, setForm] = useState({
-    resellerCountry: "Select country",
+    resellerCountry: "",
     resellerLocation: "",
-    resellerCompany: "",
+    resellerName: "",
     resellerContact: "",
     resellerEmail: "",
     resellerPhone: "",
     customerName: "",
     customerCity: "",
     customerCountry: "",
-    currency: "SGD",
+    customerLocation: "",
     lat: "",
     lng: "",
+    industry: "",
+    currency: "SGD",
+    value: "",
     solution: "",
     solutionOther: "",
-    industry: "",
-    value: "",
     stage: "qualified",
-    probability: PROB_BY_STAGE.qualified,
-    expectedCloseDate: addDaysISO(todayISO(), 14),
+    probability: PROB_BY_STAGE["qualified"],
+    expectedCloseDate: addDays(todayISO(), 14),
     supports: [],
     competitors: [],
     notes: "",
@@ -336,924 +625,574 @@ function SubmissionForm({ onSavedLocal }) {
     accept: false,
   });
   const [errors, setErrors] = useState({});
-  const locale = form.resellerCountry === "Indonesia" ? "id" : "en";
-  const t = (k) => I18N[locale][k] || I18N.en[k] || k;
+  const isID = form.resellerCountry === "Indonesia";
 
-  useEffect(() => {
-    setForm((f) => ({
-      ...f,
-      probability: PROB_BY_STAGE[f.stage] ?? f.probability,
-    }));
-  }, [form.stage]);
+  // Bahasa labels
+  const L = (en, id) => (isID ? id : en);
 
+  // auto set capital & currency when reseller country picked
   useEffect(() => {
-    const cap = CAPITALS[form.customerCountry];
-    if (cap) {
+    const cfg = COUNTRY_CAPITAL[form.resellerCountry];
+    if (cfg) {
       setForm((f) => ({
         ...f,
-        customerCity: cap.city,
-        lat: cap.lat,
-        lng: cap.lng,
-        currency: f.currency || cap.currency,
+        resellerLocation: cfg.city,
+        customerCountry: f.customerCountry || form.resellerCountry,
+        lat: cfg.lat,
+        lng: cfg.lng,
+        currency: cfg.currency,
       }));
     }
-  }, [form.customerCountry]);
+  }, [form.resellerCountry]);
 
-  function handleChange(e) {
-    const { name, value, type, checked } = e.target;
-    setForm((f) => ({ ...f, [name]: type === "checkbox" ? checked : value }));
+  // probability by stage
+  useEffect(() => {
+    setForm((f) => ({ ...f, probability: PROB_BY_STAGE[f.stage] ?? f.probability }));
+  }, [form.stage]);
+
+  function setField(name, value) {
+    setForm((f) => ({ ...f, [name]: value }));
   }
-  function toggleSupport(opt) {
+
+  function toggleList(name, item) {
     setForm((f) => {
-      const s = new Set(f.supports);
-      if (s.has(opt)) s.delete(opt);
-      else s.add(opt);
-      return { ...f, supports: Array.from(s) };
+      const s = new Set(f[name]);
+      s.has(item) ? s.delete(item) : s.add(item);
+      return { ...f, [name]: Array.from(s) };
     });
   }
+
   function handleFiles(e) {
-    setForm((f) => ({ ...f, evidenceFiles: Array.from(e.target.files || []) }));
+    const files = Array.from(e.target.files || []);
+    setForm((f) => ({ ...f, evidenceFiles: files }));
   }
 
   function validate() {
     const e = {};
-    const req = (k, label) => {
-      if (!String(form[k] || "").trim()) e[k] = `${label || k} required`;
-    };
-    if (form.resellerCountry === "Select country")
-      e.resellerCountry = "Country required";
-    req("resellerLocation", t("resellerLocation"));
-    req("resellerCompany", t("resellerCompany"));
-    req("resellerContact", t("primaryContact"));
-    req("resellerEmail", t("contactEmail"));
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.resellerEmail || ""))
+    if (!form.resellerCountry) e.resellerCountry = "Required";
+    if (!form.resellerLocation) e.resellerLocation = "Required";
+    if (!form.resellerName) e.resellerName = "Required";
+    if (!form.resellerContact) e.resellerContact = "Required";
+    if (!form.resellerEmail || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.resellerEmail))
       e.resellerEmail = "Valid email required";
-    req("customerName", t("customerName"));
-    req("customerCity", t("customerCity"));
-    req("customerCountry", t("customerCountry"));
-    if (!form.solution || (form.solution === "__OTHER__" && !form.solutionOther.trim()))
-      e.solution = "Solution required";
-    if (!(form.value && Number(form.value) > 0)) e.value = "Positive value required";
-    if (!(form.lat !== "" && form.lng !== "")) e.lat = "Lat/Lng required";
-    if (!form.evidenceFiles || form.evidenceFiles.length === 0)
-      e.evidence = "Evidence files required";
-    if (!form.accept) e.accept = "You must confirm";
+    if (!form.customerName) e.customerName = "Required";
+    if (!form.customerCountry) e.customerCountry = "Required";
+    if (!form.expectedCloseDate || !withinNext60Days(form.expectedCloseDate))
+      e.expectedCloseDate = "Must be within 60 days";
+    if (!form.solution) e.solution = "Required";
+    if (form.solution === "Other (type below)" && !form.solutionOther.trim())
+      e.solutionOther = "Please enter solution";
+    if (!form.value || Number(form.value) <= 0) e.value = "Enter a positive amount";
+    if (!form.evidenceFiles?.length) e.evidenceFiles = "Evidence is required";
+    if (!form.accept) e.accept = "Please confirm";
     setErrors(e);
     return Object.keys(e).length === 0;
+  }
+
+  function filesToBase64(files) {
+    const readers = (files || []).map(
+      (f) =>
+        new Promise((resolve, reject) => {
+          const fr = new FileReader();
+          fr.onload = () => {
+            const res = String(fr.result || "");
+            resolve({
+              name: f.name,
+              type: f.type || "application/octet-stream",
+              data: res.split(",")[1] || "",
+            });
+          };
+          fr.onerror = reject;
+          fr.readAsDataURL(f);
+        })
+    );
+    return Promise.all(readers);
   }
 
   async function submit(e) {
     e.preventDefault();
     if (!validate()) return;
 
-    const solutionFinal =
-      form.solution === "__OTHER__" ? form.solutionOther : form.solution;
-
-    const record = {
-      id:
-        Math.random().toString(36).slice(2) + Date.now().toString(36),
+    const rec = {
+      id: uid(),
       submittedAt: todayISO(),
       resellerCountry: form.resellerCountry,
       resellerLocation: form.resellerLocation,
-      resellerName: form.resellerCompany,
+      resellerName: form.resellerName,
       resellerContact: form.resellerContact,
       resellerEmail: form.resellerEmail,
       resellerPhone: form.resellerPhone,
       customerName: form.customerName,
-      customerLocation: `${form.customerCity}, ${form.customerCountry}`,
-      city: form.customerCity,
-      country: form.customerCountry,
-      lat: Number(form.lat),
-      lng: Number(form.lng),
+      customerLocation: `${form.customerCity || ""}${form.customerCountry ? ", " + form.customerCountry : ""}`,
+      city: form.customerCity || "",
+      country: form.customerCountry || "",
+      lat: form.lat || "",
+      lng: form.lng || "",
       industry: form.industry,
       currency: form.currency,
-      value: Number(form.value),
-      solution: solutionFinal,
+      value: Number(form.value || 0),
+      solution: form.solution === "Other (type below)" ? form.solutionOther : form.solution,
       stage: form.stage,
-      probability: Number(form.probability),
+      probability: Number(form.probability || 0),
       expectedCloseDate: form.expectedCloseDate,
       status: "pending",
       lockExpiry: "",
       syncedAt: "",
+      confidential: false, // removed per latest request
       remindersOptIn: false,
       supports: form.supports,
       competitors: form.competitors,
       notes: form.notes,
       evidenceLinks: [],
       updates: [],
+      emailEvidence: true,
+      evidenceEmail: "admin.asia@aptella.com",
     };
 
-    onSavedLocal?.(record);
-
     try {
-      if (!GAS.BASE) throw new Error("Apps Script URL missing");
-      const attachments = await fileListToBase64(form.evidenceFiles);
-      const payload = {
-        ...record,
-        attachments,
-        emailEvidence: true,
-        evidenceEmail: "admin.asia@aptella.com",
-      };
-      const res = await fetch(GAS.submit(GAS.BASE), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const txt = await res.text();
-      let json = null;
-      try {
-        json = JSON.parse(txt);
-      } catch {}
-      if (!res.ok || (json && json.ok === false)) {
-        alert(
-          `Submitted locally. Google Sheets sync failed: ${
-            json?.error || `HTTP ${res.status} ${res.statusText}`
-          }`
-        );
-      } else {
-        alert("Submitted and synced to Google Sheets.");
-      }
-    } catch (err) {
-      alert(
-        `Submitted locally. Google Sheets sync failed: ${
-          err?.message || err
-        }`
-      );
+      const attachments = await filesToBase64(form.evidenceFiles);
+      await gasPost("submit", { ...rec, attachments });
+      alert("Submitted and synced to Google Sheets.");
+      setForm((f) => ({
+        ...f,
+        resellerName: "",
+        resellerContact: "",
+        resellerEmail: "",
+        resellerPhone: "",
+        customerName: "",
+        customerCity: "",
+        value: "",
+        solution: "",
+        solutionOther: "",
+        evidenceFiles: [],
+        notes: "",
+        accept: false,
+      }));
+      if (typeof onSubmitted === "function") onSubmitted();
+    } catch (e) {
+      alert(`Submission failed: ${e.message}`);
     }
-
-    setForm((f) => ({
-      ...f,
-      resellerLocation: "",
-      resellerCompany: "",
-      resellerContact: "",
-      resellerEmail: "",
-      resellerPhone: "",
-      customerName: "",
-      customerCity: "",
-      customerCountry: "",
-      lat: "",
-      lng: "",
-      solution: "",
-      solutionOther: "",
-      industry: "",
-      value: "",
-      stage: "qualified",
-      probability: PROB_BY_STAGE.qualified,
-      expectedCloseDate: addDaysISO(todayISO(), 14),
-      supports: [],
-      competitors: [],
-      notes: "",
-      evidenceFiles: [],
-      accept: false,
-    }));
-    const el = document.getElementById("evidenceFiles");
-    if (el) el.value = "";
   }
 
   return (
-    <Card className="mt-6">
-      <CardHeader
-        title="Register Upcoming Deal (within 60 days)"
-        subtitle="Fields marked * are mandatory."
-      />
-      <CardBody>
-        <form className="grid gap-6" onSubmit={submit}>
-          {/* Row 1 */}
-          <div className="grid md:grid-cols-3 gap-4">
-            <div className="grid gap-2">
-              <Label required> {t("resellerCountry")} </Label>
-              <Select
-                name="resellerCountry"
-                value={form.resellerCountry}
-                onChange={handleChange}
-              >
-                {RES_COUNTRY_OPTIONS.map((c) => (
-                  <option key={c} value={c}>
-                    {c === "Select country" ? t("selectCountry") : c}
-                  </option>
-                ))}
-              </Select>
-            </div>
-            <div className="grid gap-2">
-              <Label required>{t("resellerLocation")}</Label>
-              <Input
-                name="resellerLocation"
-                value={form.resellerLocation}
-                onChange={handleChange}
-                placeholder="e.g., Jakarta"
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label>Currency</Label>
-              <Select name="currency" value={form.currency} onChange={handleChange}>
-                {CURRENCIES.map((c) => (
-                  <option key={c}>{c}</option>
-                ))}
-              </Select>
-            </div>
+    <section className="space-y-4">
+      <h2 className="text-xl font-semibold text-[#0e3446]">
+        Register Upcoming Deal <span className="text-gray-500">(within 60 days)</span>
+      </h2>
+
+      <form onSubmit={submit} className="grid gap-6">
+        <div className="grid md:grid-cols-3 gap-4">
+          <div className="grid gap-1.5">
+            <label className="text-sm">{L("Reseller Country *", "Negara Anda *")}</label>
+            <select
+              value={form.resellerCountry}
+              onChange={(e) => setField("resellerCountry", e.target.value)}
+              className="border rounded-lg px-3 py-2"
+            >
+              <option value="">{L("Select country", "Pilih negara")}</option>
+              <option>Indonesia</option>
+              <option>Malaysia</option>
+              <option>Philippines</option>
+              <option>Singapore</option>
+            </select>
+            {errors.resellerCountry && <p className="text-xs text-red-600">{errors.resellerCountry}</p>}
           </div>
 
-          {/* Row 2 */}
-          <div className="grid md:grid-cols-2 gap-4">
-            <div className="grid gap-2">
-              <Label required>{t("resellerCompany")}</Label>
-              <Input name="resellerCompany" value={form.resellerCompany} onChange={handleChange} />
-              {errors.resellerCompany && <p className="text-xs text-red-600">{errors.resellerCompany}</p>}
-            </div>
-            <div className="grid gap-2">
-              <Label required>{t("primaryContact")}</Label>
-              <Input name="resellerContact" value={form.resellerContact} onChange={handleChange} />
-              {errors.resellerContact && <p className="text-xs text-red-600">{errors.resellerContact}</p>}
-            </div>
-            <div className="grid gap-2">
-              <Label required>{t("contactEmail")}</Label>
-              <Input type="email" name="resellerEmail" value={form.resellerEmail} onChange={handleChange} />
-              {errors.resellerEmail && <p className="text-xs text-red-600">{errors.resellerEmail}</p>}
-            </div>
-            <div className="grid gap-2">
-              <Label>{t("contactPhone")}</Label>
-              <Input name="resellerPhone" value={form.resellerPhone} onChange={handleChange} />
-            </div>
+          <div className="grid gap-1.5">
+            <label className="text-sm">{L("Reseller Location *", "Lokasi Reseller *")}</label>
+            <input
+              className="border rounded-lg px-3 py-2"
+              value={form.resellerLocation}
+              onChange={(e) => setField("resellerLocation", e.target.value)}
+              placeholder={L("e.g., Singapore", "cth., Jakarta")}
+            />
+            {errors.resellerLocation && <p className="text-xs text-red-600">{errors.resellerLocation}</p>}
           </div>
 
-          {/* Row 3 */}
-          <div className="grid md:grid-cols-2 gap-4">
-            <div className="grid gap-2">
-              <Label required>{t("customerName")}</Label>
-              <Input name="customerName" value={form.customerName} onChange={handleChange} />
-              {errors.customerName && <p className="text-xs text-red-600">{errors.customerName}</p>}
-            </div>
-            <div className="grid gap-2">
-              <Label required>{t("customerCountry")}</Label>
-              <Select name="customerCountry" value={form.customerCountry} onChange={handleChange}>
-                <option value="">{t("selectCountry")}</option>
-                {COUNTRIES.map((c) => (
-                  <option key={c}>{c}</option>
-                ))}
-              </Select>
-              {errors.customerCountry && <p className="text-xs text-red-600">{errors.customerCountry}</p>}
-            </div>
+          <div className="grid gap-1.5">
+            <label className="text-sm">{L("Currency", "Mata Uang")}</label>
+            <select
+              value={form.currency}
+              onChange={(e) => setField("currency", e.target.value)}
+              className="border rounded-lg px-3 py-2"
+            >
+              {CURRENCIES.map((c) => (
+                <option key={c}>{c}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="grid md:grid-cols-2 gap-4">
+          <div className="grid gap-1.5">
+            <label className="text-sm">{L("Reseller company *", "Perusahaan reseller *")}</label>
+            <input
+              className="border rounded-lg px-3 py-2"
+              value={form.resellerName}
+              onChange={(e) => setField("resellerName", e.target.value)}
+            />
+            {errors.resellerName && <p className="text-xs text-red-600">{errors.resellerName}</p>}
+          </div>
+          <div className="grid gap-1.5">
+            <label className="text-sm">{L("Primary contact *", "Kontak utama *")}</label>
+            <input
+              className="border rounded-lg px-3 py-2"
+              value={form.resellerContact}
+              onChange={(e) => setField("resellerContact", e.target.value)}
+            />
+            {errors.resellerContact && <p className="text-xs text-red-600">{errors.resellerContact}</p>}
           </div>
 
-          {/* Row 4 */}
-          <div className="grid md:grid-cols-3 gap-4">
-            <div className="grid gap-2">
-              <Label required>{t("customerCity")}</Label>
-              <Input name="customerCity" value={form.customerCity} onChange={handleChange} />
-              {errors.customerCity && <p className="text-xs text-red-600">{errors.customerCity}</p>}
-            </div>
-            <div className="grid gap-2">
-              <Label required>{t("mapOption")}</Label>
-              <div className="flex gap-2">
-                <Input placeholder="lat" name="lat" value={form.lat} onChange={handleChange} />
-                <Input placeholder="lng" name="lng" value={form.lng} onChange={handleChange} />
-                <a
-                  className={`px-3 py-2 rounded-lg text-white text-sm ${BRAND.primaryBtn}`}
-                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-                    `${form.customerCity || ""}, ${form.customerCountry || ""}`
-                  )}`}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  {t("openMap")}
-                </a>
-              </div>
-              {errors.lat && <p className="text-xs text-red-600">{errors.lat}</p>}
-            </div>
-
-            <div className="grid gap-2">
-              <Label required>{t("solutionOffered")}</Label>
-              <Select name="solution" value={form.solution} onChange={handleChange}>
-                <option value="">{t("selectSolution")}</option>
-                {XGRIDS_SOLUTIONS.map((s) => (
-                  <option key={s} value={s}>
-                    {s === "__OTHER__" ? "+ Other (type)" : s}
-                  </option>
-                ))}
-              </Select>
-              {form.solution === "__OTHER__" && (
-                <Input
-                  className="mt-2"
-                  placeholder={t("otherSolution")}
-                  name="solutionOther"
-                  value={form.solutionOther}
-                  onChange={handleChange}
-                />
-              )}
-              <a
-                className="text-[#f0a03a] underline text-xs mt-1 inline-block"
-                href="https://www.aptella.com/asia/product-brands/xgrids-asia/"
-                target="_blank"
-                rel="noreferrer"
-              >
-                {t("learnXgrids")}
-              </a>
-              {errors.solution && <p className="text-xs text-red-600">{errors.solution}</p>}
-            </div>
+          <div className="grid gap-1.5">
+            <label className="text-sm">{L("Contact email *", "Email kontak *")}</label>
+            <input
+              className="border rounded-lg px-3 py-2"
+              type="email"
+              value={form.resellerEmail}
+              onChange={(e) => setField("resellerEmail", e.target.value)}
+            />
+            {errors.resellerEmail && <p className="text-xs text-red-600">{errors.resellerEmail}</p>}
           </div>
 
-          {/* Row 5 */}
-          <div className="grid md:grid-cols-3 gap-4">
-            <div className="grid gap-2">
-              <Label required>{t("expectedClose")}</Label>
-              <Input
-                type="date"
-                name="expectedCloseDate"
-                value={form.expectedCloseDate}
-                onChange={handleChange}
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label>{t("industry")}</Label>
-              <Select name="industry" value={form.industry} onChange={handleChange}>
-                <option value="">{locale === "id" ? "Pilih industri" : "Select industry"}</option>
-                {INDUSTRIES.map((i) => (
-                  <option key={i}>{i}</option>
-                ))}
-              </Select>
-            </div>
-            <div className="grid gap-2">
-              <Label>
-                {t("dealValue")} <span className="text-slate-400">({form.currency})</span>
-              </Label>
-              <Input type="number" step="0.01" min="0" name="value" value={form.value} onChange={handleChange} />
-              {errors.value && <p className="text-xs text-red-600">{errors.value}</p>}
-            </div>
+          <div className="grid gap-1.5">
+            <label className="text-sm">{L("Contact phone", "Telepon kontak")}</label>
+            <input
+              className="border rounded-lg px-3 py-2"
+              value={form.resellerPhone}
+              onChange={(e) => setField("resellerPhone", e.target.value)}
+            />
+          </div>
+        </div>
+
+        <div className="grid md:grid-cols-2 gap-4">
+          <div className="grid gap-1.5">
+            <label className="text-sm">{L("Customer name *", "Nama pelanggan *")}</label>
+            <input
+              className="border rounded-lg px-3 py-2"
+              value={form.customerName}
+              onChange={(e) => setField("customerName", e.target.value)}
+            />
+            {errors.customerName && <p className="text-xs text-red-600">{errors.customerName}</p>}
           </div>
 
-          {/* Row 6 */}
-          <div className="grid md:grid-cols-3 gap-4">
-            <div className="grid gap-2">
-              <Label>{t("stage")}</Label>
-              <Select name="stage" value={form.stage} onChange={handleChange}>
-                {STAGES.map((s) => (
-                  <option key={s.key} value={s.key}>
-                    {s.label}
-                  </option>
-                ))}
-              </Select>
-            </div>
-            <div className="grid gap-2">
-              <Label>{t("probability")}</Label>
-              <Input type="number" min="0" max="100" name="probability" value={form.probability} onChange={handleChange} />
-            </div>
-            <div className="grid gap-2">
-              <Label>{t("competitors")}</Label>
-              <Input
-                placeholder={locale === "id" ? "Pisahkan dengan koma (opsional)" : "Comma separated (optional)"}
-                name="competitors"
-                value={(form.competitors || []).join(", ")}
-                onChange={(e) =>
+          <div className="grid gap-1.5">
+            <label className="text-sm">{L("Customer Country *", "Negara pelanggan *")}</label>
+            <select
+              className="border rounded-lg px-3 py-2"
+              value={form.customerCountry}
+              onChange={(e) => {
+                const v = e.target.value;
+                setField("customerCountry", v);
+                if (COUNTRY_CAPITAL[v]) {
                   setForm((f) => ({
                     ...f,
-                    competitors: e.target.value.split(",").map((s) => s.trim()).filter(Boolean),
-                  }))
+                    customerCity: COUNTRY_CAPITAL[v].city,
+                    lat: COUNTRY_CAPITAL[v].lat,
+                    lng: COUNTRY_CAPITAL[v].lng,
+                  }));
                 }
-              />
-            </div>
+              }}
+            >
+              <option value="">{L("Select country", "Pilih negara")}</option>
+              <option>Indonesia</option>
+              <option>Malaysia</option>
+              <option>Philippines</option>
+              <option>Singapore</option>
+            </select>
+            {errors.customerCountry && <p className="text-xs text-red-600">{errors.customerCountry}</p>}
           </div>
+        </div>
 
-          {/* Support */}
-          <div className="grid gap-2">
-            <Label>{t("supportRequested")}</Label>
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
-              {SUPPORT_OPTIONS.map((opt) => (
-                <label key={opt} className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={form.supports.includes(opt)} onChange={() => toggleSupport(opt)} />
-                  {opt}
-                </label>
-              ))}
-            </div>
-          </div>
-
-          {/* Evidence */}
-          <div className="grid gap-2">
-            <Label required>{t("evidence")}</Label>
-            <div className="grid md:grid-cols-3 gap-3">
-              <div className="md:col-span-2">
-                <input
-                  id="evidenceFiles"
-                  type="file"
-                  multiple
-                  onChange={handleFiles}
-                  className="block w-full text-sm file:mr-4 file:rounded-lg file:border-0 file:bg-[#fff5e9] file:px-3 file:py-2 file:text-[#b66300]"
-                />
-                {errors.evidence && (
-                  <p className="text-xs text-red-600 mt-1">{errors.evidence}</p>
-                )}
-              </div>
-            </div>
-            <label className="flex items-center gap-2 text-sm mt-1">
-              <input type="checkbox" checked readOnly />
-              {t("emailEvidence")}
-            </label>
-          </div>
-
-          {/* Notes */}
-          <div className="grid gap-2">
-            <Label>{t("notes")}</Label>
-            <Textarea
-              rows={4}
-              name="notes"
-              value={form.notes}
-              onChange={handleChange}
-              placeholder={
-                locale === "id"
-                  ? "Persyaratan utama, ruang lingkup teknis, kendala pengiriman, proses keputusan, dll."
-                  : "Key requirements, technical scope, delivery constraints, decision process, etc."
-              }
+        <div className="grid md:grid-cols-3 gap-4">
+          <div className="grid gap-1.5">
+            <label className="text-sm">{L("Customer City", "Kota pelanggan")}</label>
+            <input
+              className="border rounded-lg px-3 py-2"
+              value={form.customerCity}
+              onChange={(e) => setField("customerCity", e.target.value)}
             />
           </div>
 
-          {/* Consent */}
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" name="accept" checked={!!form.accept} onChange={handleChange} />
-            {t("consent")}
-          </label>
-          {errors.accept && <p className="text-xs text-red-600 -mt-3">{errors.accept}</p>}
-
-          {/* Actions */}
-          <div className="flex items-center gap-3">
-            <button type="submit" className={`px-4 py-2 rounded-xl text-white ${BRAND.primaryBtn}`}>
-              {t("submit")}
-            </button>
-            <button type="button" className="px-4 py-2 rounded-xl bg-[#fff5e9] text-[#b66300]" onClick={() => window.location.reload()}>
-              {t("reset")}
-            </button>
-          </div>
-        </form>
-      </CardBody>
-    </Card>
-  );
-}
-
-/* =========================
-   ADMIN PANEL
-   ========================= */
-
-function AdminPanel() {
-  const [authed, setAuthed] = useState(false);
-  const [rows, setRows] = useState([]);
-  const [rates, setRates] = useState(DEFAULT_RATES_AUD);
-  const [search, setSearch] = useState("");
-  const [country, setCountry] = useState("All");
-  const [fxOpen, setFxOpen] = useState(false);
-
-  // sorting
-  const [sortKey, setSortKey] = useState("submittedAt");
-  const [sortDir, setSortDir] = useState("desc"); // 'asc' | 'desc'
-
-  const mapDiv = useRef(null);
-  const map = useRef(null);
-  const clusterLayer = useRef(null);
-  const circlesLayer = useRef(null);
-
-  async function refresh() {
-    try {
-      if (!GAS.BASE) throw new Error("Apps Script URL missing");
-      const res = await fetch(GAS.list(GAS.BASE));
-      const txt = await res.text();
-      let json = null;
-      try { json = JSON.parse(txt); } catch {}
-      if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status} ${res.statusText}`);
-      setRows(json.rows || []);
-      setRates({ ...DEFAULT_RATES_AUD, ...(json.fx || {}) });
-    } catch (e) {
-      alert(`Refresh failed: ${e?.message || e}`);
-    }
-  }
-  useEffect(() => { refresh(); }, []);
-
-  // Map update
-  useEffect(() => {
-    (async () => {
-      await loadLeaflet();
-      const L = window.L;
-      if (!map.current) {
-        map.current = L.map(mapDiv.current).setView([1.3521, 103.8198], 6);
-        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-          attribution: "&copy; OpenStreetMap contributors",
-          maxZoom: 19,
-        }).addTo(map.current);
-      }
-      if (clusterLayer.current) clusterLayer.current.remove();
-      if (circlesLayer.current) circlesLayer.current.remove();
-
-      const c = L.markerClusterGroup();
-      const g = L.layerGroup();
-
-      const items = sortedFiltered();
-
-      // Bubble totals by city
-      const groups = {};
-      for (const r of items) {
-        if (!r.lat || !r.lng) continue;
-        const key = `${r.city}|${r.country}|${r.lat}|${r.lng}`;
-        const valAUD = (rates[r.currency] || 0) * (Number(r.value) || 0);
-        if (!groups[key]) groups[key] = { lat: Number(r.lat), lng: Number(r.lng), total: 0 };
-        groups[key].total += valAUD;
-      }
-      Object.values(groups).forEach((t) => {
-        const radius = Math.sqrt(Math.max(t.total, 1)) * 10;
-        const circle = L.circle([t.lat, t.lng], {
-          radius,
-          color: BRAND.navy,
-          fillColor: BRAND.navy,
-          fillOpacity: 0.16,
-        }).bindTooltip(`${moneyAUD(t.total)} AUD`);
-        g.addLayer(circle);
-      });
-
-      items.forEach((r) => {
-        if (!r.lat || !r.lng) return;
-        const m = L.marker([Number(r.lat), Number(r.lng)]);
-        const pill =
-          r.status === "approved"
-            ? `<span style="background:#d1fae5;color:#065f46;border:1px solid #a7f3d0;border-radius:999px;padding:2px 8px;font-size:11px;">approved</span>`
-            : r.status === "closed"
-            ? `<span style="background:#fee2e2;color:#991b1b;border:1px solid #fecaca;border-radius:999px;padding:2px 8px;font-size:11px;">closed</span>`
-            : `<span style="background:#fff5e9;color:#b45309;border:1px solid #fed7aa;border-radius:999px;padding:2px 8px;font-size:11px;">pending</span>`;
-        m.bindPopup(
-          `<div style="font-weight:600;margin-bottom:4px">${r.customerName}</div>
-           <div style="font-size:12px;color:#334155">${r.customerLocation}</div>
-           <div style="font-size:12px;margin-top:6px">${r.solution} • ${r.currency} ${Number(r.value).toLocaleString()}</div>
-           <div style="margin-top:6px">${pill}</div>`
-        );
-        c.addLayer(m);
-      });
-
-      c.addTo(map.current);
-      g.addTo(map.current);
-      clusterLayer.current = c;
-      circlesLayer.current = g;
-
-      const b = c.getBounds();
-      if (b.isValid()) map.current.fitBounds(b.pad(0.2));
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, rates, country, search, sortKey, sortDir]);
-
-  function sortedFiltered() {
-    let items = rows.slice();
-    if (country !== "All")
-      items = items.filter((r) => (r.country || "").toLowerCase() === country.toLowerCase());
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      items = items.filter(
-        (r) =>
-          (r.customerName || "").toLowerCase().includes(q) ||
-          (r.solution || "").toLowerCase().includes(q) ||
-          (r.resellerName || "").toLowerCase().includes(q) ||
-          (r.customerLocation || "").toLowerCase().includes(q)
-      );
-    }
-    const dir = sortDir === "asc" ? 1 : -1;
-    items.sort((a, b) => {
-      const A = a[sortKey], B = b[sortKey];
-      if (sortKey === "value") return (Number(A) - Number(B)) * dir;
-      if (sortKey === "submittedAt" || sortKey === "expectedCloseDate")
-        return (new Date(A) - new Date(B)) * dir;
-      return String(A || "").localeCompare(String(B || "")) * dir;
-    });
-    return items;
-  }
-
-  async function doUpdate(id, patch) {
-    try {
-      if (!GAS.BASE) throw new Error("Apps Script URL missing");
-      const res = await fetch(GAS.update(GAS.BASE), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, ...patch }),
-      });
-      const txt = await res.text();
-      let json = null;
-      try { json = JSON.parse(txt); } catch {}
-      if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status} ${res.statusText}`);
-      setRows((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
-    } catch (e) {
-      alert(`Update failed: ${e?.message || e}`);
-    }
-  }
-
-  function exportCSV(items) {
-    const cols = [
-      "id","submittedAt","resellerCountry","resellerLocation","resellerName",
-      "resellerContact","resellerEmail","resellerPhone","customerName",
-      "customerLocation","city","country","lat","lng","industry","currency",
-      "value","solution","stage","probability","expectedCloseDate","status",
-      "lockExpiry","syncedAt","remindersOptIn","supports","competitors",
-      "notes","evidenceLinks","updates",
-    ];
-    const head = cols.join(",");
-    const body = items.map((x)=>
-      cols.map((k)=>{
-        const val = String(x[k] ?? "").replace(/\n/g," ").replace(/"/g,'""');
-        return `"${val}"`;
-      }).join(",")
-    ).join("\n");
-    const blob = new Blob([head+"\n"+body], {type:"text/csv"});
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `registrations_${todayISO()}.csv`;
-    a.click();
-  }
-
-  // FX drawer
-  const FxDrawer = () =>
-    !fxOpen ? null : (
-      <div className="fixed inset-0 bg-black/40 z-[60] flex items-center justify-center">
-        <div className="bg-white rounded-2xl shadow-xl w-[min(720px,95vw)] p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold">FX Rates to AUD</h3>
-            <button onClick={() => setFxOpen(false)} className="px-2 py-1 rounded-lg bg-gray-100">Close</button>
-          </div>
-          <div className="space-y-2 max-h-[60vh] overflow-auto">
-            {Object.entries(rates).map(([cur, val]) => (
-              <div key={cur} className="grid grid-cols-3 gap-2 items-center">
-                <Input
-                  value={cur}
-                  onChange={(e) => {
-                    const n = e.target.value.toUpperCase();
-                    setRates((prev) => {
-                      const { [cur]: _, ...rest } = prev;
-                      return { ...rest, [n]: val };
-                    });
-                  }}
-                />
-                <Input
-                  type="number"
-                  step="0.000001"
-                  value={val}
-                  onChange={(e) => setRates((p) => ({ ...p, [cur]: Number(e.target.value) }))}
-                />
-                <button
-                  className="text-red-600 text-sm"
-                  onClick={() => setRates((p) => {
-                    const cp = { ...p }; delete cp[cur]; return cp;
-                  })}
-                >
-                  Remove
-                </button>
-              </div>
-            ))}
-            <button className="text-sm px-3 py-1 rounded-md bg-gray-100" onClick={() => setRates((p) => ({ ...p, USD: p.USD || 1.5 }))}>
-              Add Row
-            </button>
-          </div>
-          <div className="mt-4 flex justify-end gap-2">
-            <button onClick={() => setFxOpen(false)} className="px-3 py-1.5 rounded-lg bg-gray-100">Cancel</button>
-            <button
-              onClick={async () => {
-                try {
-                  if (!GAS.BASE) throw new Error("Apps Script URL missing");
-                  const res = await fetch(GAS.fxSet(GAS.BASE), {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ fx: rates }),
-                  });
-                  const txt = await res.text();
-                  let json=null; try{ json=JSON.parse(txt);}catch{}
-                  if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status} ${res.statusText}`);
-                  alert("FX saved.");
-                  setFxOpen(false);
-                } catch (e) {
-                  alert(`FX save failed: ${e?.message || e}`);
-                }
-              }}
-              className={`px-3 py-1.5 rounded-lg text-white ${BRAND.primaryBtn}`}
-            >
-              Save
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-
-  if (!authed) {
-    return (
-      <Card className="mt-6">
-        <CardHeader title="Admin Access" subtitle="Enter password to manage registrations." />
-        <CardBody>
-          <div className="flex items-center gap-3">
-            <Input type="password" placeholder="Admin password" id="adminPw" />
-            <button
-              className={`px-3 py-2 rounded-lg text-white ${BRAND.primaryBtn}`}
-              onClick={() => {
-                const pw = document.getElementById("adminPw").value || "";
-                if (pw === ADMIN_PASSWORD) setAuthed(true);
-                else alert("Incorrect password.");
-              }}
-            >
-              Sign in
-            </button>
-          </div>
-        </CardBody>
-      </Card>
-    );
-  }
-
-  const metrics = useMemo(() => {
-    const items = sortedFiltered();
-    let total = 0, pending = 0, approved = 0;
-    items.forEach((r) => {
-      total += (rates[r.currency] || 0) * (Number(r.value) || 0);
-      if (r.status === "approved" || r.status === "locked") approved++;
-      else if (r.status !== "closed") pending++;
-    });
-    return { count: items.length, total, pending, approved };
-  }, [rows, rates, search, country, sortKey, sortDir]);
-
-  return (
-    <>
-      <FxDrawer />
-      <Card className="mt-6">
-        <CardHeader
-          title="Register opportunities within the next 60 days"
-          right={
+          <div className="grid gap-1.5">
+            <label className="text-sm">{L("Map option (paste lat,lng or use link)", "Peta (tempel lat,lng)")}</label>
             <div className="flex gap-2">
-              <button onClick={refresh} className={`px-3 py-2 rounded-lg text-white ${BRAND.primaryBtn}`}>Refresh</button>
-              <button onClick={() => exportCSV(sortedFiltered())} className={`px-3 py-2 rounded-lg ${BRAND.ghostBtn}`}>Export CSV</button>
-              <button
-                onClick={async () => {
-                  try {
-                    if (!GAS.BASE) throw new Error("Apps Script URL missing");
-                    const res = await fetch(GAS.fxGet(GAS.BASE));
-                    const txt = await res.text();
-                    let json=null; try{ json = JSON.parse(txt); }catch{}
-                    if (json?.ok && json.fx) setRates({ ...DEFAULT_RATES_AUD, ...json.fx });
-                    setFxOpen(true);
-                  } catch { setFxOpen(true); }
-                }}
-                className={`px-3 py-2 rounded-lg ${BRAND.ghostBtn}`}
+              <input
+                className="border rounded-lg px-3 py-2 w-32"
+                placeholder="lat"
+                value={form.lat}
+                onChange={(e) => setField("lat", e.target.value)}
+              />
+              <input
+                className="border rounded-lg px-3 py-2 w-32"
+                placeholder="lng"
+                value={form.lng}
+                onChange={(e) => setField("lng", e.target.value)}
+              />
+              <a
+                className={`px-3 py-2 rounded-lg text-white text-sm ${BRAND.primaryBtn}`}
+                target="_blank"
+                rel="noreferrer"
+                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                  `${form.customerCity || ""}${form.customerCountry ? ", " + form.customerCountry : ""}`
+                )}`}
               >
-                FX Settings
-              </button>
+                Open Map
+              </a>
             </div>
-          }
-        />
-        <CardBody>
-          {/* Metrics */}
-          <div className="grid md:grid-cols-4 gap-4 mb-4">
-            <Metric title="Total registrations" value={metrics.count} />
-            <Metric title="Pending review" value={metrics.pending} />
-            <Metric title="Approved / locked" value={metrics.approved} />
-            <Metric title="Total value (AUD)" value={moneyAUD(metrics.total)} />
           </div>
 
-          {/* Filters / Sort */}
-          <div className="flex flex-wrap items-center gap-3 mb-3">
-            <Input placeholder="Search..." value={search} onChange={(e) => setSearch(e.target.value)} />
-            <Select value={country} onChange={(e) => setCountry(e.target.value)} style={{ maxWidth: 220 }}>
-              <option>All</option>
-              {COUNTRIES.map((c) => <option key={c}>{c}</option>)}
-            </Select>
-            <Select value={sortKey} onChange={(e) => setSortKey(e.target.value)} style={{ maxWidth: 220 }}>
-              <option value="submittedAt">Submitted date</option>
-              <option value="customerLocation">Location</option>
-              <option value="solution">Solution</option>
-              <option value="value">Value</option>
-              <option value="stage">Stage</option>
-              <option value="status">Status</option>
-              <option value="expectedCloseDate">Expected close date</option>
-            </Select>
-            <Select value={sortDir} onChange={(e) => setSortDir(e.target.value)} style={{ maxWidth: 160 }}>
-              <option value="desc">Newest / High first</option>
-              <option value="asc">Oldest / Low first</option>
-            </Select>
+          <div className="grid gap-1.5">
+            <label className="text-sm">{L("Solution offered (Xgrids) *", "Solusi ditawarkan (Xgrids) *")}</label>
+            <select
+              className="border rounded-lg px-3 py-2"
+              value={form.solution}
+              onChange={(e) => setField("solution", e.target.value)}
+            >
+              <option value="">{L("Select an Xgrids solution", "Pilih solusi Xgrids")}</option>
+              {XGRIDS_SOLUTIONS.map((s) => (
+                <option key={s}>{s}</option>
+              ))}
+            </select>
+            {form.solution === "Other (type below)" && (
+              <input
+                className="border rounded-lg px-3 py-2 mt-2"
+                placeholder={L("Type your solution…", "Tulis solusi…")}
+                value={form.solutionOther}
+                onChange={(e) => setField("solutionOther", e.target.value)}
+              />
+            )}
+            {errors.solution && <p className="text-xs text-red-600">{errors.solution}</p>}
+            {errors.solutionOther && <p className="text-xs text-red-600">{errors.solutionOther}</p>}
+            <a
+              className="text-sky-700 underline text-xs mt-1"
+              href="https://www.aptella.com/asia/product-brands/xgrids-asia/"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Learn about Xgrids
+            </a>
+          </div>
+        </div>
+
+        <div className="grid md:grid-cols-3 gap-4">
+          <div className="grid gap-1.5">
+            <label className="text-sm">{L("Expected close date *", "Perkiraan tanggal penutupan *")}</label>
+            <input
+              type="date"
+              className="border rounded-lg px-3 py-2"
+              value={form.expectedCloseDate}
+              onChange={(e) => setField("expectedCloseDate", e.target.value)}
+            />
+            {errors.expectedCloseDate && <p className="text-xs text-red-600">{errors.expectedCloseDate}</p>}
           </div>
 
-          {/* Map */}
-          <div ref={mapDiv} style={{ height: 420 }} className="w-full mb-4"></div>
-
-          {/* Table */}
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-sm">
-              <thead className="bg-white">
-                <tr className="thead-orange">
-                  <th className="p-3 text-left">Submitted</th>
-                  <th className="p-3 text-left">Customer</th>
-                  <th className="p-3 text-left">Location</th>
-                  <th className="p-3 text-left">Solution</th>
-                  <th className="p-3 text-left">Value</th>
-                  <th className="p-3 text-left">Stage</th>
-                  <th className="p-3 text-left">Status</th>
-                  <th className="p-3 text-left">Expected Close</th>
-                  <th className="p-3 text-left">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sortedFiltered().map((r) => (
-                  <tr key={r.id} className="border-b">
-                    <td className="p-3">{r.submittedAt || ""}</td>
-                    <td className="p-3">{r.customerName || ""}</td>
-                    <td className="p-3">{r.customerLocation || ""}</td>
-                    <td className="p-3">{r.solution || ""}</td>
-                    <td className="p-3">
-                      {r.currency} {Number(r.value || 0).toLocaleString()}{" "}
-                      <span className="text-slate-400">
-                        ({moneyAUD((rates[r.currency] || 0) * (Number(r.value) || 0))})
-                      </span>
-                    </td>
-                    <td className="p-3">{r.stage || ""}</td>
-                    <td className="p-3">
-                      <span className={statusPill(r.status || "pending")}>
-                        {r.status || "pending"}
-                      </span>
-                    </td>
-                    <td className="p-3">{r.expectedCloseDate || ""}</td>
-                    <td className="p-3 space-x-2">
-                      <button
-                        onClick={() => doUpdate(r.id, { status: "approved" })}
-                        className="px-2.5 py-1.5 rounded-lg text-white bg-green-600 hover:bg-green-700"
-                      >
-                        Approve
-                      </button>
-                      <button
-                        onClick={() => doUpdate(r.id, { status: "closed" })}
-                        className="px-2.5 py-1.5 rounded-lg text-white bg-gray-600 hover:bg-gray-700"
-                      >
-                        Close
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-                {sortedFiltered().length === 0 && (
-                  <tr>
-                    <td className="p-6 text-slate-500" colSpan={9}>No rows.</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+          <div className="grid gap-1.5">
+            <label className="text-sm">{L("Industry", "Industri")}</label>
+            <select
+              className="border rounded-lg px-3 py-2"
+              value={form.industry}
+              onChange={(e) => setField("industry", e.target.value)}
+            >
+              <option value="">{L("Select industry", "Pilih industri")}</option>
+              {INDUSTRIES.map((i) => (
+                <option key={i}>{i}</option>
+              ))}
+            </select>
           </div>
-        </CardBody>
-      </Card>
-    </>
+
+          <div className="grid gap-1.5">
+            <label className="text-sm">{L("Deal value *", "Nilai transaksi *")}</label>
+            <input
+              className="border rounded-lg px-3 py-2"
+              type="number"
+              min="0"
+              step="0.01"
+              value={form.value}
+              onChange={(e) => setField("value", e.target.value)}
+            />
+            {errors.value && <p className="text-xs text-red-600">{errors.value}</p>}
+          </div>
+        </div>
+
+        <div className="grid md:grid-cols-3 gap-4">
+          <div className="grid gap-1.5">
+            <label className="text-sm">{L("Sales stage", "Tahap penjualan")}</label>
+            <select
+              className="border rounded-lg px-3 py-2"
+              value={form.stage}
+              onChange={(e) => setField("stage", e.target.value)}
+            >
+              {STAGES.map((s) => (
+                <option key={s.key} value={s.key}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="grid gap-1.5">
+            <label className="text-sm">{L("Probability (%)", "Probabilitas (%)")}</label>
+            <input
+              className="border rounded-lg px-3 py-2"
+              type="number"
+              min="0"
+              max="100"
+              value={form.probability}
+              onChange={(e) => setField("probability", e.target.value)}
+            />
+          </div>
+          <div className="grid gap-1.5">
+            <label className="text-sm">{L("Competitors", "Pesaing")}</label>
+            <input
+              className="border rounded-lg px-3 py-2"
+              placeholder={L("Comma separated (optional)", "Pisahkan dengan koma (opsional)")}
+              value={form.competitors.join(", ")}
+              onChange={(e) =>
+                setField(
+                  "competitors",
+                  e.target.value.split(",").map((s) => s.trim()).filter(Boolean)
+                )
+              }
+            />
+          </div>
+        </div>
+
+        <div className="grid gap-1.5">
+          <label className="text-sm">{L("Support requested", "Dukungan diminta")}</label>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
+            {SUPPORTS.map((s) => (
+              <label key={s} className="text-sm flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={form.supports.includes(s)}
+                  onChange={() => toggleList("supports", s)}
+                />
+                {isID
+                  ? {
+                      "Pre-sales engineer": "Insinyur pra-penjualan",
+                      "Demo / loan unit": "Unit demo / pinjaman",
+                      "Pricing exception": "Pengecualian harga",
+                      "Marketing materials": "Materi pemasaran",
+                      "Partner training": "Pelatihan mitra",
+                      "On-site customer visit": "Kunjungan ke lokasi pelanggan",
+                      "Extended lock request": "Permintaan perpanjangan lock",
+                    }[s] || s
+                  : s}
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <div className="grid md:grid-cols-2 gap-4">
+          <div className="grid gap-1.5">
+            <label className="text-sm">{L("Evidence (required)", "Bukti (wajib)")}</label>
+            <input type="file" multiple onChange={handleFiles} className="block w-full text-sm" />
+            {errors.evidenceFiles && <p className="text-xs text-red-600">{errors.evidenceFiles}</p>}
+            <label className="text-sm flex items-center gap-2 mt-1">
+              <input type="checkbox" checked readOnly />
+              {L(
+                `Email attached files to Aptella (admin.asia@aptella.com)`,
+                `Kirim file terlampir ke Aptella (admin.asia@aptella.com)`
+              )}
+            </label>
+          </div>
+          <div className="grid gap-1.5">
+            <label className="text-sm">{L("Notes", "Catatan")}</label>
+            <textarea
+              rows={4}
+              className="border rounded-lg px-3 py-2"
+              value={form.notes}
+              onChange={(e) => setField("notes", e.target.value)}
+              placeholder={L(
+                "Key requirements, scope, delivery constraints, decision process, etc.",
+                "Persyaratan utama, ruang lingkup, kendala pengiriman, proses keputusan, dll."
+              )}
+            />
+          </div>
+        </div>
+
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={!!form.accept}
+            onChange={(e) => setField("accept", e.target.checked)}
+          />
+          {L(
+            "I confirm details are accurate and consent to data storage for deal management",
+            "Saya mengonfirmasi detail akurat dan setuju penyimpanan data untuk pengelolaan deal"
+          )}
+        </label>
+        {errors.accept && <p className="text-xs text-red-600 -mt-2">{errors.accept}</p>}
+
+        <div className="flex items-center gap-3">
+          <button type="submit" className={`px-4 py-2 rounded-xl text-white ${BRAND.primaryBtn}`}>
+            {isID ? "Kirim Pendaftaran" : "Submit Registration"}
+          </button>
+          <button
+            type="button"
+            className="px-4 py-2 rounded-xl bg-gray-200"
+            onClick={() => window.location.reload()}
+          >
+            Reset
+          </button>
+        </div>
+      </form>
+    </section>
   );
 }
 
-function Metric({ title, value }) {
+/* ===============================
+   ROOT APP — NO CONDITIONAL HOOKS
+   =============================== */
+
+export default function App() {
+  const [tab, setTab] = useState("reseller"); // 'reseller' | 'admin'
+  const [adminAuthed, setAdminAuthed] = useState(false);
+
+  // shared data for Admin panel
+  const [rows, setRows] = useState([]);
+  const [fx, setFx] = useState({ AUD: 1 });
+
+  // admin login gate (NO hook calls inside conditionals)
+  useEffect(() => {
+    if (tab !== "admin") return;
+    if (adminAuthed) return;
+    // prompt once when switching to Admin
+    const pw = window.prompt("Enter Aptella admin password");
+    if (pw === ADMIN_PASSWORD) {
+      setAdminAuthed(true);
+    } else {
+      setTab("reseller");
+      if (pw !== null) alert("Incorrect password.");
+    }
+  }, [tab, adminAuthed]);
+
+  function signOut() {
+    setAdminAuthed(false);
+    setTab("reseller");
+  }
+
   return (
-    <div className="rounded-xl border p-4 bg-white">
-      <div className="text-xs uppercase tracking-wide text-slate-500">{title}</div>
-      <div className="text-xl font-semibold mt-1">{value}</div>
+    <div className="min-h-screen bg-[#f8fafc] text-slate-900">
+      {/* brand override styles (subtle) */}
+      <style>{`
+        .btn-primary { background:${BRAND.navy}; color:#fff; }
+        .btn-primary:hover { background:#0b2938; }
+        .pill { background:#fff; border:1px solid #e5e7eb; border-radius:14px; padding:6px 10px; font-size:12px; }
+      `}</style>
+
+      <BrandHeader tab={tab} setTab={setTab} adminAuthed={adminAuthed} onSignOut={signOut} />
+
+      <main className="mx-auto max-w-7xl px-4 py-6">
+        {tab === "reseller" && <SubmissionForm onSubmitted={() => { /* no-op */ }} />}
+
+        {tab === "admin" && adminAuthed && (
+          <AdminPanel fx={fx} setFx={setFx} rows={rows} setRows={setRows} />
+        )}
+      </main>
+
+      <footer className="mt-10 text-xs text-gray-500 text-center py-6">
+        © {new Date().getFullYear()} Aptella — Xgrids Master Distributor
+      </footer>
     </div>
   );
 }
-
-/* =========================
-   ROOT
-   ========================= */
-
-function AptellaRoot() {
-  const [tab, setTab] = useState("reseller");
-
-  return (
-    <div>
-      {/* NAV */}
-      <div className="nav-wrap bg-white">
-        <div className="nav-inner flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <img src={"aptella-logo.png"} alt="Aptella" className="brand-logo-lg" />
-            <div className="brand-badge">Master Distributor • Xgrids</div>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              className={`px-3 py-2 rounded-lg ${
-                tab === "reseller" ? "btn-primary text-white" : "btn-ghost"
-              }`}
-              onClick={() => setTab("reseller")}
-            >
-              Reseller
-            </button>
-            <button
-              className={`px-3 py-2 rounded-lg ${
-                tab === "admin" ? "btn-primary text-white" : "btn-ghost"
-              }`}
-              onClick={() => setTab("admin")}
-            >
-              Admin
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* HERO */}
-      <div className="hero">
-        <div className="hero-inner">
-          <h1 className="text-2xl md:text-3xl">Reseller Deal Registration</h1>
-          <p className="mt-1 text-sm md:text-base">
-            Register opportunities within the next 60 days
-          </p>
-        </div>
-      </div>
-
-      {/* CONTENT */}
-      <div className="max-w-6xl mx-auto px-4">
-        {tab === "reseller" ? <SubmissionForm /> : <AdminPanel />}
-      </div>
-    </div>
-  );
-}
-
-export default AptellaRoot;
