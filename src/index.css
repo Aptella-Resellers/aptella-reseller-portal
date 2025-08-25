@@ -2,16 +2,14 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Aptella brand helpers */
+/* --- Aptella brand tokens --- */
 :root {
   --aptella-navy: #0E3446;
   --aptella-navy-dark: #0B2938;
   --aptella-orange: #F0A03A;
 }
 
-html, body, #root {
-  height: 100%;
-}
+html, body, #root { height: 100%; }
 
 body {
   @apply bg-slate-50 text-slate-900;
@@ -19,28 +17,33 @@ body {
   background-attachment: fixed;
 }
 
-.card {
-  @apply bg-white rounded-2xl shadow-card;
-}
+/* Cards */
+.card { @apply bg-white rounded-2xl shadow-[0_6px_20px_-4px_rgba(14,52,70,0.15)]; }
 
-/* Buttons */
+/* Primary brand button — use CSS vars for bg to avoid @apply error */
 .brand-btn {
-  @apply text-white;
+  @apply text-white rounded-xl px-4 py-2;
   background-color: var(--aptella-navy);
 }
-.brand-btn:hover {
-  background-color: var(--aptella-navy-dark);
+.brand-btn:hover { background-color: var(--aptella-navy-dark); }
+
+/* Secondary button */
+.brand-btn-secondary {
+  @apply rounded-xl px-4 py-2 bg-gray-100 text-slate-800;
 }
 
 /* Table header accent (Aptella orange) */
-.table-head-orange thead {
-  background-color: color-mix(in oklab, var(--aptella-orange) 12%, white);
-}
-.table-head-orange thead th {
-  color: var(--aptella-navy);
-}
+.table-head-orange thead { background-color: color-mix(in oklab, var(--aptella-orange) 12%, white); }
+.table-head-orange thead th { color: var(--aptella-navy); }
 
 /* Leaflet container fix inside flex layouts */
-.leaflet-container {
-  font: inherit;
+.leaflet-container { font: inherit; }
+
+/* Optional: utilities you can use in JSX (no hover apply) */
+@layer utilities {
+  .bg-aptella-navy { background-color: var(--aptella-navy); }
+  .bg-aptella-navy-dark { background-color: var(--aptella-navy-dark); }
+  .text-aptella-navy { color: var(--aptella-navy); }
+  .text-aptella-orange { color: var(--aptella-orange); }
+  .border-aptella-navy { border-color: var(--aptella-navy); }
 }
