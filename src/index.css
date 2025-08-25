@@ -1,49 +1,127 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-/* --- Aptella brand tokens --- */
-:root {
-  --aptella-navy: #0E3446;
-  --aptella-navy-dark: #0B2938;
-  --aptella-orange: #F0A03A;
+:root{
+  --aptella-navy:#0e3446;
+  --aptella-navy-700:#0b2938;
+  --aptella-orange:#f0a03a;
+  --aptella-orange-600:#e38f22;
+  --ink:#0f172a;
+  --muted:#6b7280;
+  --bg:#f7fafc;
+  --card:#ffffff;
+  --line:#e5e7eb;
 }
 
-html, body, #root { height: 100%; }
-
-body {
-  @apply bg-slate-50 text-slate-900;
-  background-image: linear-gradient(180deg, rgba(14,52,70,0.04) 0%, rgba(14,52,70,0.02) 100%);
-  background-attachment: fixed;
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;
+  background:var(--bg);
+  color:var(--ink);
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
 }
 
-/* Cards */
-.card { @apply bg-white rounded-2xl shadow-[0_6px_20px_-4px_rgba(14,52,70,0.15)]; }
-
-/* Primary brand button — use CSS vars for bg to avoid @apply error */
-.brand-btn {
-  @apply text-white rounded-xl px-4 py-2;
-  background-color: var(--aptella-navy);
+/* --------- Brand bar --------- */
+.brandbar{
+  background:#fff;
+  border-bottom:1px solid var(--line);
 }
-.brand-btn:hover { background-color: var(--aptella-navy-dark); }
+.brandbar-inner{
+  max-width:1200px;
+  margin:0 auto;
+  padding:14px 16px;
+  display:flex; align-items:center; gap:16px;
+}
+.brand-logo{
+  height:36px; width:auto; object-fit:contain; display:block;
+}
+.brand-meta{ color:var(--muted); font-size:14px; display:flex; gap:8px; align-items:center }
+.brand-meta .sep{ opacity:.4 }
 
-/* Secondary button */
-.brand-btn-secondary {
-  @apply rounded-xl px-4 py-2 bg-gray-100 text-slate-800;
+/* --------- Generic UI --------- */
+.container{
+  max-width:1200px; margin:24px auto; padding:0 16px;
+}
+.card{
+  background:var(--card);
+  border:1px solid var(--line);
+  border-radius:14px;
+  box-shadow:0 1px 2px rgba(16,24,40,.04);
+}
+.card-pad{ padding:16px }
+
+/* Buttons */
+.btn{border:1px solid transparent; border-radius:10px; padding:8px 12px; font-weight:600; cursor:pointer}
+.btn:disabled{opacity:.6; cursor:not-allowed}
+.btn-navy{ background:var(--aptella-navy); color:#fff }
+.btn-navy:hover{ background:var(--aptella-navy-700) }
+.btn-orange{ background:var(--aptella-orange); color:#0b1a22 }
+.btn-orange:hover{ background:var(--aptella-orange-600) }
+.btn-ghost{ background:#f3f4f6; color:#111827 }
+
+/* Nav pills (Reseller/Admin) */
+.pills{ display:flex; gap:8px }
+.pill{ border-radius:10px; padding:8px 12px; font-weight:600; border:1px solid var(--line); background:#fff; color:var(--aptella-navy) }
+.pill.is-active-reseller{ background:var(--aptella-orange); color:#0b1a22; border-color:transparent }
+.pill.is-active-admin{ background:var(--aptella-navy); color:#fff; border-color:transparent }
+
+/* Inputs */
+.input, select, textarea{
+  width:100%;
+  border:1px solid var(--line);
+  border-radius:10px;
+  padding:10px 12px;
+  font:inherit;
+  background:#fff;
+}
+.input:focus, select:focus, textarea:focus{
+  outline:none;
+  border-color:var(--aptella-orange);
+  box-shadow:0 0 0 3px rgba(240,160,58,.25);
 }
 
-/* Table header accent (Aptella orange) */
-.table-head-orange thead { background-color: color-mix(in oklab, var(--aptella-orange) 12%, white); }
-.table-head-orange thead th { color: var(--aptella-navy); }
+/* Mandatory/required styling:
+   - orange background for the *Reseller Country* chooser (special class)
+   - soft grey background for all other required fields
+*/
+.required-input{ background:#f6f7f9 }
+.required-input.reseller-accent{ background:rgba(240,160,58,.15); border-color:var(--aptella-orange) }
 
-/* Leaflet container fix inside flex layouts */
-.leaflet-container { font: inherit; }
-
-/* Optional: utilities you can use in JSX (no hover apply) */
-@layer utilities {
-  .bg-aptella-navy { background-color: var(--aptella-navy); }
-  .bg-aptella-navy-dark { background-color: var(--aptella-navy-dark); }
-  .text-aptella-navy { color: var(--aptella-navy); }
-  .text-aptella-orange { color: var(--aptella-orange); }
-  .border-aptella-navy { border-color: var(--aptella-navy); }
+/* Field grid */
+.grid{ display:grid; gap:14px }
+.grid-2{ grid-template-columns:1fr 1fr }
+.grid-3{ grid-template-columns:repeat(3,1fr) }
+@media (max-width:920px){
+  .grid-2,.grid-3{ grid-template-columns:1fr }
 }
+
+/* Map wrapper – fixed height, full width */
+.map-wrap{ height:420px; width:100%; border-radius:12px; overflow:hidden; border:1px solid var(--line) }
+
+/* Admin stats bar */
+.stats{ display:flex; gap:14px; flex-wrap:wrap }
+.stat{ background:#fff; border:1px solid var(--line); border-radius:12px; padding:10px 12px; min-width:180px }
+.stat .k{ font-size:12px; color:var(--muted) }
+.stat .v{ font-weight:700; font-size:20px; color:var(--aptella-navy) }
+
+/* Table (admin) – orange headers, stacked under the map */
+.table{ width:100%; border-collapse:separate; border-spacing:0 }
+.table th{ text-align:left; padding:10px 12px; background:rgba(240,160,58,.14); color:#111827; position:sticky; top:0 }
+.table td{ padding:10px 12px; border-top:1px solid var(--line) }
+
+/* Stack: map first, table after */
+.admin-layout{ display:block }
+.admin-map{ margin-bottom:14px }
+.admin-table{ }
+
+/* Settings modal always above the map */
+.modal{
+  position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
+  background:rgba(15,23,42,.35); z-index:9999;
+}
+.modal-card{ background:#fff; border-radius:14px; border:1px solid var(--line); width:min(680px,92vw); padding:18px }
+
+/* Tiny helpers */
+.badge{ font-size:12px; border-radius:999px; padding:4px 8px; border:1px solid var(--line); background:#fff; }
+.badge-green{ background:#e7f7ed; color:#065f46; border-color:#a7f3d0 }
+.badge-red{ background:#fde2e2; color:#991b1b; border-color:#fecaca }
+.badge-blue{ background:#e0f2fe; color:#075985; border-color:#bae6fd }
+.badge-orange{ background:#fff7ed; color:#9a3412; border-color:#fed7aa }
