@@ -8,7 +8,10 @@
     />
     <title>Aptella — Reseller Deal Registration</title>
 
-    <!-- Leaflet + MarkerCluster via CDN (no bundling headaches) -->
+    <!-- Favicon (hosted) -->
+    <link rel="icon" href="https://www.aptella.com/wp-content/uploads/2023/08/cropped-Aptella-Icon-32x32.png" />
+
+    <!-- Leaflet + MarkerCluster via CDN -->
     <link
       rel="stylesheet"
       href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
@@ -30,11 +33,10 @@
       href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"
     />
     <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
-
-    <link rel="icon" href="/favicon.ico" />
   </head>
   <body>
     <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
+    <!-- Vite dev uses this module path; the build replaces it with hashed assets and respects 'base' -->
+    <script type="module" src="/aptella-reseller-portal/src/main.jsx"></script>
   </body>
 </html>
