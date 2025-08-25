@@ -1,33 +1,31 @@
-/* src/index.css */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* (optional) a couple of tiny global tweaks */
-html, body { height: 100%; }
-.leaflet-container { image-rendering: auto; } /* keeps map tiles crisp */
-
-/* Keep Leaflet beneath any app modals/drawers */
-.leaflet-pane,
-.leaflet-control,
-.leaflet-top,
-.leaflet-bottom {
-  z-index: 200 !important;
+/* Brand accents (optional) */
+:root{
+  --aptella-navy:#0E3446;
+  --aptella-orange:#F0A03A;
 }
 
-/* Our Settings drawer overlay */
-.ap-modal {
-  position: fixed;
-  inset: 0;
-  z-index: 10000;                /* higher than Leaflet panes */
-  background: rgba(0,0,0,0.4);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+body{
+  @apply bg-slate-50 text-slate-900;
 }
-.ap-modal > .ap-modal-card {
-  width: min(680px, 95vw);
-  border-radius: 1rem;
-  background: #fff;
-  box-shadow: 0 25px 50px -12px rgba(0,0,0,.25);
+
+/* Card look that matches your UI */
+.card{
+  @apply bg-white rounded-2xl shadow-sm border border-slate-200;
+}
+
+/* Buttons */
+.btn-primary{
+  @apply bg-aptella-navy text-white hover:bg-aptella-navy-dark rounded-xl px-4 py-2;
+}
+.btn-ghost{
+  @apply bg-slate-100 hover:bg-slate-200 rounded-xl px-4 py-2;
+}
+
+/* Make required inputs visually stronger (Tailwind forms plugin helps, too) */
+input:required, select:required, textarea:required{
+  @apply ring-1 ring-slate-200;
 }
