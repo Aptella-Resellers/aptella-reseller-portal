@@ -1,568 +1,609 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React from "react";
 
-/** ======= CONFIG ======= */
-const GAS_URL =
+// ====== Brand + Assets =======================================================
+import logoSvg from "./assets/aptella-logo.svg";          // <-- add this file
+import logoPng from "./assets/aptella-logo.png";          // <-- optional fallback
+
+// GAS endpoint (as you requested)
+const GOOGLE_APPS_SCRIPT_URL =
   "https://script.google.com/macros/s/AKfycbw3O_GnYcTx4bRYdFD2vCSs26L_Gzl2ZIZd18dyJmZAEE442hvhqp7j1C4W6cFX_DWM/exec";
 
-const ADMIN_PASSWORD = "aptella2025!"; // change in prod
-
-const INDUSTRIES = [
-  "Construction",
-  "Mining",
-  "Agriculture",
-  "Utilities",
-  "Transport & Logistics",
-  "Oil & Gas",
-  "Other",
-];
-
-const STAGES = [
-  { key: "Qualified", label: "Qualified" },
-  { key: "Proposal", label: "Proposal" },
-  { key: "Negotiation", label: "Negotiation" },
-  { key: "Won", label: "Won" },
-  { key: "Lost", label: "Lost" },
-];
-
-const SOLUTIONS = ["Xgrids L2 PRO", "Xgrids K1", "Xgrids L1", "Other…"];
-
-const CURRENCIES = ["AUD", "SGD", "IDR", "MYR", "USD"];
-
-const DEFAULT_PROB = {
-  Qualified: 35,
-  Proposal: 50,
-  Negotiation: 70,
-  Won: 100,
-  Lost: 0,
+// Aptella palette
+const BRAND = {
+  navy: "#0E3446",
+  navyDark: "#0B2938",
+  orange: "#F0A03A",
+  fog: "#F6FAFD",
+  gray1: "#f8fafc",
+  gray2: "#e2e8f0",
+  text: "#0f172a",
 };
 
-// quick capitals for default lat/lng
-const CAPITALS = {
-  Singapore: [1.3521, 103.8198],
-  Indonesia: [-6.2088, 106.8456], // Jakarta
-  Malaysia: [3.139, 101.6869],
-  Australia: [-35.282, 149.1286], // Canberra
-  Thailand: [13.7563, 100.5018],
-  Philippines: [14.5995, 120.9842],
-  Vietnam: [21.0278, 105.8342],
-};
+// Resolve asset URL via Vite (works on GH Pages)
+const APTELLA_LOGO =
+  (logoSvg && new URL(logoSvg, import.meta.url).href) ||
+  (logoPng && new URL(logoPng, import.meta.url).href);
 
-const prettyDate = (isoLike) => {
-  if (!isoLike) return "";
-  // if already YYYY-MM-DD
-  if (/^\d{4}-\d{2}-\d{2}$/.test(isoLike)) return isoLike;
+// ====== Tiny utilities =======================================================
+const fmtMoney = (n, ccy = "AUD") =>
+  typeof n === "number" && !Number.isNaN(n)
+    ? new Intl.NumberFormat("en-AU", { style: "currency", currency: ccy }).format(n)
+    : "—";
+
+const ymd = (d) => {
   try {
-    const d = new Date(isoLike);
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    const day = String(d.getDate()).padStart(2, "0");
-    return `${y}-${m}-${day}`;
+    const dt = new Date(d);
+    if (Number.isNaN(dt.getTime())) return "";
+    return dt.toISOString().slice(0, 10);
   } catch {
-    return isoLike;
+    return "";
   }
 };
 
-const fetchJSON = async (url, opts = {}) => {
-  try {
-    const res = await fetch(url, {
-      mode: "cors",
-      headers: { "Content-Type": "application/json" },
-      ...opts,
-    });
-    const text = await res.text();
-    let json = {};
-    try {
-      json = JSON.parse(text);
-    } catch {
-      json = { ok: false, error: `Non-JSON: ${text.slice(0, 200)}` };
-    }
-    if (!res.ok || json.ok === false)
-      throw new Error(json.error || `${res.status} ${res.statusText}`);
-    return json;
-  } catch (err) {
-    throw new Error(`Failed to fetch: ${err.message || err}`);
-  }
-};
-
-/** ======= APP ======= */
-export default function App() {
-  const [tab, setTab] = useState("reseller");
-  const [adminOK, setAdminOK] = useState(
-    () => localStorage.getItem("aptella_admin_ok") === "1"
-  );
-
+// ====== Branded header =======================================================
+function BrandHeader({ tab, setTab, onLogout }) {
   return (
-    <div>
-      <div className="brandbar">
-        <div className="container" style={{ display: "flex", gap: 16, alignItems: "center", justifyContent: "space-between" }}>
-          <div className="brand">
-            <img src="https://www.aptella.com/wp-content/uploads/2023/08/Aptella-Logo.svg" alt="Aptella" />
-            <span className="kicker">Master Distributor • Xgrids</span>
+    <>
+      <style>{`
+        :root{
+          --aptella-navy:${BRAND.navy};
+          --aptella-navy-dark:${BRAND.navyDark};
+          --aptella-orange:${BRAND.orange};
+        }
+        .brand-shadow { box-shadow:0 8px 30px rgba(14,52,70,.06); }
+        .brand-outline { border-bottom:1px solid rgba(14,52,70,.08); }
+        .pill { padding:.45rem .9rem; border-radius:999px; border:1px solid transparent; font-weight:800; }
+        .pill[aria-current="page"]{ background:var(--aptella-orange); color:#0e0e0e; }
+        .btn{ display:inline-flex; align-items:center; gap:.5rem; padding:.55rem .9rem; border-radius:.75rem; border:1px solid rgba(14,52,70,.12); background:#fff; color:var(--aptella-navy); font-weight:700 }
+        .btn-navy{ background:var(--aptella-navy); color:#fff; border-color:transparent; }
+        .btn-navy:hover{ background:var(--aptella-navy-dark) }
+        .chip{ background:rgba(240,160,58,.12); color:var(--aptella-orange); border:1px solid rgba(240,160,58,.28); padding:.2rem .55rem; border-radius:999px; font-size:.72rem; font-weight:800 }
+      `}</style>
+
+      <header
+        className="brand-shadow brand-outline"
+        style={{ position: "sticky", top: 0, zIndex: 50, background: "#ffffffcc", backdropFilter: "blur(8px)" }}
+      >
+        <div
+          style={{
+            maxWidth: 1200,
+            margin: "0 auto",
+            padding: "14px 12px",
+            display: "grid",
+            gridTemplateColumns: "auto 1fr auto",
+            alignItems: "center",
+            gap: 12,
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <img
+              src={APTELLA_LOGO}
+              onError={(e) => {
+                if (logoPng) e.currentTarget.src = new URL(logoPng, import.meta.url).href;
+              }}
+              alt="Aptella"
+              style={{ height: 30, width: "auto", display: "block" }}
+            />
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 12, color: "#64748b" }}>Master Distributor •</span>
+              <span className="chip">Xgrids</span>
+            </div>
           </div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button className={`btn ${tab==='reseller'?'orange':''}`} onClick={()=>setTab('reseller')}>Reseller</button>
-            <button className={`btn ${tab==='admin'?'primary':''}`} onClick={()=>setTab('admin')}>Admin</button>
-            {!adminOK ? (
-              <button className="btn" onClick={()=>{
-                const p = prompt("Admin password");
-                if (p === ADMIN_PASSWORD) { localStorage.setItem("aptella_admin_ok","1"); setAdminOK(true); setTab('admin');}
-                else alert("Incorrect password");
-              }}>Login</button>
-            ) : (
-              <button className="btn" onClick={()=>{ localStorage.removeItem("aptella_admin_ok"); setAdminOK(false); setTab('reseller'); }}>Logout</button>
-            )}
+
+          <div style={{ textAlign: "center" }}>
+            <h1 style={{ margin: 0, fontSize: 18, fontWeight: 900, color: BRAND.navy, letterSpacing: 0.2 }}>
+              Reseller Deal Registration
+            </h1>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8 }}>
+            <nav style={{ display: "flex", gap: 6 }}>
+              <button
+                className="pill"
+                aria-current={tab === "reseller" ? "page" : undefined}
+                onClick={() => setTab("reseller")}
+              >
+                Reseller
+              </button>
+              <button className="pill" aria-current={tab === "admin" ? "page" : undefined} onClick={() => setTab("admin")}>
+                Admin
+              </button>
+            </nav>
+            <button className="btn" onClick={onLogout}>Logout</button>
           </div>
         </div>
-      </div>
-
-      <div className="container">
-        {tab === "reseller" && <ResellerForm />}
-        {tab === "admin" && (adminOK ? <AdminPanel/> : <AuthHint/>)}
-        <div className="footer">© {new Date().getFullYear()} Aptella — Xgrids Master Distributor</div>
-      </div>
-    </div>
+      </header>
+    </>
   );
 }
 
-function AuthHint(){
-  return (
-    <div className="card" style={{padding:18}}>
-      <h3>Admin access</h3>
-      <p>Use the <b>Login</b> button in the header to enter the admin password.</p>
-    </div>
-  );
-}
-
-/** ======= Reseller ======= */
-function ResellerForm(){
-  const [form, setForm] = useState({
+// ====== Reseller form (minimal, branded) =====================================
+function ResellerForm({ onSubmitted }) {
+  const [saving, setSaving] = React.useState(false);
+  const [form, setForm] = React.useState({
     resellerCountry: "",
     resellerLocation: "",
     currency: "SGD",
-    resellerCompany: "",
-    primaryContact: "",
-    contactEmail: "",
-    contactPhone: "",
+    company: "",
+    contact: "",
+    email: "",
+    phone: "",
     customerName: "",
-    customerCity: "",
     customerCountry: "",
+    customerCity: "",
     lat: "",
     lng: "",
     solution: "",
-    solutionOther: "",
-    expectedCloseDate: prettyDate(new Date().toISOString()),
+    expectedCloseDate: ymd(new Date()),
     industry: "",
     stage: "Qualified",
-    probability: DEFAULT_PROB.Qualified,
+    probability: 35,
     value: "",
     competitors: "",
-    supportPreSales: false,
-    supportDemo: false,
-    supportTraining: false,
-    supportPricing: false,
-    supportOnsite: false,
-    supportMarketing: false,
-    supportExtendLock: false,
     notes: "",
-    emailEvidence: true,  // default ticked
+    emailEvidence: true, // will email to admin.asia@aptella.com
   });
-  const [probDirty, setProbDirty] = useState(false);
-  const [files, setFiles] = useState([]);
-  const isID = form.resellerCountry === "Indonesia";
 
-  // Bahasa labels
-  const L = (en,id) => (isID ? id : en);
-
-  // default lat/lng from capital
-  useEffect(()=>{
-    if (form.customerCountry && CAPITALS[form.customerCountry]) {
-      const [lat, lng] = CAPITALS[form.customerCountry];
-      setForm(f=>({...f, lat: f.lat||lat, lng: f.lng||lng}));
-    }
-  }, [form.customerCountry]);
-
-  const handle = (e) => {
-    const {name, value, type, checked} = e.target;
-    setForm(f=>({...f, [name]: type==='checkbox'? checked : value}));
+  const requiredStyle = {
+    background: BRAND.gray1,
+    border: `1px solid ${BRAND.gray2}`,
+    borderRadius: 10,
+    padding: "10px 12px",
+    width: "100%",
+    outlineColor: BRAND.orange,
   };
 
-  const openMap = () => {
-    const q = encodeURIComponent(`${form.customerCity||""}, ${form.customerCountry||""}`);
-    window.open(`https://www.google.com/maps/search/?api=1&query=${q}`, "_blank");
+  const orangeAccent = {
+    background: "#fff7ed",
+    border: `1px solid ${BRAND.orange}`,
+    borderRadius: 10,
+    padding: "10px 12px",
+    width: "100%",
+    outlineColor: BRAND.orange,
   };
+
+  const group = { display: "grid", gap: 6 };
 
   const submit = async (e) => {
     e.preventDefault();
-    // simple require
-    const must = ["resellerCountry","resellerLocation","currency","contactEmail","customerName","customerCountry","expectedCloseDate","value"];
-    for (const k of must){
-      if (!form[k]) { alert(`Please fill ${k}`); return; }
-    }
-    if (files.length===0){ alert("Evidence is required. Please attach at least one file."); return; }
-
-    const payload = {
-      ...form,
-      submittedAt: prettyDate(new Date().toISOString()),
-      solution: form.solution==="Other…" ? form.solutionOther : form.solution,
-    };
-
+    setSaving(true);
     try {
-      const res = await fetchJSON(`${GAS_URL}?action=submit`, { method:"POST", body: JSON.stringify(payload) });
-      if (!res.ok) throw new Error(res.error||"failed");
-      alert("Submitted locally. Google Sheets sync queued.");
+      const payload = { ...form, action: "submit" };
+      const res = await fetch(`${GOOGLE_APPS_SCRIPT_URL}?action=submit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const text = await res.text();
+      let json = null;
+      try { json = JSON.parse(text); } catch {}
+      if (!res.ok || (json && json.ok === false)) {
+        throw new Error((json && json.error) || `HTTP ${res.status} ${res.statusText}`);
+      }
+      alert("Submitted. If GAS is set to anyone-with-link, the row will appear in Admin after Refresh.");
+      setForm((f) => ({ ...f, value: "", customerName: "", customerCity: "" }));
+      onSubmitted && onSubmitted();
     } catch (err) {
-      alert(`Submitted locally. Google Sheets sync failed: ${err.message}`);
+      alert(`Submitted locally. Google Sheets sync failed: ${err.message || err}`);
+    } finally {
+      setSaving(false);
     }
   };
 
   return (
-    <form className="card" style={{padding:18}} onSubmit={submit}>
-      <h3 style={{marginBottom:12}}>Register Upcoming Deal <span className="kicker">(within 60 days)</span></h3>
+    <section style={{ maxWidth: 1100, margin: "18px auto", padding: "0 12px" }}>
+      <form onSubmit={submit}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14 }}>
+          {/* Row 1 */}
+          <div style={group}>
+            <label style={{ fontWeight: 700, color: BRAND.navy }}>Reseller Country *</label>
+            <select
+              value={form.resellerCountry}
+              onChange={(e) => setForm((f) => ({ ...f, resellerCountry: e.target.value }))}
+              style={orangeAccent}
+              required
+            >
+              <option value="">Select country</option>
+              <option>Singapore</option>
+              <option>Indonesia</option>
+              <option>Malaysia</option>
+              <option>Australia</option>
+            </select>
+          </div>
+          <div style={group}>
+            <label style={{ fontWeight: 700, color: BRAND.navy }}>Reseller Location *</label>
+            <input
+              style={requiredStyle}
+              placeholder="e.g., Singapore"
+              value={form.resellerLocation}
+              onChange={(e) => setForm((f) => ({ ...f, resellerLocation: e.target.value }))}
+              required
+            />
+          </div>
+          <div style={group}>
+            <label style={{ fontWeight: 700, color: BRAND.navy }}>Currency *</label>
+            <select
+              style={requiredStyle}
+              value={form.currency}
+              onChange={(e) => setForm((f) => ({ ...f, currency: e.target.value }))}
+              required
+            >
+              <option>SGD</option>
+              <option>IDR</option>
+              <option>AUD</option>
+              <option>MYR</option>
+            </select>
+          </div>
 
-      {/* row 1 */}
-      <div style={{display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12}}>
-        <div>
-          <label>{L("Reseller Country *","Negara Reseller *")}</label>
-          <select name="resellerCountry" required className="input orange" value={form.resellerCountry} onChange={handle}>
-            <option value="">{L("Select country","Pilih negara")}</option>
-            <option>Singapore</option><option>Indonesia</option><option>Malaysia</option>
-            <option>Australia</option><option>Thailand</option><option>Philippines</option><option>Vietnam</option>
-          </select>
-        </div>
-        <div>
-          <label>{L("Reseller Location *","Lokasi Reseller *")}</label>
-          <input name="resellerLocation" required className="input" placeholder={L("e.g., Singapore","mis. Jakarta")} value={form.resellerLocation} onChange={handle}/>
-        </div>
-        <div>
-          <label>{L("Currency *","Mata uang *")}</label>
-          <select name="currency" required className="input" value={form.currency} onChange={handle}>
-            {CURRENCIES.map(c=><option key={c}>{c}</option>)}
-          </select>
-        </div>
-      </div>
+          {/* Row 2 */}
+          <div style={group}>
+            <label>Reseller company *</label>
+            <input style={requiredStyle} value={form.company} onChange={(e) => setForm((f) => ({ ...f, company: e.target.value }))} required />
+          </div>
+          <div style={group}>
+            <label>Primary contact *</label>
+            <input style={requiredStyle} value={form.contact} onChange={(e) => setForm((f) => ({ ...f, contact: e.target.value }))} required />
+          </div>
+          <div style={group}>
+            <label>Contact email *</label>
+            <input type="email" style={requiredStyle} value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} required />
+          </div>
 
-      {/* row 2 */}
-      <div style={{display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12, marginTop:10}}>
-        <div>
-          <label>{L("Reseller company *","Perusahaan reseller *")}</label>
-          <input name="resellerCompany" required className="input" value={form.resellerCompany} onChange={handle}/>
-        </div>
-        <div>
-          <label>{L("Primary contact *","Kontak utama *")}</label>
-          <input name="primaryContact" required className="input" value={form.primaryContact} onChange={handle}/>
-        </div>
-        <div>
-          <label>{L("Contact email *","Email kontak *")}</label>
-          <input name="contactEmail" required type="email" className="input" value={form.contactEmail} onChange={handle}/>
-        </div>
-      </div>
+          {/* Row 3 */}
+          <div style={group}>
+            <label>Contact phone</label>
+            <input style={requiredStyle} value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} />
+          </div>
+          <div style={group}>
+            <label>Customer name *</label>
+            <input style={requiredStyle} value={form.customerName} onChange={(e) => setForm((f) => ({ ...f, customerName: e.target.value }))} required />
+          </div>
+          <div style={group}>
+            <label>Customer Country *</label>
+            <select
+              style={requiredStyle}
+              value={form.customerCountry}
+              onChange={(e) => setForm((f) => ({ ...f, customerCountry: e.target.value }))}
+              required
+            >
+              <option value="">Select country</option>
+              <option>Singapore</option>
+              <option>Indonesia</option>
+              <option>Malaysia</option>
+              <option>Australia</option>
+            </select>
+          </div>
 
-      {/* row 3 */}
-      <div style={{display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12, marginTop:10}}>
-        <div>
-          <label>{L("Contact phone","Telepon kontak")}</label>
-          <input name="contactPhone" className="input" value={form.contactPhone} onChange={handle}/>
-        </div>
-        <div>
-          <label>{L("Customer name *","Nama pelanggan *")}</label>
-          <input name="customerName" required className="input" value={form.customerName} onChange={handle}/>
-        </div>
-        <div>
-          <label>{L("Customer Country *","Negara Pelanggan *")}</label>
-          <select name="customerCountry" required className="input" value={form.customerCountry} onChange={handle}>
-            <option value="">{L("Select country","Pilih negara")}</option>
-            <option>Singapore</option><option>Indonesia</option><option>Malaysia</option>
-            <option>Australia</option><option>Thailand</option><option>Philippines</option><option>Vietnam</option>
-          </select>
-        </div>
-      </div>
+          {/* Row 4 */}
+          <div style={group}>
+            <label>Customer City</label>
+            <input style={requiredStyle} value={form.customerCity} onChange={(e) => setForm((f) => ({ ...f, customerCity: e.target.value }))} />
+          </div>
+          <div style={group}>
+            <label>Map option (paste lat,lng)</label>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              <input style={requiredStyle} placeholder="lat" value={form.lat} onChange={(e) => setForm((f) => ({ ...f, lat: e.target.value }))} />
+              <input style={requiredStyle} placeholder="lng" value={form.lng} onChange={(e) => setForm((f) => ({ ...f, lng: e.target.value }))} />
+            </div>
+          </div>
+          <div style={group}>
+            <label>Expected close date *</label>
+            <input
+              type="date"
+              style={requiredStyle}
+              value={form.expectedCloseDate}
+              onChange={(e) => setForm((f) => ({ ...f, expectedCloseDate: e.target.value }))}
+              required
+            />
+          </div>
 
-      {/* row 4 */}
-      <div style={{display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12, marginTop:10, alignItems:"end"}}>
-        <div>
-          <label>{L("Customer City","Kota Pelanggan")}</label>
-          <input name="customerCity" className="input" value={form.customerCity} onChange={(e)=>{
-            const v = e.target.value;
-            setForm(f=>({...f, customerCity:v}));
-          }}/>
-        </div>
-        <div>
-          <label>{L("Map option (paste lat,lng or use link)","Opsi peta (tempel lat,lng atau gunakan tautan)")}</label>
-          <div style={{display:"grid", gridTemplateColumns:"1fr 1fr 110px", gap:8}}>
-            <input className="input" name="lat" placeholder="lat" value={form.lat} onChange={handle}/>
-            <input className="input" name="lng" placeholder="lng" value={form.lng} onChange={handle}/>
-            <button type="button" className="btn primary" onClick={openMap}>Open Map</button>
+          {/* Row 5 */}
+          <div style={group}>
+            <label>Solution offered (Xgrids) *</label>
+            <select
+              style={requiredStyle}
+              value={form.solution}
+              onChange={(e) => setForm((f) => ({ ...f, solution: e.target.value }))}
+              required
+            >
+              <option value="">Select an Xgrids solution</option>
+              <option>Xgrids L2 PRO</option>
+              <option>Xgrids K1</option>
+              <option>Other</option>
+            </select>
+          </div>
+          <div style={group}>
+            <label>Industry</label>
+            <select
+              style={requiredStyle}
+              value={form.industry}
+              onChange={(e) => setForm((f) => ({ ...f, industry: e.target.value }))}
+            >
+              <option value="">Select industry</option>
+              <option>Construction</option>
+              <option>Mining</option>
+              <option>Utilities</option>
+              <option>Other</option>
+            </select>
+          </div>
+          <div style={group}>
+            <label>Deal value *</label>
+            <input
+              style={requiredStyle}
+              placeholder="e.g., 25000"
+              value={form.value}
+              onChange={(e) => setForm((f) => ({ ...f, value: e.target.value.replace(/[^\d.]/g, "") }))}
+              required
+            />
+          </div>
+
+          {/* Row 6 */}
+          <div style={group}>
+            <label>Sales stage</label>
+            <select
+              style={requiredStyle}
+              value={form.stage}
+              onChange={(e) => setForm((f) => ({ ...f, stage: e.target.value }))}
+            >
+              <option>Qualified</option>
+              <option>Negotiation</option>
+              <option>Proposal</option>
+              <option>Closed</option>
+            </select>
+          </div>
+          <div style={group}>
+            <label>Probability (%)</label>
+            <input
+              style={requiredStyle}
+              type="number"
+              min={0}
+              max={100}
+              value={form.probability}
+              onChange={(e) => setForm((f) => ({ ...f, probability: Number(e.target.value) }))}
+            />
+          </div>
+          <div style={group}>
+            <label>Competitors</label>
+            <input style={requiredStyle} placeholder="Comma separated (optional)" value={form.competitors} onChange={(e) => setForm((f) => ({ ...f, competitors: e.target.value }))} />
+          </div>
+
+          {/* Row 7 */}
+          <div style={{ gridColumn: "1 / span 3", display: "grid", gap: 6 }}>
+            <label>Notes</label>
+            <textarea
+              style={{ ...requiredStyle, minHeight: 90 }}
+              placeholder="Key requirements, scope, constraints, decision process, etc."
+              value={form.notes}
+              onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
+            />
+          </div>
+
+          {/* Evidence */}
+          <div style={{ gridColumn: "1 / span 3", display: "flex", alignItems: "center", gap: 12 }}>
+            <label style={{ fontWeight: 700 }}>Evidence (required)</label>
+            <input type="file" multiple required />
+            <label style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+              <input
+                type="checkbox"
+                checked={!!form.emailEvidence}
+                onChange={(e) => setForm((f) => ({ ...f, emailEvidence: e.target.checked }))}
+              />
+              Email attached files to Aptella (admin.asia@aptella.com)
+            </label>
           </div>
         </div>
-        <div>
-          <label>{L("Expected close date *","Perkiraan tanggal penutupan *")}</label>
-          <input type="date" required className="input" name="expectedCloseDate" value={form.expectedCloseDate} onChange={handle}/>
-        </div>
-      </div>
 
-      {/* row 5 */}
-      <div style={{display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12, marginTop:10}}>
-        <div>
-          <label>{L("Solution offered (Xgrids) *","Solusi ditawarkan (Xgrids) *")}</label>
-          <select name="solution" required className="input" value={form.solution} onChange={handle}>
-            <option value="">{L("Select an Xgrids solution","Pilih solusi Xgrids")}</option>
-            {SOLUTIONS.map(s=><option key={s}>{s}</option>)}
-          </select>
-          {form.solution==="Other…" && (
-            <input className="input" style={{marginTop:8}} placeholder={L("Type the solution","Ketik solusi")} name="solutionOther" value={form.solutionOther} onChange={handle}/>
-          )}
-          <div><a href="https://www.aptella.com/xgrids/" target="_blank" rel="noreferrer">{L("Learn about Xgrids","Pelajari Xgrids")}</a></div>
+        <div style={{ marginTop: 16, display: "flex", gap: 10, justifyContent: "flex-end" }}>
+          <button type="reset" className="btn">Reset</button>
+          <button type="submit" className="btn btn-navy" disabled={saving}>
+            {saving ? "Submitting…" : "Submit Registration"}
+          </button>
         </div>
-        <div>
-          <label>{L("Industry","Industri")}</label>
-          <select className="input" name="industry" value={form.industry} onChange={handle}>
-            <option value="">{L("Select industry","Pilih industri")}</option>
-            {INDUSTRIES.map(i=><option key={i}>{i}</option>)}
-          </select>
-        </div>
-        <div>
-          <label>{L("Deal value *","Nilai kesepakatan *")}</label>
-          <input name="value" required className="input" placeholder={L("e.g., 25000","mis. 25000")} value={form.value} onChange={handle}/>
-        </div>
-      </div>
-
-      {/* row 6 */}
-      <div style={{display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12, marginTop:10}}>
-        <div>
-          <label>{L("Sales stage","Tahap penjualan")}</label>
-          <select name="stage" className="input" value={form.stage} onChange={(e)=>{
-            const v = e.target.value;
-            setForm(f=>({...f, stage:v, probability: probDirty? f.probability : (DEFAULT_PROB[v] ?? f.probability)}));
-          }}>
-            {STAGES.map(s=><option key={s.key} value={s.key}>{s.label}</option>)}
-          </select>
-        </div>
-        <div>
-          <label>{L("Probability (%)","Probabilitas (%)")}</label>
-          <input className="input" name="probability" value={form.probability} onChange={(e)=>{ setProbDirty(true); handle(e); }}/>
-        </div>
-        <div>
-          <label>{L("Competitors","Kompetitor")}</label>
-          <input className="input" name="competitors" placeholder={L("Comma separated (optional)","Dipisah koma (opsional)")} value={form.competitors} onChange={handle}/>
-        </div>
-      </div>
-
-      {/* supports */}
-      <div style={{marginTop:10}}>
-        <label>{L("Support requested","Dukungan diminta")}</label>
-        <div style={{display:"grid", gridTemplateColumns:"repeat(3, minmax(0,1fr))", gap:8, marginTop:6}}>
-          <label><input type="checkbox" name="supportPreSales" checked={form.supportPreSales} onChange={handle}/> {L("Pre-sales engineer","Engineer pra-penjualan")}</label>
-          <label><input type="checkbox" name="supportDemo" checked={form.supportDemo} onChange={handle}/> {L("Demo / loan unit","Demo / unit pinjam")}</label>
-          <label><input type="checkbox" name="supportMarketing" checked={form.supportMarketing} onChange={handle}/> {L("Marketing materials","Materi pemasaran")}</label>
-          <label><input type="checkbox" name="supportTraining" checked={form.supportTraining} onChange={handle}/> {L("Partner training","Pelatihan mitra")}</label>
-          <label><input type="checkbox" name="supportPricing" checked={form.supportPricing} onChange={handle}/> {L("Pricing exception","Pengecualian harga")}</label>
-          <label><input type="checkbox" name="supportOnsite" checked={form.supportOnsite} onChange={handle}/> {L("On-site customer visit","Kunjungan pelanggan")}</label>
-          <label><input type="checkbox" name="supportExtendLock" checked={form.supportExtendLock} onChange={handle}/> {L("Extended lock request","Permintaan perpanjangan lock")}</label>
-        </div>
-      </div>
-
-      {/* evidence */}
-      <div style={{marginTop:10}}>
-        <label>{L("Evidence (required)","Bukti (wajib)")}</label>
-        <input type="file" multiple required onChange={(e)=>setFiles(Array.from(e.target.files||[]))}/>
-        <label style={{display:"block", marginTop:6}}>
-          <input type="checkbox" name="emailEvidence" checked={form.emailEvidence} onChange={handle}/>
-          {" "}Email attached files to Aptella (admin.asia@aptella.com)
-        </label>
-      </div>
-
-      <div style={{marginTop:10}}>
-        <label>{L("Notes","Catatan")}</label>
-        <textarea rows="4" className="input" name="notes" placeholder={L("Key requirements, scope, constraints, decision process, etc.","Kebutuhan utama, ruang lingkup, kendala, proses keputusan, dll.")} value={form.notes} onChange={handle}/>
-      </div>
-
-      <div style={{marginTop:12, display:"flex", gap:8, justifyContent:"flex-end"}}>
-        <button type="reset" className="btn">Reset</button>
-        <button className="btn primary" type="submit">{L("Submit Registration","Kirim Registrasi")}</button>
-      </div>
-    </form>
+      </form>
+    </section>
   );
 }
 
-/** ======= Admin ======= */
-function AdminPanel(){
-  const [rows, setRows] = useState([]);
-  const [fx, setFx] = useState({ AUD:1, SGD:1.05, IDR:0.0001, MYR:0.33, USD:1.5 });
-  const [q, setQ] = useState("");
-  const [sort, setSort] = useState({ key:"submittedAt", dir:"desc" });
-  const [fxOpen, setFxOpen] = useState(false);
-  const mapRef = useRef(null);
-  const leafletRef = useRef(null);
+// ====== FX drawer (simple) ===================================================
+function FxDrawer({ open, onClose, onSave, rows }) {
+  const [local, setLocal] = React.useState(rows || [{ ccy: "SGD", rateToAUD: 1.05 }]);
+  React.useEffect(() => setLocal(rows || [{ ccy: "SGD", rateToAUD: 1.05 }]), [rows]);
 
-  const filtered = useMemo(()=>{
-    const s = (q||"").toLowerCase();
-    let arr = rows.filter(r=>{
-      if (!s) return true;
-      const blob = [
-        r.customerName, r.resellerLocation, r.customerCountry, r.solution, r.stage, r.status
-      ].join(" ").toLowerCase();
-      return blob.includes(s);
-    });
-    const cmp = (a,b) => {
-      const dir = sort.dir==="asc" ? 1 : -1;
-      let va=a[sort.key], vb=b[sort.key];
-      if (sort.key==="valueAud"){ va=valueAud(a, fx); vb=valueAud(b, fx); }
-      if (sort.key==="expectedCloseDate"||sort.key==="submittedAt"){ va=prettyDate(a[sort.key]); vb=prettyDate(b[sort.key]); }
-      return (va>vb?1:va<vb?-1:0)*dir;
-    };
-    arr.sort(cmp);
-    return arr;
-  }, [rows, q, sort, fx]);
-
-  const totalAud = useMemo(()=>{
-    return filtered.reduce((sum,r)=> sum + valueAud(r, fx), 0);
-  }, [filtered, fx]);
-
-  const handleRefresh = async () =>{
-    try {
-      const j = await fetchJSON(`${GAS_URL}?action=list`);
-      setRows(j.rows||[]);
-      if (j.fx) setFx(j.fx);
-      setTimeout(initMap, 50);
-    } catch (err) {
-      alert(`Refresh failed: ${err.message}`);
-    }
-  };
-
-  useEffect(()=>{ handleRefresh(); },[]);
-
-  const saveFx = async (map) => {
-    try{
-      const res = await fetchJSON(`${GAS_URL}?action=fx`, {method:"POST", body:JSON.stringify({fx:map})});
-      if (!res.ok) throw new Error(res.error||"failed");
-      setFx(map);
-      setFxOpen(false);
-    }catch(err){
-      alert(`FX save failed: ${err.message}`);
-    }
-  };
-
-  const approve = async (r) => {
-    if (r.status==="approved") return;
-    try{
-      await fetchJSON(`${GAS_URL}?action=approve`, {method:"POST", body:JSON.stringify({id:r.id})});
-      setRows(prev => prev.map(x=> x.id===r.id ? {...x, status:"approved"} : x));
-    }catch(err){ alert(`Update failed: ${err.message}`); }
-  };
-  const close = async (r) => {
-    if (r.status==="closed") return;
-    try{
-      await fetchJSON(`${GAS_URL}?action=close`, {method:"POST", body:JSON.stringify({id:r.id})});
-      setRows(prev => prev.map(x=> x.id===r.id ? {...x, status:"closed"} : x));
-    }catch(err){ alert(`Update failed: ${err.message}`); }
-  };
-
-  const initMap = () => {
-    try{
-      const L = window.L; if (!L || !mapRef.current) return;
-      if (leafletRef.current){ leafletRef.current.remove(); leafletRef.current=null; }
-      const m = L.map(mapRef.current).setView([-2.5,118],5);
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:18, attribution:"&copy; OpenStreetMap"}).addTo(m);
-
-      // group/sum
-      const groups = {};
-      rows.forEach(r=>{
-        const lat=Number(r.lat), lng=Number(r.lng);
-        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
-        const k=`${lat.toFixed(2)},${lng.toFixed(2)}`;
-        const aud=valueAud(r, fx);
-        if (!groups[k]) groups[k]={lat,lng,total:0,count:0,by:{pending:0,approved:0,closed:0}, items:[]};
-        groups[k].total += aud; groups[k].count++; (groups[k].by[r.status||"pending"]++); groups[k].items.push(r);
-      });
-
-      const cluster = L.markerClusterGroup ? L.markerClusterGroup({ showCoverageOnHover:false }) : null;
-
-      Object.values(groups).forEach(g=>{
-        const label=`A$ ${Math.round(g.total).toLocaleString()}`;
-        const html=`<div class="bubble">${label}</div>`;
-        const icon=L.divIcon({html, className:"bubble-icon", iconSize:[1,1]});
-        const mk=L.marker([g.lat,g.lng],{icon});
-        const rowsHtml = g.items.slice(0,10).map(r=> `<div><b>${r.customerName||"-"}</b> — ${r.solution||"-"} — <i>${r.status||"pending"}</i></div>`).join("");
-        const more = g.items.length>10 ? `<div>…and ${g.items.length-10} more</div>` : "";
-        mk.bindPopup(`<div style="min-width:240px">
-            <div style="font-weight:800;margin-bottom:6px">${label} • ${g.count} deal(s)</div>
-            <div style="display:flex;gap:8px;margin-bottom:8px">
-              <span class="badge blue">pending ${g.by.pending||0}</span>
-              <span class="badge green">approved ${g.by.approved||0}</span>
-              <span class="badge red">closed ${g.by.closed||0}</span>
-            </div>
-            ${rowsHtml}${more}
-          </div>`);
-        if (cluster) cluster.addLayer(mk); else mk.addTo(m);
-      });
-      if (cluster) m.addLayer(cluster);
-      leafletRef.current=m;
-    }catch{}
-  };
+  if (!open) return null;
 
   return (
-    <div>
-      <div className="card" style={{padding:12, marginBottom:12, display:"flex", gap:12, alignItems:"center", flexWrap:"wrap"}}>
-        <input className="input" style={{maxWidth:280}} placeholder="Search customer/location/solution…" value={q} onChange={e=>setQ(e.target.value)} />
-        <select className="input" style={{maxWidth:200}} value={sort.key} onChange={e=>setSort(s=>({...s, key:e.target.value}))}>
-          <option value="submittedAt">Sort by: Submitted</option>
-          <option value="expectedCloseDate">Sort by: Expected</option>
-          <option value="customerName">Sort by: Customer</option>
-          <option value="resellerLocation">Sort by: Location</option>
-          <option value="solution">Sort by: Solution</option>
-          <option value="valueAud">Sort by: Value (AUD)</option>
-          <option value="stage">Sort by: Stage</option>
-          <option value="status">Sort by: Status</option>
-        </select>
-        <select className="input" style={{maxWidth:140}} value={sort.dir} onChange={e=>setSort(s=>({...s, dir:e.target.value}))}>
-          <option value="desc">Newest → Oldest</option>
-          <option value="asc">Oldest → Newest</option>
-        </select>
+    <div style={{
+      position: "fixed", inset: 0, background: "rgba(0,0,0,.4)",
+      display: "flex", alignItems: "center", justifyContent: "center", zIndex: 60
+    }}>
+      <div style={{ background: "#fff", borderRadius: 16, width: 560, padding: 18 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <h3 style={{ margin: 0, fontWeight: 900, color: BRAND.navy }}>FX Rates to AUD</h3>
+          <button className="btn" onClick={onClose}>Close</button>
+        </div>
+        <div style={{ display: "grid", gap: 10 }}>
+          {local.map((r, i) => (
+            <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 8 }}>
+              <input
+                value={r.ccy}
+                onChange={(e) => setLocal((L) => L.map((x, idx) => idx === i ? { ...x, ccy: e.target.value.toUpperCase() } : x))}
+                placeholder="CCY e.g. SGD"
+                style={{ padding: "10px 12px", borderRadius: 10, border: `1px solid ${BRAND.gray2}` }}
+              />
+              <input
+                value={r.rateToAUD}
+                onChange={(e) => setLocal((L) => L.map((x, idx) => idx === i ? { ...x, rateToAUD: e.target.value } : x))}
+                placeholder="Rate to AUD"
+                style={{ padding: "10px 12px", borderRadius: 10, border: `1px solid ${BRAND.gray2}` }}
+              />
+              <button className="btn" onClick={() => setLocal((L) => L.filter((_, idx) => idx !== i))}>Remove</button>
+            </div>
+          ))}
+          <div>
+            <button className="btn" onClick={() => setLocal((L) => [...L, { ccy: "", rateToAUD: "" }])}>Add Row</button>
+          </div>
+        </div>
+        <div style={{ marginTop: 14, display: "flex", justifyContent: "flex-end", gap: 8 }}>
+          <button className="btn" onClick={onClose}>Cancel</button>
+          <button className="btn btn-navy" onClick={() => onSave(local)}>Save</button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
-        <div style={{flex:1}} />
-        <div className="kicker">Total (AUD): <b>A$ {Math.round(totalAud).toLocaleString()}</b></div>
-        <button className="btn primary" onClick={handleRefresh}>Refresh</button>
-        <button className="btn" onClick={()=>setFxOpen(true)}>FX Settings</button>
+// ====== Admin panel (list + basic actions) ===================================
+function AdminPanel() {
+  const [items, setItems] = React.useState([]);
+  const [loading, setLoading] = React.useState(false);
+  const [fxOpen, setFxOpen] = React.useState(false);
+  const [fxRows, setFxRows] = React.useState([]);
+
+  const refresh = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${GOOGLE_APPS_SCRIPT_URL}?action=list`);
+      const txt = await res.text();
+      let json = null; try { json = JSON.parse(txt); } catch {}
+      if (!res.ok || (json && json.ok === false)) throw new Error((json && json.error) || `HTTP ${res.status}`);
+      setItems(json.rows || []);
+    } catch (e) {
+      alert(`Refresh failed: ${e.message || e}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadFx = async () => {
+    try {
+      const res = await fetch(`${GOOGLE_APPS_SCRIPT_URL}?action=fxList`);
+      const txt = await res.text();
+      let json = null; try { json = JSON.parse(txt); } catch {}
+      if (!res.ok || (json && json.ok === false)) throw new Error((json && json.error) || `HTTP ${res.status}`);
+      setFxRows(json.rows || [{ ccy: "SGD", rateToAUD: 1.05 }]);
+      setFxOpen(true);
+    } catch (e) {
+      alert(`FX load failed: ${e.message || e}`);
+    }
+  };
+
+  const saveFx = async (rows) => {
+    try {
+      const res = await fetch(`${GOOGLE_APPS_SCRIPT_URL}?action=fx`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rows })
+      });
+      const txt = await res.text();
+      let json = null; try { json = JSON.parse(txt); } catch {}
+      if (!res.ok || (json && json.ok === false)) throw new Error((json && json.error) || `HTTP ${res.status}`);
+      setFxOpen(false);
+      await refresh();
+    } catch (e) {
+      alert(`FX save failed: ${e.message || e}`);
+    }
+  };
+
+  const updateStatus = async (row, newStatus) => {
+    try {
+      const res = await fetch(`${GOOGLE_APPS_SCRIPT_URL}?action=update`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: row.id, status: newStatus })
+      });
+      const txt = await res.text();
+      let json = null; try { json = JSON.parse(txt); } catch {}
+      if (!res.ok || (json && json.ok === false)) throw new Error((json && json.error) || `HTTP ${res.status}`);
+      setItems((prev) => prev.map((r) => (r.id === row.id ? { ...r, status: newStatus } : r)));
+    } catch (e) {
+      alert(`Update failed: ${e.message || e}`);
+    }
+  };
+
+  React.useEffect(() => { refresh(); }, []);
+
+  return (
+    <section style={{ maxWidth: 1200, margin: "18px auto", padding: "0 12px" }}>
+      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginBottom: 10 }}>
+        <button className="btn btn-navy" onClick={refresh} disabled={loading}>{loading ? "Refreshing…" : "Refresh"}</button>
+        <button className="btn" onClick={loadFx}>FX Settings</button>
       </div>
 
-      <div className="card" style={{padding:12, marginBottom:12}}>
-        <div ref={mapRef} className="map-wrap"></div>
+      {/* Map “space” (if you later inject Leaflet, mount it here) */}
+      <div style={{
+        height: 380,
+        background: BRAND.fog,
+        border: `1px solid ${BRAND.gray2}`,
+        borderRadius: 16,
+        marginBottom: 12,
+        display: "grid",
+        placeItems: "center",
+        color: "#64748b",
+        fontWeight: 700
+      }}>
+        Map placeholder — your Leaflet init can target this container later.
       </div>
 
-      <div className="card" style={{padding:0, overflow:"hidden"}}>
-        <table className="table">
+      <div style={{ overflowX: "auto", border: `1px solid ${BRAND.gray2}`, borderRadius: 12 }}>
+        <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: 0 }}>
           <thead>
-            <tr>
-              {["Submitted","Expected","Customer","Location","Solution","Value","Stage","Status","Actions"].map(h=>(
-                <th key={h}>{h}</th>
+            <tr style={{ background: "rgba(240,160,58,.12)", color: BRAND.navy }}>
+              {["Submitted", "Expected", "Customer", "Location", "Solution", "Value", "Stage", "Status", "Actions"].map((h) => (
+                <th key={h} style={{ textAlign: "left", padding: "10px 12px", fontWeight: 900, borderBottom: `1px solid ${BRAND.gray2}` }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {filtered.length===0 && (
-              <tr><td colSpan="9" style={{textAlign:"center", padding:"32px"}}>No rows match the filters</td></tr>
+            {items.length === 0 && (
+              <tr>
+                <td colSpan={9} style={{ padding: 16, color: "#64748b" }}>No rows.</td>
+              </tr>
             )}
-            {filtered.map(r=>(
+            {items.map((r) => (
               <tr key={r.id}>
-                <td>{prettyDate(r.submittedAt)}</td>
-                <td>{prettyDate(r.expectedCloseDate)}</td>
-                <td>{r.customerName||"-"}</td>
-                <td>{[r.customerCity,r.customerCountry].filter(Boolean).join(", ")||r.resellerLocation||"-"}</td>
-                <td>{r.solution||"-"}</td>
-                <td>A$ {Math.round(valueAud(r, fx)).toLocaleString()}</td>
-                <td>{r.stage||"-"}</td>
-                <td>
-                  {r.status==="approved" && <span className="badge green">approved</span>}
-                  {r.status==="closed" && <span className="badge red">closed</span>}
-                  {!r.status || r.status==="pending" ? <span className="badge blue">pending</span> : null}
+                <td style={{ padding: "10px 12px", borderBottom: `1px solid ${BRAND.gray2}` }}>{ymd(r.submittedAt)}</td>
+                <td style={{ padding: "10px 12px", borderBottom: `1px solid ${BRAND.gray2}` }}>{ymd(r.expectedCloseDate)}</td>
+                <td style={{ padding: "10px 12px", borderBottom: `1px solid ${BRAND.gray2}` }}>{r.customerName || "—"}</td>
+                <td style={{ padding: "10px 12px", borderBottom: `1px solid ${BRAND.gray2}` }}>
+                  {[r.city, r.country].filter(Boolean).join(", ") || r.customerLocation || "—"}
                 </td>
-                <td className="actions">
-                  {r.status!=="approved" && r.status!=="closed" && (
-                    <button className="btn orange" onClick={()=>approve(r)}>Approve</button>
-                  )}
-                  {r.status!=="closed" && (
-                    <button className="btn" onClick={()=>close(r)}>Close</button>
-                  )}
+                <td style={{ padding: "10px 12px", borderBottom: `1px solid ${BRAND.gray2}` }}>{r.solution || "—"}</td>
+                <td style={{ padding: "10px 12px", borderBottom: `1px solid ${BRAND.gray2}` }}>
+                  {fmtMoney(Number(r.valueAUD || r.value || 0), "AUD")}
+                </td>
+                <td style={{ padding: "10px 12px", borderBottom: `1px solid ${BRAND.gray2}` }}>{r.stage || "—"}</td>
+                <td style={{ padding: "10px 12px", borderBottom: `1px solid ${BRAND.gray2}` }}>
+                  <span style={{
+                    padding: ".2rem .55rem",
+                    borderRadius: 999,
+                    fontSize: 12,
+                    fontWeight: 800,
+                    background:
+                      r.status === "approved" ? "rgba(34,197,94,.12)" :
+                      r.status === "closed" ? "rgba(239,68,68,.12)" :
+                      "rgba(59,130,246,.12)",
+                    color:
+                      r.status === "approved" ? "#16A34A" :
+                      r.status === "closed" ? "#DC2626" :
+                      "#2563EB",
+                    border: `1px solid ${
+                      r.status === "approved" ? "rgba(34,197,94,.28)" :
+                      r.status === "closed" ? "rgba(239,68,68,.28)" :
+                      "rgba(59,130,246,.28)"
+                    }`
+                  }}>
+                    {r.status || "pending"}
+                  </span>
+                </td>
+                <td style={{ padding: "10px 12px", borderBottom: `1px solid ${BRAND.gray2}` }}>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    {r.status !== "approved" && (
+                      <button className="btn" onClick={() => updateStatus(r, "approved")}>Approve</button>
+                    )}
+                    {r.status !== "closed" && (
+                      <button className="btn" onClick={() => updateStatus(r, "closed")}>Close</button>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}
@@ -570,52 +611,22 @@ function AdminPanel(){
         </table>
       </div>
 
-      {fxOpen && <FxModal initial={fx} onClose={()=>setFxOpen(false)} onSave={saveFx} />}
-    </div>
+      <FxDrawer open={fxOpen} onClose={() => setFxOpen(false)} onSave={saveFx} rows={fxRows} />
+    </section>
   );
 }
 
-function valueAud(r, fx){
-  const v = Number(r.value||0);
-  const rate = r.currency==="AUD" ? 1 : Number(fx?.[r.currency]||1);
-  return v*rate;
-}
-
-function FxModal({initial, onClose, onSave}){
-  const [map, setMap] = useState(()=>({...initial}));
-  const entries = Object.entries(map);
+// ====== App root =============================================================
+export default function App() {
+  const [tab, setTab] = React.useState("reseller");
 
   return (
-    <div className="scrim" onClick={onClose}>
-      <div className="modal" onClick={e=>e.stopPropagation()}>
-        <h3>FX Rates to AUD</h3>
-        <div style={{display:"grid", gap:8, marginTop:8}}>
-          {entries.map(([cur,rate])=>(
-            <div key={cur} style={{display:"grid", gridTemplateColumns:"130px 1fr auto", gap:8}}>
-              <select className="input" value={cur} onChange={(e)=>{
-                const nv=e.target.value;
-                setMap(m=>{
-                  const copy={...m}; delete copy[cur]; copy[nv]=rate; return copy;
-                });
-              }}>
-                {CURRENCIES.map(c=><option key={c}>{c}</option>)}
-              </select>
-              <input className="input" value={rate} onChange={(e)=> setMap(m=>({...m, [cur]: e.target.value}))}/>
-              <button className="btn" onClick={()=> setMap(m=>{ const copy={...m}; delete copy[cur]; return copy; })}>Remove</button>
-            </div>
-          ))}
-          <div>
-            <button className="btn" onClick={()=>{
-              const nxt = CURRENCIES.find(c=>!(c in map));
-              if (nxt) setMap(m=>({...m, [nxt]:1}));
-            }}>Add Row</button>
-          </div>
-        </div>
-        <div style={{display:"flex", gap:8, justifyContent:"flex-end", marginTop:12}}>
-          <button className="btn" onClick={onClose}>Cancel</button>
-          <button className="btn primary" onClick={()=>onSave(map)}>Save</button>
-        </div>
-      </div>
+    <div style={{ minHeight: "100dvh", background: "#fbfdff", color: BRAND.text }}>
+      <BrandHeader tab={tab} setTab={setTab} onLogout={() => setTab("reseller")} />
+      {tab === "reseller" ? <ResellerForm onSubmitted={() => setTab("admin")} /> : <AdminPanel />}
+      <footer style={{ maxWidth: 1200, margin: "24px auto", padding: "0 12px", fontSize: 12, color: "#64748b" }}>
+        © {new Date().getFullYear()} Aptella — Xgrids Master Distributor
+      </footer>
     </div>
   );
 }
