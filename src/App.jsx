@@ -1,516 +1,784 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 
-/* =========================================================
-   Aptella • Reseller Deal Registration
-   ========================================================= */
+/* =========================
+   CONFIG / CONSTANTS
+   ========================= */
 
-const BRAND = {
-  navy:        "#0e3446",
-  navyDark:    "#0b2938",
-  orange:      "#f0a03a",
-  primaryBtn:  "bg-[#0e3446] hover:bg-[#0b2938]",
-  chipApproved:"bg-green-100 text-green-800",
-  chipPending: "bg-blue-100 text-blue-800",
-  chipClosed:  "bg-red-100 text-red-800",
-  chipWarn:    "bg-orange-100 text-orange-800",
+const GAS = {
+  // <-- Set this to your live Web App URL
+  BASE: (typeof GOOGLE_APPS_SCRIPT_URL !== "undefined" && GOOGLE_APPS_SCRIPT_URL) || "",
+  list: (base) => `${base}?action=list`,
+  submit: (base) => `${base}?action=submit`,
+  update: (base) => `${base}?action=update`,
+  fxGet: (base) => `${base}?action=fx-get`,
+  fxSet: (base) => `${base}?action=fx-set`,
 };
 
 const ADMIN_PASSWORD = "Aptella2025!";
 
-// UPDATED recipient
-const APTELLA_EVIDENCE_EMAIL = "admin.asia@aptella.com";
-
-const COUNTRY_CONFIG = {
-  Indonesia:   { currency: "IDR", capital: "Jakarta",       center: [-6.2088, 106.8456] },
-  Singapore:   { currency: "SGD", capital: "Singapore",     center: [ 1.3521, 103.8198] },
-  Malaysia:    { currency: "MYR", capital: "Kuala Lumpur",  center: [ 3.139,  101.6869] },
-  Philippines: { currency: "PHP", capital: "Manila",        center: [14.5995, 120.9842] },
+// Brand / UI
+const BRAND = {
+  primaryBtn: "bg-[#0e3446] hover:bg-[#0b2938]",
+  pill: "rounded-full px-2.5 py-1 text-xs font-medium",
+  pillPending: "bg-blue-50 text-blue-700 border border-blue-200",
+  pillApproved: "bg-green-50 text-green-700 border border-green-200",
+  pillClosed: "bg-red-50 text-red-700 border border-red-200",
+  pillWarning: "bg-orange-50 text-orange-700 border border-orange-200",
 };
 
-const CURRENCIES       = ["SGD","IDR","MYR","PHP","AUD","USD"];
-const XGRIDS_SOLUTIONS = ["Xgrids L2 PRO","Xgrids K1","Xgrids PortalCam","Xgrids Drone Kit"];
-const SUPPORT_OPTIONS  = [
-  "Pre-sales engineer","Demo / loan unit","Pricing exception","Marketing materials",
-  "Partner training","On-site customer visit","Extended lock request",
-];
+// Core lists
+const COUNTRIES = ["Indonesia", "Malaysia", "Philippines", "Singapore"];
+const RES_COUNTRY_OPTIONS = ["Select country", ...COUNTRIES];
+const CURRENCIES = ["AUD", "SGD", "IDR", "MYR", "PHP", "USD"];
 const INDUSTRIES = [
-  "Construction","Mining","Oil & Gas","Utilities","Telecommunications",
-  "Government","Transport & Logistics","Manufacturing","Education",
-  "Real Estate","Architecture/Engineering","Other",
+  "Construction",
+  "Survey / Mapping",
+  "Mining",
+  "Oil & Gas",
+  "Utilities",
+  "Telecom",
+  "Transport / Logistics",
+  "Government",
+  "Education",
+  "Other",
 ];
-const STAGES = [
-  { key:"qualified", label:"Qualified" },
-  { key:"proposal", label:"Proposal" },
-  { key:"negotiation", label:"Negotiation" },
-  { key:"won", label:"Won" },
-  { key:"lost", label:"Lost" },
-];
-const PROB_BY_STAGE = { qualified:35, proposal:55, negotiation:70, won:100, lost:0 };
 
-/* ---------- i18n (labels) ---------- */
-const STR = {
+const SUPPORT_OPTIONS = [
+  "Pre-sales engineer",
+  "Demo / loan unit",
+  "Pricing exception",
+  "Marketing materials",
+  "Partner training",
+  "On-site customer visit",
+  "Extended lock request",
+];
+
+const XGRIDS_SOLUTIONS = [
+  "Xgrids L2 PRO",
+  "Xgrids K1",
+  "Xgrids PortalCam",
+  "Xgrids Drone Kit",
+  "__OTHER__", // shows free text
+];
+
+const DEFAULT_RATES_AUD = {
+  AUD: 1,
+  SGD: 1.05,
+  USD: 1.50,
+  MYR: 0.33,
+  PHP: 0.028,
+  IDR: 0.0001,
+};
+
+// capital coords (for Customer Country)
+const CAPITALS = {
+  Indonesia: { lat: -6.2088, lng: 106.8456, city: "Jakarta", currency: "IDR" },
+  Singapore: { lat: 1.3521, lng: 103.8198, city: "Singapore", currency: "SGD" },
+  Malaysia: { lat: 3.139, lng: 101.6869, city: "Kuala Lumpur", currency: "MYR" },
+  Philippines: { lat: 14.5995, lng: 120.9842, city: "Manila", currency: "PHP" },
+};
+
+// i18n (minimal – enough to cover the form)
+const I18N = {
   en: {
-    title:"Register Upcoming Deal (within 60 days)",
-    subtitle:"Fields marked * are mandatory.",
-    resellerCountry:"Reseller Country",
-    selectCountry:"Select country",
-    resellerLocation:"Reseller Location",
-    currency:"Currency",
-    resellerCompany:"Reseller company",
-    primaryContact:"Primary contact",
-    contactEmail:"Contact email",
-    contactPhone:"Contact phone",
-    customerName:"Customer name",
-    customerCity:"Customer City",
-    customerCountry:"Customer Country",
-    mapOption:"Map option (paste lat,lng or use link)",
-    openMap:"Open Map",
-    solution:"Solution offered (Xgrids)",
-    other:"+ Other (type below)",
-    learn:"Learn about Xgrids",
-    expectedClose:"Expected close date",
-    industry:"Industry",
-    dealValue:"Deal value",
-    salesStage:"Sales stage",
-    probability:"Probability (%)",
-    supportRequested:"Support requested",
-    competitors:"Competitors",
-    evidence:"Evidence (required)",
-    emailEvidence:`Email attached files to Aptella (${APTELLA_EVIDENCE_EMAIL})`,
-    notes:"Notes",
-    consent:"I confirm details are accurate and consent to data storage for deal management",
-    submit:"Submit Registration",
-    reset:"Reset",
+    resellerCountry: "Reseller Country",
+    selectCountry: "Select country",
+    resellerLocation: "Reseller Location",
+    resellerCompany: "Reseller company",
+    primaryContact: "Primary contact",
+    contactEmail: "Contact email",
+    contactPhone: "Contact phone",
+    customerName: "Customer name",
+    customerCity: "Customer City",
+    customerCountry: "Customer Country",
+    mapOption: "Map option (paste lat,lng or use link)",
+    openMap: "Open Map",
+    solutionOffered: "Solution offered (Xgrids)",
+    selectSolution: "Select an Xgrids solution",
+    otherSolution: "Other solution",
+    learnXgrids: "Learn about Xgrids",
+    expectedClose: "Expected close date",
+    industry: "Industry",
+    dealValue: "Deal value",
+    stage: "Sales stage",
+    probability: "Probability (%)",
+    competitors: "Competitors",
+    supportRequested: "Support requested",
+    evidence: "Evidence (required)",
+    chooseFiles: "Choose files",
+    emailEvidence: `Email attached files to Aptella (admin.asia@aptella.com)`,
+    notes: "Notes",
+    consent: "I confirm details are accurate and consent to data storage for deal management",
+    submit: "Submit Registration",
+    reset: "Reset",
   },
   id: {
-    title:"Daftarkan Kesempatan (dalam 60 hari)",
-    subtitle:"Kolom bertanda * wajib diisi.",
-    resellerCountry:"Negara Anda",
-    selectCountry:"Pilih negara",
-    resellerLocation:"Lokasi Reseller",
-    currency:"Mata Uang",
-    resellerCompany:"Perusahaan reseller",
-    primaryContact:"Kontak utama",
-    contactEmail:"Email kontak",
-    contactPhone:"Telepon kontak",
-    customerName:"Nama pelanggan",
-    customerCity:"Kota pelanggan",
-    customerCountry:"Negara pelanggan",
-    mapOption:"Opsi peta (tempel lat,lng atau gunakan tautan)",
-    openMap:"Buka Peta",
-    solution:"Solusi yang ditawarkan (Xgrids)",
-    other:"+ Lainnya (ketik di bawah)",
-    learn:"Pelajari Xgrids",
-    expectedClose:"Perkiraan tanggal penutupan",
-    industry:"Industri",
-    dealValue:"Nilai transaksi",
-    salesStage:"Tahap penjualan",
-    probability:"Probabilitas (%)",
-    supportRequested:"Dukungan yang diminta",
-    competitors:"Pesaing",
-    evidence:"Bukti (wajib)",
-    emailEvidence:`Kirim lampiran ke Aptella (${APTELLA_EVIDENCE_EMAIL})`,
-    notes:"Catatan",
-    consent:"Saya mengonfirmasi detail akurat dan menyetujui penyimpanan data untuk pengelolaan deal",
-    submit:"Kirim Pendaftaran",
-    reset:"Atur Ulang",
-  }
+    resellerCountry: "Negara Reseller",
+    selectCountry: "Pilih negara",
+    resellerLocation: "Lokasi Reseller",
+    resellerCompany: "Perusahaan reseller",
+    primaryContact: "Kontak utama",
+    contactEmail: "Email kontak",
+    contactPhone: "Telepon kontak",
+    customerName: "Nama pelanggan",
+    customerCity: "Kota Pelanggan",
+    customerCountry: "Negara Pelanggan",
+    mapOption: "Opsi peta (tempel lat,lng atau gunakan tautan)",
+    openMap: "Buka Peta",
+    solutionOffered: "Solusi ditawarkan (Xgrids)",
+    selectSolution: "Pilih solusi Xgrids",
+    otherSolution: "Solusi lainnya",
+    learnXgrids: "Pelajari tentang Xgrids",
+    expectedClose: "Perkiraan tanggal penutupan",
+    industry: "Industri",
+    dealValue: "Nilai transaksi",
+    stage: "Tahap penjualan",
+    probability: "Probabilitas (%)",
+    competitors: "Pesaing",
+    supportRequested: "Dukungan yang diminta",
+    evidence: "Bukti (wajib)",
+    chooseFiles: "Pilih berkas",
+    emailEvidence: `Kirim berkas terlampir ke Aptella (admin.asia@aptella.com)`,
+    notes: "Catatan",
+    consent: "Saya mengonfirmasi detail akurat dan menyetujui penyimpanan data untuk pengelolaan deal",
+    submit: "Kirim Pendaftaran",
+    reset: "Atur ulang",
+  },
 };
 
-/* ---------- Utilities ---------- */
-const GAS_URL =
-  (typeof window!=="undefined" && window.GOOGLE_APPS_SCRIPT_URL) ||
-  "https://script.google.com/macros/s/AKfycbw3O_GnYcTx4bRYdFD2vCSs26L_Gzl2ZIZd18dyJmZAEE442hvhqp7j1C4W6cFX_DWM/exec";
+const STAGES = [
+  { key: "qualified", label: "Qualified" },
+  { key: "proposal", label: "Proposal" },
+  { key: "negotiation", label: "Negotiation" },
+  { key: "won", label: "Won" },
+  { key: "lost", label: "Lost" },
+];
+const PROB_BY_STAGE = { qualified: 35, proposal: 55, negotiation: 70, won: 100, lost: 0 };
 
-function uid(){ return Math.random().toString(36).slice(2)+Date.now().toString(36); }
-function todayISO(){ const d=new Date(); return d.toISOString().slice(0,10); }
-function addDays(iso,n){ const d=new Date(iso); d.setDate(d.getDate()+Number(n||0)); return d.toISOString().slice(0,10); }
-function daysUntil(iso){ return Math.round((new Date(iso)-new Date(todayISO()))/(1000*60*60*24)); }
-function withinNext60Days(iso){ const d=daysUntil(iso); return d>=0 && d<=60; }
+const emailEvidenceAddress = "admin.asia@aptella.com";
 
-async function gasGET(params){
-  const usp = new URLSearchParams({ ...params, t: Date.now() });
-  const res = await fetch(`${GAS_URL}?${usp}`, { method: "GET" });
-  const text = await res.text();
-  let json; try { json = JSON.parse(text); } catch { throw new Error(text || "Bad JSON"); }
-  if (!res.ok || json?.ok === false) throw new Error(json?.error || text);
-  return json;
-}
-async function gasPOST(action, payload){
-  const res  = await fetch(`${GAS_URL}?action=${encodeURIComponent(action)}&t=${Date.now()}`, {
-    method: "POST",
-    body: JSON.stringify(payload || {})   // simple request (no preflight)
+/* =========================
+   UTILITIES
+   ========================= */
+
+const todayISO = () => {
+  const d = new Date();
+  return d.toISOString().slice(0, 10);
+};
+const addDaysISO = (dateISO, days) => {
+  const d = new Date(dateISO);
+  d.setDate(d.getDate() + Number(days || 0));
+  return d.toISOString().slice(0, 10);
+};
+
+const valOr = (v, d) => (v === undefined || v === null ? d : v);
+
+const fileListToBase64 = async (fileList, maxTotalMB = 20) => {
+  const files = Array.from(fileList || []);
+  let total = 0;
+  const items = await Promise.all(
+    files.map(
+      (f) =>
+        new Promise((res, rej) => {
+          const r = new FileReader();
+          r.onload = () => {
+            const out = String(r.result || "");
+            const b64 = out.split(",")[1] || "";
+            total += (b64.length * 3) / 4;
+            res({ name: f.name, type: f.type || "application/octet-stream", data: b64 });
+          };
+          r.onerror = rej;
+          r.readAsDataURL(f);
+        })
+    )
+  );
+  if (total > maxTotalMB * 1024 * 1024) {
+    throw new Error(`Attachments exceed ${maxTotalMB}MB total.`);
+  }
+  return items;
+};
+
+const money = (v) =>
+  new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD", maximumFractionDigits: 0 }).format(
+    Number(v || 0)
+  );
+
+const statusPill = (s) => {
+  const base = BRAND.pill;
+  if (s === "approved" || s === "locked") return `${base} ${BRAND.pillApproved}`;
+  if (s === "closed" || s === "lost") return `${base} ${BRAND.pillClosed}`;
+  if (s === "warning") return `${base} ${BRAND.pillWarning}`;
+  return `${base} ${BRAND.pillPending}`;
+};
+
+/* =========================
+   LEAFLET LOADER (no build deps)
+   ========================= */
+
+let leafletPromise = null;
+function loadLeaflet() {
+  if (leafletPromise) return leafletPromise;
+  leafletPromise = new Promise((resolve, reject) => {
+    if (window.L && window.L.MarkerClusterGroup) return resolve(window.L);
+    const css1 = document.createElement("link");
+    css1.rel = "stylesheet";
+    css1.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+    document.head.appendChild(css1);
+
+    const css2 = document.createElement("link");
+    css2.rel = "stylesheet";
+    css2.href = "https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css";
+    document.head.appendChild(css2);
+
+    const css3 = document.createElement("link");
+    css3.rel = "stylesheet";
+    css3.href = "https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css";
+    document.head.appendChild(css3);
+
+    const s1 = document.createElement("script");
+    s1.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+    s1.onload = () => {
+      const s2 = document.createElement("script");
+      s2.src = "https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js";
+      s2.onload = () => resolve(window.L);
+      s2.onerror = reject;
+      document.body.appendChild(s2);
+    };
+    s1.onerror = reject;
+    document.body.appendChild(s1);
   });
-  const text = await res.text();
-  let json; try { json = JSON.parse(text); } catch { throw new Error(text || "Bad JSON"); }
-  if (!res.ok || json?.ok === false) throw new Error(json?.error || text);
-  return json;
+  return leafletPromise;
 }
 
-/* ---------- Small UI atoms ---------- */
-function Card({children}){ return <div className="rounded-2xl bg-white shadow border border-gray-200">{children}</div>; }
-function CardHeader({title,subtitle,right}){
+/* =========================
+   SMALL UI ATOMS
+   ========================= */
+
+function Card({ children, className = "" }) {
+  return <div className={`card rounded-2xl bg-white ${className}`}>{children}</div>;
+}
+function CardHeader({ title, subtitle, right }) {
   return (
-    <div className="flex items-center justify-between px-5 py-4 border-b">
+    <div className="px-5 pt-5 pb-2 flex items-center justify-between">
       <div>
-        <div className="text-[15px] font-semibold text-slate-800">{title}</div>
-        {subtitle && <div className="text-xs text-slate-500">{subtitle}</div>}
+        <h3 className="text-lg font-semibold">{title}</h3>
+        {subtitle && <p className="text-sm text-slate-500">{subtitle}</p>}
       </div>
       {right}
     </div>
   );
 }
-function CardBody({children}){ return <div className="p-5">{children}</div>; }
-function Label({children,required,...rest}){
-  return <label className="text-sm font-medium text-slate-700" {...rest}>{children} {required && <span className="text-red-500">*</span>}</label>;
+function CardBody({ children }) {
+  return <div className="px-5 pb-5">{children}</div>;
 }
-function Input(props){ return <input {...props} className={"w-full rounded-xl border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200 "+(props.className||"")} />; }
-function Select(props){ return <select {...props} className={"w-full rounded-xl border px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-sky-200 "+(props.className||"")} />; }
-function Textarea(props){ return <textarea {...props} className={"w-full rounded-xl border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200 "+(props.className||"")} />; }
 
-/* =========================================================
-   FX Drawer
-   ========================================================= */
-function FxDrawer({ open, onClose, ratesAUD, onSave, saving }){
-  const [local,setLocal] = useState(ratesAUD||{});
-  useEffect(()=>setLocal(ratesAUD||{}),[ratesAUD,open]);
-  if(!open) return null;
-  const rows = Object.entries(local);
-
+function Label({ children, required, ...rest }) {
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40">
-      <div className="bg-white rounded-2xl w-[min(760px,95vw)] shadow-xl">
-        <CardHeader title="FX Rates to AUD" right={<button onClick={onClose} className="px-3 py-1.5 rounded-lg bg-gray-100 text-sm">Close</button>} />
-        <CardBody>
-          <div className="grid grid-cols-3 gap-2 mb-2 text-sm font-medium text-slate-600">
-            <div>Currency</div><div>Rate → AUD</div><div></div>
-          </div>
-          {rows.map(([ccy,rate])=>(
-            <div key={ccy} className="grid grid-cols-3 gap-2 items-center mb-1">
-              <Input value={ccy} onChange={e=>{
-                const v=e.target.value.toUpperCase();
-                setLocal(p=>{ const {[ccy]:_,...rest}=p; return {...rest,[v]:rate}; });
-              }}/>
-              <Input type="number" step="0.000001" value={rate} onChange={e=>setLocal(p=>({...p,[ccy]:Number(e.target.value)}))}/>
-              <button className="text-red-600 text-sm" onClick={()=>setLocal(p=>{ const cp={...p}; delete cp[ccy]; return cp; })}>Remove</button>
-            </div>
-          ))}
-          <button className="px-3 py-1.5 rounded-lg bg-gray-100 text-sm" onClick={()=>setLocal(p=>({...p, SGD:p.SGD||1.05 }))}>Add Row</button>
-        </CardBody>
-        <div className="px-5 pb-5 flex justify-end gap-2">
-          <button onClick={onClose} className="px-3 py-2 rounded-lg bg-gray-100">Cancel</button>
-          <button disabled={saving} onClick={()=>onSave(local)} className={"px-3 py-2 rounded-lg text-white "+BRAND.primaryBtn}>{saving?"Saving…":"Save"}</button>
-        </div>
-      </div>
-    </div>
+    <label
+      aria-required={required ? "true" : undefined}
+      className="text-sm font-medium text-slate-700"
+      {...rest}
+    >
+      {children} {required && <span className="text-red-500">*</span>}
+    </label>
   );
 }
+const Input = (p) => <input {...p} className={`border rounded-lg px-3 py-2 w-full ${p.className || ""}`} />;
+const Select = (p) => <select {...p} className={`border rounded-lg px-3 py-2 w-full ${p.className || ""}`} />;
+const Textarea = (p) => <textarea {...p} className={`border rounded-lg px-3 py-2 w-full ${p.className || ""}`} />;
 
-/* =========================================================
-   Reseller Form
-   ========================================================= */
-function SubmissionForm({ onLocalAdd, onSyncOne }){
-  // start with "Select country"
-  const [form,setForm] = useState({
-    resellerCountry:"",
-    resellerLocation:"",
-    resellerName:"", resellerContact:"", resellerEmail:"", resellerPhone:"",
-    customerName:"", customerLocation:"", city:"", country:"",
-    lat:"", lng:"",
-    industry:"", currency:"SGD", value:"",
-    // NEW: support + Other
-    solution:"", solutionOther:"",
-    stage:"qualified", probability:PROB_BY_STAGE.qualified,
-    expectedCloseDate:addDays(todayISO(),14),
-    supports:[],
-    competitors:"",
-    notes:"",
-    emailEvidence:true,
-    evidenceFiles:[],
-    accept:false
+/* =========================
+   SUBMISSION FORM
+   ========================= */
+
+function SubmissionForm({ onSavedLocal, onSyncOne }) {
+  const [form, setForm] = useState({
+    resellerCountry: "Select country",
+    resellerLocation: "",
+    resellerCompany: "",
+    resellerContact: "",
+    resellerEmail: "",
+    resellerPhone: "",
+    customerName: "",
+    customerCity: "",
+    customerCountry: "",
+    currency: "SGD",
+    lat: "",
+    lng: "",
+    solution: "",
+    solutionOther: "",
+    industry: "",
+    value: "",
+    stage: "qualified",
+    probability: PROB_BY_STAGE["qualified"],
+    expectedCloseDate: addDaysISO(todayISO(), 14),
+    supports: [],
+    competitors: [],
+    notes: "",
+    evidenceFiles: [],
+    emailEvidence: true,
+    accept: false,
   });
+  const [errors, setErrors] = useState({});
+  const locale = form.resellerCountry === "Indonesia" ? "id" : "en";
+  const t = (k) => I18N[locale][k] || I18N.en[k] || k;
 
-  const isID = form.resellerCountry === "Indonesia";
-  const L = STR[isID ? "id" : "en"];
+  // Auto probability by stage
+  useEffect(() => {
+    setForm((f) => ({ ...f, probability: PROB_BY_STAGE[f.stage] ?? f.probability }));
+  }, [form.stage]);
 
-  // stage → default probability
-  useEffect(()=>setForm(f=>({...f, probability: PROB_BY_STAGE[f.stage] ?? f.probability })),[form.stage]);
-
-  // country → currency + capital + center
-  useEffect(()=>{
-    const cfg=COUNTRY_CONFIG[form.resellerCountry];
-    if(cfg){
-      setForm(f=>({
+  // When customer country changes, default capital coords & currency
+  useEffect(() => {
+    const cap = CAPITALS[form.customerCountry];
+    if (cap) {
+      setForm((f) => ({
         ...f,
-        currency:cfg.currency,
-        resellerLocation: f.resellerLocation || cfg.capital,
-        lat: cfg.center[0],
-        lng: cfg.center[1]
+        customerCity: cap.city,
+        lat: cap.lat,
+        lng: cap.lng,
+        currency: f.currency || cap.currency,
       }));
     }
-  },[form.resellerCountry]);
+  }, [form.customerCountry]);
 
-  function handleChange(e){ const {name,value,type,checked}=e.target; setForm(f=>({...f,[name]:type==="checkbox"?checked:value})); }
-  function toggleSupport(opt){ setForm(f=>({ ...f, supports: f.supports.includes(opt) ? f.supports.filter(x=>x!==opt) : [...f.supports,opt] })); }
-  function handleFiles(e){ setForm(f=>({...f, evidenceFiles: Array.from(e.target.files||[]) })); }
-
-  function validate(){
-    const errs=[];
-    if(!form.resellerCountry) errs.push(isID? "Pilih negara reseller.":"Select reseller country.");
-    if(!form.resellerName) errs.push(isID? "Perusahaan reseller wajib diisi.":"Reseller company is required.");
-    if(!form.resellerContact) errs.push(isID? "Kontak utama wajib diisi.":"Primary contact is required.");
-    if(!form.resellerEmail || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.resellerEmail)) errs.push(isID? "Email tidak valid.":"Valid email required.");
-    if(!form.customerName) errs.push(isID? "Nama pelanggan wajib diisi.":"Customer name is required.");
-    if(!form.city || !form.country) errs.push(isID? "Kota & negara pelanggan wajib.":"Customer city & country required.");
-    const chosenSolution = (form.solution || "").trim();
-    const otherChosen = chosenSolution === "__OTHER__";
-    const finalSolution = otherChosen ? (form.solutionOther||"").trim() : chosenSolution;
-    if(!finalSolution) errs.push(isID? "Solusi wajib diisi.":"Solution offered is required.");
-    if(!form.value || Number(form.value)<=0) errs.push(isID? "Nilai transaksi harus positif.":"Deal value must be positive.");
-    if(!withinNext60Days(form.expectedCloseDate)) errs.push(isID? "Tanggal penutupan harus dalam 60 hari.":"Expected close date must be within 60 days.");
-    // MANDATORY evidence
-    if(!(form.evidenceFiles && form.evidenceFiles.length>0)) errs.push(isID? "Lampirkan minimal satu berkas bukti.":"Attach at least one evidence file.");
-    if(!form.accept) errs.push(isID? "Konfirmasi dan persetujuan wajib.":"You must confirm details and consent.");
-    if(errs.length){ alert(errs.join("\n")); return false; }
-    return true;
+  function handleChange(e) {
+    const { name, value, type, checked } = e.target;
+    setForm((f) => ({ ...f, [name]: type === "checkbox" ? checked : value }));
+  }
+  function toggleSupport(opt) {
+    setForm((f) => {
+      const s = new Set(f.supports);
+      if (s.has(opt)) s.delete(opt);
+      else s.add(opt);
+      return { ...f, supports: Array.from(s) };
+    });
+  }
+  function handleFiles(e) {
+    setForm((f) => ({ ...f, evidenceFiles: Array.from(e.target.files || []) }));
   }
 
-  function filesToBase64(files){
-    const readers=(files||[]).map(f => new Promise((resolve,reject)=>{
-      const fr=new FileReader();
-      fr.onload=()=>{ const res=String(fr.result||""); resolve({ name:f.name, type:f.type||"application/octet-stream", data:(res.split(",")[1]||"") }); };
-      fr.onerror=reject; fr.readAsDataURL(f);
-    }));
-    return Promise.all(readers);
+  function validate() {
+    const e = {};
+    const req = (key, label) => {
+      if (!String(form[key] || "").trim()) e[key] = `${label || key} required`;
+    };
+    if (form.resellerCountry === "Select country") e.resellerCountry = "Country required";
+    req("resellerLocation", t("resellerLocation"));
+    req("resellerCompany", t("resellerCompany"));
+    req("resellerContact", t("primaryContact"));
+    req("resellerEmail", t("contactEmail"));
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.resellerEmail || "")) e.resellerEmail = "Valid email required";
+    req("customerName", t("customerName"));
+    req("customerCity", t("customerCity"));
+    req("customerCountry", t("customerCountry"));
+    if (!form.solution || (form.solution === "__OTHER__" && !form.solutionOther.trim()))
+      e.solution = "Solution required";
+    if (!(form.value && Number(form.value) > 0)) e.value = "Positive value required";
+    if (!(form.lat !== "" && form.lng !== "")) e.lat = "Lat/Lng required";
+    if (!form.evidenceFiles || form.evidenceFiles.length === 0) e.evidence = "Evidence files required";
+    if (!form.accept) e.accept = "You must confirm";
+    setErrors(e);
+    return Object.keys(e).length === 0;
   }
 
-  async function submit(e){
+  async function submit(e) {
     e.preventDefault();
-    if(!validate()) return;
-
-    const chosenSolution = (form.solution || "").trim();
-    const solution = chosenSolution === "__OTHER__" ? (form.solutionOther||"").trim() : chosenSolution;
-
+    if (!validate()) return;
+    const solutionFinal = form.solution === "__OTHER__" ? form.solutionOther : form.solution;
     const record = {
-      id: uid(),
+      id: Math.random().toString(36).slice(2) + Date.now().toString(36),
       submittedAt: todayISO(),
-      status: "pending",
-      lockExpiry: "",
-      syncedAt: null,
       resellerCountry: form.resellerCountry,
       resellerLocation: form.resellerLocation,
-      resellerName: form.resellerName,
+      resellerName: form.resellerCompany,
       resellerContact: form.resellerContact,
       resellerEmail: form.resellerEmail,
       resellerPhone: form.resellerPhone,
       customerName: form.customerName,
-      customerLocation: `${form.city}${form.country?`, ${form.country}`:""}`,
-      city: form.city,
-      country: form.country,
-      lat: Number(form.lat)||0, lng: Number(form.lng)||0,
+      customerLocation: `${form.customerCity}, ${form.customerCountry}`,
+      city: form.customerCity,
+      country: form.customerCountry,
+      lat: Number(form.lat),
+      lng: Number(form.lng),
       industry: form.industry,
       currency: form.currency,
-      value: Number(form.value)||0,
-      solution,
+      value: Number(form.value),
+      solution: solutionFinal,
       stage: form.stage,
-      probability: Number(form.probability)||0,
+      probability: Number(form.probability),
       expectedCloseDate: form.expectedCloseDate,
-      supports: form.supports.join("; "),
-      competitors: form.competitors || "",
+      status: "pending",
+      lockExpiry: "",
+      syncedAt: "",
+      remindersOptIn: false,
+      supports: form.supports,
+      competitors: form.competitors,
       notes: form.notes,
-      evidenceLinks: "",
-      updates: "",
-      emailEvidence: true // always send
+      evidenceLinks: [],
+      updates: [],
     };
 
-    onLocalAdd(record);
+    // Save locally
+    onSavedLocal?.(record);
 
-    try{
-      const payload={...record, attachments: await filesToBase64(form.evidenceFiles)};
-      await onSyncOne(payload);
-      alert(isID? "Berhasil dikirim dan tersinkron ke Google Sheets." : "Submitted and synced to Google Sheets.");
-      // reset minimal fields
-      setForm(f=>({ ...f, customerName:"", value:"", notes:"", evidenceFiles:[] }));
-    }catch(err){
-      alert((isID? "Terkirim lokal. Sinkronisasi gagal: " : "Submitted locally. Google Sheets sync failed: ") + (err?.message||err));
+    // Prepare payload for GAS (with attachments)
+    try {
+      if (!GAS.BASE) throw new Error("Apps Script URL missing");
+      const attachments = await fileListToBase64(form.evidenceFiles);
+      const payload = { ...record, attachments, emailEvidence: true, evidenceEmail: emailEvidenceAddress };
+      const res = await fetch(GAS.submit(GAS.BASE), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const txt = await res.text();
+      let json = null;
+      try {
+        json = JSON.parse(txt);
+      } catch {}
+      if (!res.ok || (json && json.ok === false)) {
+        alert(`Submitted locally. Google Sheets sync failed: ${json?.error || `HTTP ${res.status} ${res.statusText}`}`);
+      } else {
+        alert("Submitted and synced to Google Sheets.");
+      }
+    } catch (err) {
+      alert(`Submitted locally. Google Sheets sync failed: ${err?.message || err}`);
     }
+
+    // Clear form
+    setForm((f) => ({
+      ...f,
+      resellerLocation: "",
+      resellerCompany: "",
+      resellerContact: "",
+      resellerEmail: "",
+      resellerPhone: "",
+      customerName: "",
+      customerCity: "",
+      customerCountry: "",
+      lat: "",
+      lng: "",
+      solution: "",
+      solutionOther: "",
+      industry: "",
+      value: "",
+      stage: "qualified",
+      probability: PROB_BY_STAGE["qualified"],
+      expectedCloseDate: addDaysISO(todayISO(), 14),
+      supports: [],
+      competitors: [],
+      notes: "",
+      evidenceFiles: [],
+      accept: false,
+    }));
+    const el = document.getElementById("evidenceFiles");
+    if (el) el.value = "";
   }
 
   return (
-    <Card>
-      <CardHeader title={L.title} subtitle={L.subtitle} />
+    <Card className="mt-6">
+      <CardHeader
+        title="Register Upcoming Deal (within 60 days)"
+        subtitle="Fields marked * are mandatory."
+      />
       <CardBody>
-        <form onSubmit={submit} className="grid gap-6">
+        <form className="grid gap-6" onSubmit={submit}>
+          {/* Row 1 */}
           <div className="grid md:grid-cols-3 gap-4">
             <div className="grid gap-2">
-              <Label required>{L.resellerCountry}</Label>
-              <Select name="resellerCountry" value={form.resellerCountry} onChange={handleChange}>
-                <option value="">{L.selectCountry}</option>
-                <option>Indonesia</option><option>Singapore</option><option>Malaysia</option><option>Philippines</option>
+              <Label required>{t("resellerCountry")}</Label>
+              <Select
+                name="resellerCountry"
+                value={form.resellerCountry}
+                onChange={handleChange}
+              >
+                {RES_COUNTRY_OPTIONS.map((c) => (
+                  <option key={c} value={c}>
+                    {c === "Select country" ? t("selectCountry") : c}
+                  </option>
+                ))}
               </Select>
             </div>
             <div className="grid gap-2">
-              <Label required>{L.resellerLocation}</Label>
-              <Input name="resellerLocation" value={form.resellerLocation} onChange={handleChange} />
+              <Label required>{t("resellerLocation")}</Label>
+              <Input
+                name="resellerLocation"
+                value={form.resellerLocation}
+                onChange={handleChange}
+                placeholder="e.g., Jakarta"
+              />
             </div>
             <div className="grid gap-2">
-              <Label>{L.currency}</Label>
+              <Label>Currency</Label>
               <Select name="currency" value={form.currency} onChange={handleChange}>
-                {CURRENCIES.map(c=><option key={c} value={c}>{c}</option>)}
+                {CURRENCIES.map((c) => (
+                  <option key={c}>{c}</option>
+                ))}
               </Select>
             </div>
           </div>
 
+          {/* Row 2 */}
           <div className="grid md:grid-cols-2 gap-4">
             <div className="grid gap-2">
-              <Label required>{L.resellerCompany}</Label>
-              <Input name="resellerName" value={form.resellerName} onChange={handleChange} />
+              <Label required>{t("resellerCompany")}</Label>
+              <Input name="resellerCompany" value={form.resellerCompany} onChange={handleChange} />
+              {errors.resellerCompany && <p className="text-xs text-red-600">{errors.resellerCompany}</p>}
             </div>
             <div className="grid gap-2">
-              <Label required>{L.primaryContact}</Label>
+              <Label required>{t("primaryContact")}</Label>
               <Input name="resellerContact" value={form.resellerContact} onChange={handleChange} />
+              {errors.resellerContact && <p className="text-xs text-red-600">{errors.resellerContact}</p>}
             </div>
             <div className="grid gap-2">
-              <Label required>{L.contactEmail}</Label>
-              <Input name="resellerEmail" type="email" value={form.resellerEmail} onChange={handleChange} />
+              <Label required>{t("contactEmail")}</Label>
+              <Input type="email" name="resellerEmail" value={form.resellerEmail} onChange={handleChange} />
+              {errors.resellerEmail && <p className="text-xs text-red-600">{errors.resellerEmail}</p>}
             </div>
             <div className="grid gap-2">
-              <Label>{L.contactPhone}</Label>
+              <Label>{t("contactPhone")}</Label>
               <Input name="resellerPhone" value={form.resellerPhone} onChange={handleChange} />
             </div>
           </div>
 
-          <div className="grid md:grid-cols-3 gap-4">
-            <div className="grid gap-2">
-              <Label required>{L.customerName}</Label>
-              <Input name="customerName" value={form.customerName} onChange={handleChange} />
-            </div>
-            <div className="grid gap-2">
-              <Label required>{L.customerCity}</Label>
-              <Input name="city" value={form.city} onChange={e=>{
-                const v=e.target.value; setForm(f=>({...f, city:v, customerLocation:`${v}${f.country?`, ${f.country}`:""}`}));
-              }}/>
-            </div>
-            <div className="grid gap-2">
-              <Label required>{L.customerCountry}</Label>
-              <Select name="country" value={form.country} onChange={e=>{
-                const v=e.target.value; setForm(f=>({...f, country:v, customerLocation:`${f.city||""}${v?`, ${v}`:""}`}));
-              }}>
-                <option value="">{L.selectCountry}</option>
-                <option>Indonesia</option><option>Singapore</option><option>Malaysia</option><option>Philippines</option>
-              </Select>
-            </div>
-          </div>
-
-          <div className="grid md:grid-cols-3 gap-4">
-            <div className="grid gap-2">
-              <Label>{L.mapOption}</Label>
-              <div className="flex gap-2">
-                <Input placeholder="lat" value={form.lat} onChange={e=>setForm(f=>({...f,lat:e.target.value}))}/>
-                <Input placeholder="lng" value={form.lng} onChange={e=>setForm(f=>({...f,lng:e.target.value}))}/>
-                <a className={"px-3 py-2 rounded-xl text-white text-sm "+BRAND.primaryBtn}
-                   href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((form.city||"")+","+(form.country||""))}`}
-                   target="_blank" rel="noreferrer">{L.openMap}</a>
-              </div>
-            </div>
-
-            <div className="grid gap-2 md:col-span-2">
-              <Label required>{L.solution}</Label>
-              <Select
-                value={form.solution || (form.solutionOther ? "__OTHER__" : "")}
-                onChange={(e)=>{
-                  const v=e.target.value;
-                  if(v==="__OTHER__"){ setForm(f=>({...f, solution:"__OTHER__"})); }
-                  else { setForm(f=>({...f, solution:v, solutionOther:""})); }
-                }}
-              >
-                <option value="">{isID ? "Pilih solusi" : "Select an Xgrids solution"}</option>
-                {XGRIDS_SOLUTIONS.map(s=><option key={s} value={s}>{s}</option>)}
-                <option value="__OTHER__">{L.other}</option>
-              </Select>
-              { (form.solution==="__OTHER__") && (
-                <Input placeholder={isID?"Tulis solusi lain…":"Type other solution…"}
-                       value={form.solutionOther}
-                       onChange={e=>setForm(f=>({...f, solutionOther:e.target.value}))}/>
-              )}
-              <a className="text-sky-700 underline text-xs" href="https://www.aptella.com/asia/product-brands/xgrids-asia/" target="_blank" rel="noreferrer">{L.learn}</a>
-            </div>
-          </div>
-
-          <div className="grid md:grid-cols-3 gap-4">
-            <div className="grid gap-2">
-              <Label>{L.expectedClose}</Label>
-              <Input type="date" name="expectedCloseDate" value={form.expectedCloseDate} onChange={handleChange}/>
-            </div>
-            <div className="grid gap-2">
-              <Label>{L.industry}</Label>
-              <Select name="industry" value={form.industry} onChange={handleChange}>
-                <option value="">{isID ? "Pilih industri" : "Select industry"}</option>
-                {INDUSTRIES.map(i=><option key={i} value={i}>{i}</option>)}
-              </Select>
-            </div>
-            <div className="grid gap-2">
-              <Label>{L.dealValue}</Label>
-              <Input type="number" name="value" step="0.01" min="0" value={form.value} onChange={handleChange}/>
-            </div>
-          </div>
-
-          <div className="grid md:grid-cols-3 gap-4">
-            <div className="grid gap-2">
-              <Label>{L.salesStage}</Label>
-              <Select name="stage" value={form.stage} onChange={handleChange}>
-                {STAGES.map(s=><option key={s.key} value={s.key}>{isID
-                  ? ({qualified:"Qualified",proposal:"Proposal",negotiation:"Negosiasi",won:"Menang",lost:"Kalah"}[s.key])
-                  : s.label}</option>)}
-              </Select>
-            </div>
-            <div className="grid gap-2">
-              <Label>{L.probability}</Label>
-              <Input type="number" min="0" max="100" name="probability" value={form.probability} onChange={handleChange}/>
-            </div>
-            <div className="grid gap-2">
-              <Label>{L.supportRequested}</Label>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
-                {SUPPORT_OPTIONS.map(opt=>(
-                  <label key={opt} className="text-sm flex items-center gap-2">
-                    <input type="checkbox" checked={form.supports.includes(opt)} onChange={()=>toggleSupport(opt)} /> {opt}
-                  </label>
-                ))}
-              </div>
-            </div>
-          </div>
-
+          {/* Row 3 */}
           <div className="grid md:grid-cols-2 gap-4">
             <div className="grid gap-2">
-              <Label>{L.competitors}</Label>
-              <Input name="competitors" value={form.competitors} onChange={handleChange} placeholder={isID?"Pisahkan dengan koma (opsional)":"Comma separated (optional)"}/>
+              <Label required>{t("customerName")}</Label>
+              <Input name="customerName" value={form.customerName} onChange={handleChange} />
+              {errors.customerName && <p className="text-xs text-red-600">{errors.customerName}</p>}
             </div>
             <div className="grid gap-2">
-              <Label required>{L.evidence}</Label>
-              <input id="evidenceFiles" type="file" multiple onChange={handleFiles}
-                     className="block w-full text-sm file:mr-4 file:rounded-lg file:border-0 file:bg-sky-50 file:px-3 file:py-2 file:text-sky-700"/>
-              <label className="text-sm inline-flex items-center gap-2 mt-1">
-                <input type="checkbox" checked={true} readOnly/>
-                {L.emailEvidence}
-              </label>
+              <Label required>{t("customerCountry")}</Label>
+              <Select
+                name="customerCountry"
+                value={form.customerCountry}
+                onChange={handleChange}
+              >
+                <option value="">{t("selectCountry")}</option>
+                {COUNTRIES.map((c) => (
+                  <option key={c}>{c}</option>
+                ))}
+              </Select>
+              {errors.customerCountry && <p className="text-xs text-red-600">{errors.customerCountry}</p>}
             </div>
           </div>
 
-          <div className="grid gap-2">
-            <Label>{L.notes}</Label>
-            <Textarea rows={4} name="notes" value={form.notes} onChange={handleChange} placeholder={isID?"Kebutuhan utama, ruang lingkup teknis, batasan pengiriman, proses keputusan, dll.":"Key requirements, scope, delivery constraints, decision process, etc."} />
+          {/* Row 4 */}
+          <div className="grid md:grid-cols-3 gap-4">
+            <div className="grid gap-2">
+              <Label required>{t("customerCity")}</Label>
+              <Input name="customerCity" value={form.customerCity} onChange={handleChange} />
+              {errors.customerCity && <p className="text-xs text-red-600">{errors.customerCity}</p>}
+            </div>
+            <div className="grid gap-2">
+              <Label required>{t("mapOption")}</Label>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="lat"
+                  name="lat"
+                  value={form.lat}
+                  onChange={handleChange}
+                />
+                <Input
+                  placeholder="lng"
+                  name="lng"
+                  value={form.lng}
+                  onChange={handleChange}
+                />
+                <a
+                  className={`px-3 py-2 rounded-lg text-white text-sm ${BRAND.primaryBtn}`}
+                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                    `${form.customerCity || ""}, ${form.customerCountry || ""}`
+                  )}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {t("openMap")}
+                </a>
+              </div>
+              {errors.lat && <p className="text-xs text-red-600">{errors.lat}</p>}
+            </div>
+
+            <div className="grid gap-2">
+              <Label required>{t("solutionOffered")}</Label>
+              <Select
+                name="solution"
+                value={form.solution}
+                onChange={handleChange}
+              >
+                <option value="">{t("selectSolution")}</option>
+                {XGRIDS_SOLUTIONS.map((s) => (
+                  <option key={s} value={s}>
+                    {s === "__OTHER__" ? "+ Other (type)" : s}
+                  </option>
+                ))}
+              </Select>
+              {form.solution === "__OTHER__" && (
+                <Input
+                  className="mt-2"
+                  placeholder={t("otherSolution")}
+                  name="solutionOther"
+                  value={form.solutionOther}
+                  onChange={handleChange}
+                />
+              )}
+              <a
+                className="text-sky-700 underline text-xs mt-1 inline-block"
+                href="https://www.aptella.com/asia/product-brands/xgrids-asia/"
+                target="_blank"
+                rel="noreferrer"
+              >
+                {t("learnXgrids")}
+              </a>
+              {errors.solution && <p className="text-xs text-red-600">{errors.solution}</p>}
+            </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            <label className="text-sm inline-flex items-center gap-2">
-              <input type="checkbox" name="accept" checked={!!form.accept} onChange={handleChange}/>
-              {L.consent}
+          {/* Row 5 */}
+          <div className="grid md:grid-cols-3 gap-4">
+            <div className="grid gap-2">
+              <Label required>{t("expectedClose")}</Label>
+              <Input
+                type="date"
+                name="expectedCloseDate"
+                value={form.expectedCloseDate}
+                onChange={handleChange}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label>{t("industry")}</Label>
+              <Select name="industry" value={form.industry} onChange={handleChange}>
+                <option value="">{locale === "id" ? "Pilih industri" : "Select industry"}</option>
+                {INDUSTRIES.map((i) => (
+                  <option key={i}>{i}</option>
+                ))}
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label>{t("dealValue")} ({form.currency})</Label>
+              <Input
+                type="number"
+                step="0.01"
+                min="0"
+                name="value"
+                value={form.value}
+                onChange={handleChange}
+              />
+              {errors.value && <p className="text-xs text-red-600">{errors.value}</p>}
+            </div>
+          </div>
+
+          {/* Row 6 */}
+          <div className="grid md:grid-cols-3 gap-4">
+            <div className="grid gap-2">
+              <Label>{t("stage")}</Label>
+              <Select name="stage" value={form.stage} onChange={handleChange}>
+                {STAGES.map((s) => (
+                  <option key={s.key} value={s.key}>
+                    {s.label}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label>{t("probability")}</Label>
+              <Input
+                type="number"
+                min="0"
+                max="100"
+                name="probability"
+                value={form.probability}
+                onChange={handleChange}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label>{t("competitors")}</Label>
+              <Input
+                placeholder={locale === "id" ? "Pisahkan dengan koma (opsional)" : "Comma separated (optional)"}
+                name="competitors"
+                value={form.competitors.join(", ")}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, competitors: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) }))
+                }
+              />
+            </div>
+          </div>
+
+          {/* Support */}
+          <div className="grid gap-2">
+            <Label>{t("supportRequested")}</Label>
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
+              {SUPPORT_OPTIONS.map((opt) => (
+                <label key={opt} className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={form.supports.includes(opt)}
+                    onChange={() => toggleSupport(opt)}
+                  />
+                  {opt}
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {/* Evidence */}
+          <div className="grid gap-2">
+            <Label required>{t("evidence")}</Label>
+            <div className="grid md:grid-cols-3 gap-3">
+              <div className="md:col-span-2">
+                <input
+                  id="evidenceFiles"
+                  type="file"
+                  multiple
+                  onChange={handleFiles}
+                  className="block w-full text-sm file:mr-4 file:rounded-lg file:border-0 file:bg-sky-50 file:px-3 file:py-2 file:text-sky-700"
+                />
+                {errors.evidence && <p className="text-xs text-red-600 mt-1">{errors.evidence}</p>}
+              </div>
+            </div>
+            <label className="flex items-center gap-2 text-sm mt-1">
+              <input type="checkbox" checked readOnly />
+              {t("emailEvidence")}
             </label>
           </div>
 
+          {/* Notes */}
+          <div className="grid gap-2">
+            <Label>{t("notes")}</Label>
+            <Textarea
+              rows={4}
+              name="notes"
+              value={form.notes}
+              onChange={handleChange}
+              placeholder={
+                locale === "id"
+                  ? "Persyaratan utama, ruang lingkup teknis, kendala pengiriman, proses keputusan, dll."
+                  : "Key requirements, technical scope, delivery constraints, decision process, etc."
+              }
+            />
+          </div>
+
+          {/* Consent */}
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" name="accept" checked={!!form.accept} onChange={handleChange} />
+            {t("consent")}
+          </label>
+          {errors.accept && <p className="text-xs text-red-600 -mt-3">{errors.accept}</p>}
+
+          {/* Actions */}
           <div className="flex items-center gap-3">
-            <button type="submit" className={"px-4 py-2 rounded-xl text-white "+BRAND.primaryBtn}>{L.submit}</button>
-            <button type="button" className="px-4 py-2 rounded-xl bg-gray-200" onClick={()=>window.location.reload()}>{L.reset}</button>
+            <button type="submit" className={`px-4 py-2 rounded-xl text-white ${BRAND.primaryBtn}`}>
+              {t("submit")}
+            </button>
+            <button
+              type="button"
+              className="px-4 py-2 rounded-xl bg-gray-200"
+              onClick={() => window.location.reload()}
+            >
+              {t("reset")}
+            </button>
           </div>
         </form>
       </CardBody>
@@ -518,195 +786,522 @@ function SubmissionForm({ onLocalAdd, onSyncOne }){
   );
 }
 
-/* =========================================================
-   Admin (unchanged from previous answer)
-   ========================================================= */
-function StatusChip({row}){
-  let cls=BRAND.chipPending, txt="pending";
-  if(row.status==="approved"){ cls=BRAND.chipApproved; txt="approved"; }
-  else if(row.status==="closed"||row.status==="lost"){ cls=BRAND.chipClosed; txt=row.status; }
-  else if(row.lockExpiry && daysUntil(row.lockExpiry)<=7){ cls=BRAND.chipWarn; txt="ending soon"; }
-  return <span className={"px-2 py-1 rounded-lg text-xs "+cls}>{txt}</span>;
-}
+/* =========================
+   ADMIN PANEL
+   ========================= */
 
-function AdminPanel({items,fx,onRefresh,onApprove,onClose,onOpenFx,onExportCSV}){
-  const totalAUD = useMemo(()=>{
-    const r=fx||{};
-    return (items||[]).reduce((sum,row)=>{
-      const rate = (row.currency==="AUD") ? 1 : (r[row.currency] || 0);
-      const v = Number(row.value||0) * (rate||0);
-      return sum + (isFinite(v)?v:0);
-    },0);
-  },[items,fx]);
+function AdminPanel() {
+  const [authed, setAuthed] = useState(false);
+  const [items, setItems] = useState([]);
+  const [ratesAUD, setRatesAUD] = useState(DEFAULT_RATES_AUD);
+  const [search, setSearch] = useState("");
+  const [countryFilter, setCountryFilter] = useState("All");
+  const [fxOpen, setFxOpen] = useState(false);
+  const mapRef = useRef(null);
+  const mapObj = useRef(null);
+  const clusterLayer = useRef(null);
+  const circlesLayer = useRef(null);
 
-  const mapRef=useRef(null), mapObj=useRef(null), group=useRef(null);
-  useEffect(()=>{
-    if(!mapRef.current || mapObj.current) return;
-    const L=window.L; if(!L) return;
-    mapObj.current=L.map(mapRef.current).setView([1.3521,103.8198],6);
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"&copy; OpenStreetMap contributors"}).addTo(mapObj.current);
-    group.current = L.markerClusterGroup ? L.markerClusterGroup({ showCoverageOnHover:false, disableClusteringAtZoom: 10 }) : L.layerGroup();
-    mapObj.current.addLayer(group.current);
-  },[]);
-  useEffect(()=>{
-    const L=window.L; if(!L || !mapObj.current || !group.current) return;
-    group.current.clearLayers();
-    const bounds=[];
-    for(const r of items){
-      if(!r.lat || !r.lng) continue;
-      const color = r.status==="approved" ? "#16a34a" : (r.status==="closed"||r.status==="lost") ? "#dc2626" :
-                    (r.lockExpiry && daysUntil(r.lockExpiry)<=7) ? "#f59e0b" : "#2563eb";
-      const icon = L.divIcon({
-        className:"status-dot",
-        html:`<div style="width:12px;height:12px;border-radius:50%;background:${color};border:2px solid white;box-shadow:0 0 0 1px ${color}"></div>`,
-        iconSize:[12,12]
-      });
-      const m=L.marker([r.lat,r.lng],{icon})
-        .bindPopup(`<div style="font-size:12px"><strong>${r.customerName||""}</strong><br/>${r.customerLocation||""}<br/>${r.solution||""}<br/>${r.currency||""} ${r.value||""}</div>`);
-      group.current.addLayer(m); bounds.push([r.lat,r.lng]);
+  async function refresh() {
+    try {
+      if (!GAS.BASE) throw new Error("Apps Script URL missing");
+      const res = await fetch(GAS.list(GAS.BASE));
+      const txt = await res.text();
+      let json = null;
+      try {
+        json = JSON.parse(txt);
+      } catch {}
+      if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status} ${res.statusText}`);
+      setItems(json.rows || []);
+      setRatesAUD({ ...DEFAULT_RATES_AUD, ...(json.fx || {}) });
+    } catch (e) {
+      alert(`Refresh failed: ${e?.message || e}`);
     }
-    if(bounds.length) mapObj.current.fitBounds(bounds,{padding:[30,30]});
-  },[items]);
+  }
+
+  useEffect(() => {
+    refresh();
+  }, []);
+
+  // Map render/update
+  useEffect(() => {
+    (async () => {
+      await loadLeaflet();
+      const L = window.L;
+      if (!mapObj.current) {
+        const map = L.map(mapRef.current).setView([1.3521, 103.8198], 6);
+        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+          maxZoom: 19,
+          attribution: "&copy; OpenStreetMap contributors",
+        }).addTo(map);
+        mapObj.current = map;
+      }
+      // Clear layers
+      if (clusterLayer.current) clusterLayer.current.remove();
+      if (circlesLayer.current) circlesLayer.current.remove();
+
+      const map = mapObj.current;
+      const cluster = L.markerClusterGroup();
+      const circles = L.layerGroup();
+
+      // Filtered set
+      const visible = filteredItems();
+
+      // group by city for circles (total AUD)
+      const groups = {};
+      for (const r of visible) {
+        const k = `${r.city}|${r.country}|${r.lat}|${r.lng}`;
+        const rate = ratesAUD[r.currency] || 0;
+        const aud = (Number(r.value || 0) * rate) || 0;
+        if (!groups[k]) groups[k] = { lat: Number(r.lat), lng: Number(r.lng), total: 0 };
+        groups[k].total += aud;
+      }
+      Object.values(groups).forEach((g) => {
+        const r = Math.sqrt(Math.max(g.total, 1)) * 10; // scale bubble
+        const c = L.circle([g.lat, g.lng], { radius: r, color: "#0e3446", fillColor: "#0e3446", fillOpacity: 0.15 });
+        c.bindTooltip(`${money(g.total)} AUD`, { permanent: false });
+        circles.addLayer(c);
+      });
+
+      visible.forEach((x) => {
+        if (!x.lat || !x.lng) return;
+        const m = L.marker([Number(x.lat), Number(x.lng)]);
+        const pill =
+          x.status === "approved"
+            ? `<span style="background:#d1fae5;color:#065f46;border:1px solid #a7f3d0;border-radius:999px;padding:2px 8px;font-size:11px;">approved</span>`
+            : x.status === "closed"
+            ? `<span style="background:#fee2e2;color:#991b1b;border:1px solid #fecaca;border-radius:999px;padding:2px 8px;font-size:11px;">closed</span>`
+            : `<span style="background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:999px;padding:2px 8px;font-size:11px;">pending</span>`;
+        m.bindPopup(
+          `<div style="font-weight:600;margin-bottom:4px">${x.customerName}</div>
+           <div style="font-size:12px;color:#334155">${x.customerLocation}</div>
+           <div style="font-size:12px;margin-top:6px">${x.solution} • ${x.currency} ${Number(x.value).toLocaleString()}</div>
+           <div style="margin-top:6px">${pill}</div>`
+        );
+        cluster.addLayer(m);
+      });
+
+      cluster.addTo(map);
+      circles.addTo(map);
+      clusterLayer.current = cluster;
+      circlesLayer.current = circles;
+
+      // Fit bounds
+      const bounds = cluster.getBounds();
+      if (bounds.isValid()) map.fitBounds(bounds.pad(0.2));
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items, ratesAUD, countryFilter, search]);
+
+  function filteredItems() {
+    let rows = items.slice();
+    if (countryFilter !== "All") rows = rows.filter((r) => (r.country || "").toLowerCase() === countryFilter.toLowerCase());
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      rows = rows.filter(
+        (r) =>
+          (r.customerName || "").toLowerCase().includes(q) ||
+          (r.solution || "").toLowerCase().includes(q) ||
+          (r.resellerName || "").toLowerCase().includes(q)
+      );
+    }
+    return rows;
+  }
+
+  const metrics = useMemo(() => {
+    const rows = filteredItems();
+    let total = 0;
+    let pending = 0;
+    let approved = 0;
+    rows.forEach((r) => {
+      const rate = ratesAUD[r.currency] || 0;
+      total += Number(r.value || 0) * rate;
+      if (r.status === "approved" || r.status === "locked") approved += 1;
+      else if (r.status !== "closed") pending += 1;
+    });
+    return { count: rows.length, total, pending, approved };
+  }, [items, ratesAUD, search, countryFilter]);
+
+  async function doUpdate(id, patch) {
+    try {
+      if (!GAS.BASE) throw new Error("Apps Script URL missing");
+      const res = await fetch(GAS.update(GAS.BASE), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, ...patch }),
+      });
+      const txt = await res.text();
+      let json = null;
+      try {
+        json = JSON.parse(txt);
+      } catch {}
+      if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status} ${res.statusText}`);
+      setItems((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+    } catch (e) {
+      alert(`Update failed: ${e?.message || e}`);
+    }
+  }
+
+  function exportCSV(rows) {
+    const cols = [
+      "id",
+      "submittedAt",
+      "resellerCountry",
+      "resellerLocation",
+      "resellerName",
+      "resellerContact",
+      "resellerEmail",
+      "resellerPhone",
+      "customerName",
+      "customerLocation",
+      "city",
+      "country",
+      "lat",
+      "lng",
+      "industry",
+      "currency",
+      "value",
+      "solution",
+      "stage",
+      "probability",
+      "expectedCloseDate",
+      "status",
+      "lockExpiry",
+      "syncedAt",
+      "remindersOptIn",
+      "supports",
+      "competitors",
+      "notes",
+      "evidenceLinks",
+      "updates",
+    ];
+    const head = cols.join(",");
+    const body = rows
+      .map((x) =>
+        cols
+          .map((k) => {
+            const val = String(valOr(x[k], "")).replace(/\n/g, " ").replace(/"/g, '""');
+            return `"${val}"`;
+          })
+          .join(",")
+      )
+      .join("\n");
+    const blob = new Blob([head + "\n" + body], { type: "text/csv" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `registrations_${todayISO()}.csv`;
+    a.click();
+  }
+
+  // FX drawer
+  const FxDrawer = () =>
+    !fxOpen ? null : (
+      <div className="fixed inset-0 bg-black/40 z-[60] flex items-center justify-center">
+        <div className="bg-white rounded-2xl shadow-xl w-[min(720px,95vw)] p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold">FX Rates to AUD</h3>
+            <button onClick={() => setFxOpen(false)} className="px-2 py-1 rounded-lg bg-gray-100">
+              Close
+            </button>
+          </div>
+          <div className="space-y-2 max-h-[60vh] overflow-auto">
+            {Object.entries(ratesAUD).map(([cur, val]) => (
+              <div key={cur} className="grid grid-cols-3 gap-2 items-center">
+                <Input
+                  value={cur}
+                  onChange={(e) => {
+                    const n = e.target.value.toUpperCase();
+                    setRatesAUD((prev) => {
+                      const { [cur]: _, ...rest } = prev;
+                      return { ...rest, [n]: val };
+                    });
+                  }}
+                />
+                <Input
+                  type="number"
+                  step="0.000001"
+                  value={val}
+                  onChange={(e) => setRatesAUD((p) => ({ ...p, [cur]: Number(e.target.value) }))}
+                />
+                <button
+                  className="text-red-600 text-sm"
+                  onClick={() =>
+                    setRatesAUD((p) => {
+                      const cp = { ...p };
+                      delete cp[cur];
+                      return cp;
+                    })
+                  }
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
+            <button
+              className="text-sm px-3 py-1 rounded-md bg-gray-100"
+              onClick={() =>
+                setRatesAUD((p) => {
+                  const next = { ...p };
+                  if (!next.USD) next.USD = 1.5;
+                  return next;
+                })
+              }
+            >
+              Add Row
+            </button>
+          </div>
+          <div className="mt-4 flex justify-end gap-2">
+            <button onClick={() => setFxOpen(false)} className="px-3 py-1.5 rounded-lg bg-gray-100">
+              Cancel
+            </button>
+            <button
+              onClick={async () => {
+                try {
+                  if (!GAS.BASE) throw new Error("Apps Script URL missing");
+                  const res = await fetch(GAS.fxSet(GAS.BASE), {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ fx: ratesAUD }),
+                  });
+                  const txt = await res.text();
+                  let json = null;
+                  try {
+                    json = JSON.parse(txt);
+                  } catch {}
+                  if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status} ${res.statusText}`);
+                  alert("FX saved.");
+                  setFxOpen(false);
+                } catch (e) {
+                  alert(`FX save failed: ${e?.message || e}`);
+                }
+              }}
+              className={`px-3 py-1.5 rounded-lg text-white ${BRAND.primaryBtn}`}
+            >
+              Save
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+
+  if (!authed) {
+    return (
+      <Card className="mt-6">
+        <CardHeader title="Admin Access" subtitle="Enter password to manage registrations." />
+        <CardBody>
+          <AuthGate onUnlock={() => setAuthed(true)} />
+        </CardBody>
+      </Card>
+    );
+  }
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <button onClick={onRefresh} className={"px-3 py-2 rounded-lg text-white "+BRAND.primaryBtn}>Refresh</button>
-        <button onClick={onExportCSV} className="px-3 py-2 rounded-lg bg-gray-100">Export CSV</button>
-        <button onClick={onOpenFx} className="px-3 py-2 rounded-lg bg-[#f0a03a] text-white">FX Settings</button>
-        <div className="ml-auto text-sm text-slate-600">Total value (AUD): <span className="font-semibold">A$ {totalAUD.toLocaleString()}</span></div>
-      </div>
+    <>
+      <FxDrawer />
+      <Card className="mt-6">
+        <CardHeader
+          title="Register opportunities within the next 60 days"
+          right={
+            <div className="flex gap-2">
+              <button onClick={refresh} className={`px-3 py-2 rounded-lg text-white ${BRAND.primaryBtn}`}>
+                Refresh
+              </button>
+              <button onClick={() => exportCSV(filteredItems())} className="px-3 py-2 rounded-lg btn-ghost">
+                Export CSV
+              </button>
+              <button onClick={async () => {
+                try {
+                  if (!GAS.BASE) throw new Error("Apps Script URL missing");
+                  // Pull FX from GAS (optional quick fetch)
+                  const res = await fetch(GAS.fxGet(GAS.BASE));
+                  const txt = await res.text();
+                  let json=null; try{ json=JSON.parse(txt); }catch{}
+                  if (json?.ok && json.fx) setRatesAUD({ ...DEFAULT_RATES_AUD, ...json.fx });
+                  setFxOpen(true);
+                } catch {
+                  setFxOpen(true);
+                }
+              }} className="px-3 py-2 rounded-lg btn-ghost">
+                FX Settings
+              </button>
+            </div>
+          }
+        />
+        <CardBody>
+          <div className="grid md:grid-cols-4 gap-4 mb-4">
+            <Metric title="Total registrations" value={metrics.count} />
+            <Metric title="Pending review" value={metrics.pending} />
+            <Metric title="Approved / locked" value={metrics.approved} />
+            <Metric title="Total value (AUD)" value={money(metrics.total)} />
+          </div>
 
-      <div className="h-[420px] rounded-2xl overflow-hidden border" ref={mapRef} />
+          <div className="flex items-center gap-3 mb-3">
+            <Input placeholder="Search..." value={search} onChange={(e) => setSearch(e.target.value)} />
+            <Select value={countryFilter} onChange={(e) => setCountryFilter(e.target.value)} style={{ maxWidth: 220 }}>
+              <option>All</option>
+              {COUNTRIES.map((c) => (
+                <option key={c}>{c}</option>
+              ))}
+            </Select>
+          </div>
 
-      <div className="overflow-x-auto">
-        <table className="min-w-full text-sm">
-          <thead>
-            <tr className="bg-gray-100 text-gray-700">
-              <th className="p-3 text-left">Submitted</th>
-              <th className="p-3 text-left">Customer</th>
-              <th className="p-3 text-left">Location</th>
-              <th className="p-3 text-left">Solution</th>
-              <th className="p-3 text-left">Value</th>
-              <th className="p-3 text-left">Stage</th>
-              <th className="p-3 text-left">Status</th>
-              <th className="p-3 text-left">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map(r=>(
-              <tr key={r.id} className="border-b">
-                <td className="p-3">{r.submittedAt}</td>
-                <td className="p-3">{r.customerName}</td>
-                <td className="p-3">{r.customerLocation}</td>
-                <td className="p-3">{r.solution}</td>
-                <td className="p-3">{(r.currency||"")+" "+(r.value||"")}</td>
-                <td className="p-3">{r.stage}</td>
-                <td className="p-3"><StatusChip row={r}/></td>
-                <td className="p-3 space-x-2">
-                  <button onClick={()=>onApprove(r)} className="px-2.5 py-1.5 rounded-lg bg-green-600 text-white">Approve</button>
-                  <button onClick={()=>onClose(r)} className="px-2.5 py-1.5 rounded-lg bg-gray-200">Close</button>
-                </td>
-              </tr>
-            ))}
-            {items.length===0 && <tr><td className="p-4 text-sm text-gray-500" colSpan={8}>No rows.</td></tr>}
-          </tbody>
-        </table>
-      </div>
+          <div ref={mapRef} style={{ height: 420 }} className="w-full mb-4"></div>
+
+          {/* Table */}
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="p-3 text-left">Submitted</th>
+                  <th className="p-3 text-left">Customer</th>
+                  <th className="p-3 text-left">Location</th>
+                  <th className="p-3 text-left">Solution</th>
+                  <th className="p-3 text-left">Value</th>
+                  <th className="p-3 text-left">Stage</th>
+                  <th className="p-3 text-left">Status</th>
+                  <th className="p-3 text-left">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredItems().map((r) => (
+                  <tr key={r.id} className="border-b">
+                    <td className="p-3">{r.submittedAt || ""}</td>
+                    <td className="p-3">{r.customerName || ""}</td>
+                    <td className="p-3">{r.customerLocation || ""}</td>
+                    <td className="p-3">{r.solution || ""}</td>
+                    <td className="p-3">
+                      {r.currency} {Number(r.value || 0).toLocaleString()}{" "}
+                      <span className="text-slate-400">({money((ratesAUD[r.currency] || 0) * (Number(r.value) || 0))})</span>
+                    </td>
+                    <td className="p-3">{r.stage || ""}</td>
+                    <td className="p-3">
+                      <span className={statusPill(r.status || "pending")}>{r.status || "pending"}</span>
+                    </td>
+                    <td className="p-3 space-x-2">
+                      <button
+                        onClick={() => doUpdate(r.id, { status: "approved" })}
+                        className="px-2.5 py-1.5 rounded-lg text-white bg-green-600 hover:bg-green-700"
+                      >
+                        Approve
+                      </button>
+                      <button
+                        onClick={() => doUpdate(r.id, { status: "closed" })}
+                        className="px-2.5 py-1.5 rounded-lg text-white bg-gray-600 hover:bg-gray-700"
+                      >
+                        Close
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {filteredItems().length === 0 && (
+                  <tr>
+                    <td className="p-6 text-slate-500" colSpan={8}>
+                      No rows.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </CardBody>
+      </Card>
+    </>
+  );
+}
+
+function Metric({ title, value }) {
+  return (
+    <div className="rounded-xl border p-4 bg-white">
+      <div className="text-xs uppercase tracking-wide text-slate-500">{title}</div>
+      <div className="text-xl font-semibold mt-1">{value}</div>
     </div>
   );
 }
 
-/* =========================================================
-   Root
-   ========================================================= */
-export default function App(){
-  const [tab,setTab]         = useState("reseller");
-  const [authed,setAuthed]   = useState(false);
-  const [items,setItems]     = useState([]);
-  const [fx,setFx]           = useState({});
-  const [fxOpen,setFxOpen]   = useState(false);
-  const [savingFx,setSaving] = useState(false);
+function AuthGate({ onUnlock }) {
+  const [pw, setPw] = useState("");
+  return (
+    <div className="flex items-center gap-3">
+      <Input type="password" placeholder="Admin password" value={pw} onChange={(e) => setPw(e.target.value)} />
+      <button
+        className={`px-3 py-2 rounded-lg text-white ${BRAND.primaryBtn}`}
+        onClick={() => {
+          if (pw === ADMIN_PASSWORD) onUnlock?.();
+          else alert("Incorrect password.");
+        }}
+      >
+        Sign in
+      </button>
+    </div>
+  );
+}
 
-  function onLocalAdd(r){ setItems(p=>[r,...p]); }
+/* =========================
+   ROOT
+   ========================= */
 
-  async function onSyncOne(payload){
-    await gasPOST("submit", payload);
-    setItems(p=>p.map(x=>x.id===payload.id?{...x,syncedAt:todayISO()}:x));
-  }
+function AptellaRoot() {
+  const [tab, setTab] = useState("reseller");
+  const [authed, setAuthed] = useState(false);
+  const [items, setItems] = useState([]);
 
-  async function refresh(){
-    try{ const {rows}=await gasGET({action:"list"}); setItems(Array.isArray(rows)?rows:[]); }
-    catch(e){ alert("Refresh failed: "+(e?.message||e)); }
-  }
-
-  async function approve(row){
-    try{
-      await gasPOST("update",{id:row.id,status:"approved",lockDays:60});
-      setItems(p=>p.map(r=>r.id===row.id?{...r,status:"approved"}:r));
-    }catch(e){ alert("Update failed: "+(e?.message||e)); }
-  }
-  async function closeRow(row){
-    try{
-      await gasPOST("update",{id:row.id,status:"closed"});
-      setItems(p=>p.map(r=>r.id===row.id?{...r,status:"closed"}:r));
-    }catch(e){ alert("Update failed: "+(e?.message||e)); }
-  }
-
-  function exportCSV(){
-    const cols=["id","submittedAt","resellerCountry","resellerLocation","resellerName","resellerContact","resellerEmail","resellerPhone","customerName","customerLocation","city","country","lat","lng","industry","currency","value","solution","stage","probability","expectedCloseDate","status","lockExpiry","syncedAt","confidential","remindersOptIn","supports","competitors","notes","evidenceLinks","updates"];
-    const head=cols.join(",");
-    const body=(items||[]).map(x=>cols.map(k=>{
-      const val=(x[k]==null?"":String(x[k])).replace(/\n/g," ").replace(/"/g,'""');
-      return `"${val}"`;
-    }).join(",")).join("\n");
-    const blob=new Blob([head+"\n"+body],{type:"text/csv"});
-    const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="aptella-registrations.csv"; a.click(); URL.revokeObjectURL(a.href);
-  }
-
-  async function openFx(){
-    setFxOpen(true);
-    try{ const {ratesAUD}=await gasGET({action:"fx"}); setFx(ratesAUD||{}); }
-    catch(e){ alert("Could not load FX: "+(e?.message||e)); }
-  }
-  async function saveFx(newFx){
-    setSaving(true);
-    try{ const {ratesAUD}=await gasPOST("fx",{ratesAUD:newFx}); setFx(ratesAUD||{}); setFxOpen(false); }
-    catch(e){ alert("FX save failed: "+(e?.message||e)); }
-    finally{ setSaving(false); }
-  }
-
-  function login(){
-    const pwd=prompt("Enter admin password:"); if(pwd===ADMIN_PASSWORD){ setAuthed(true); refresh(); } else alert("Incorrect password.");
+  function onSavedLocal(r) {
+    setItems((prev) => [r, ...prev]);
   }
 
   return (
-    <div className="min-h-screen bg-[#f7fafc] text-slate-900">
-      <div className="border-b bg-white">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+    <div>
+      {/* NAV */}
+      <div className="nav-wrap bg-white">
+        <div className="nav-inner flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <img src={"aptella-logo.png"} alt="Aptella" className="h-7"/>
-            <div className="text-sm text-slate-500">Master Distributor • Xgrids</div>
+            <img src={"aptella-logo.png"} alt="Aptella" className="brand-logo" />
+            <div className="brand-badge">Master Distributor • Xgrids</div>
           </div>
           <div className="flex items-center gap-2">
-            <button className={"px-3 py-2 rounded-lg "+(tab==="reseller"?"bg-[#0e3446] text-white":"bg-gray-100 text-[#0e3446]")} onClick={()=>setTab("reseller")}>Reseller</button>
-            <button className={"px-3 py-2 rounded-lg "+(tab==="admin"?"bg-[#0e3446] text-white":"bg-gray-100 text-[#0e3446]")} onClick={()=>setTab("admin")}>Admin</button>
-            {authed ? <button className="px-3 py-2 rounded-lg bg-gray-100" onClick={()=>setAuthed(false)}>Logout</button>
-                    : <button className="px-3 py-2 rounded-lg bg-gray-100" onClick={login}>Login</button>}
+            <button
+              className={`px-3 py-2 rounded-lg ${tab === "reseller" ? "btn-primary text-white" : "btn-ghost"}`}
+              onClick={() => setTab("reseller")}
+            >
+              Reseller
+            </button>
+            <button
+              className={`px-3 py-2 rounded-lg ${tab === "admin" ? "btn-primary text-white" : "btn-ghost"}`}
+              onClick={() => setTab("admin")}
+            >
+              Admin
+            </button>
+            {authed ? (
+              <button className="px-3 py-2 rounded-lg btn-ghost" onClick={() => setAuthed(false)}>
+                Logout
+              </button>
+            ) : (
+              <button className="px-3 py-2 rounded-lg btn-ghost" onClick={() => setAuthed(true)}>
+                Login
+              </button>
+            )}
           </div>
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 py-6">
-        {tab==="reseller" && <SubmissionForm onLocalAdd={onLocalAdd} onSyncOne={onSyncOne} />}
-        {tab==="admin" && (
-          authed
-          ? <AdminPanel items={items} fx={fx} onRefresh={refresh} onApprove={approve} onClose={closeRow} onOpenFx={openFx} onExportCSV={exportCSV}/>
-          : <Card><CardBody>Enter the admin password to continue.</CardBody></Card>
-        )}
+      {/* HERO */}
+      <div className="hero">
+        <div className="hero-inner">
+          <h1 className="text-2xl md:text-3xl">Reseller Deal Registration</h1>
+          <p className="mt-1 text-sm md:text-base">Register opportunities within the next 60 days</p>
+        </div>
       </div>
 
-      <FxDrawer open={fxOpen} onClose={()=>setFxOpen(false)} ratesAUD={fx} onSave={saveFx} saving={savingFx} />
+      {/* CONTENT */}
+      <div className="max-w-6xl mx-auto px-4">
+        {tab === "reseller" ? (
+          <SubmissionForm onSavedLocal={onSavedLocal} />
+        ) : (
+          <AdminPanel />
+        )}
+      </div>
     </div>
   );
 }
+
+export default AptellaRoot;
