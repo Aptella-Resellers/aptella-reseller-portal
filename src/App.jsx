@@ -6,7 +6,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 
 const GAS = {
   // <-- Set this to your live Web App URL
-  BASE: (typeof GOOGLE_APPS_SCRIPT_URL !== "undefined" && GOOGLE_APPS_SCRIPT_URL) || "",
+  BASE: (typeof GOOGLE_APPS_SCRIPT_URL !== "undefined" && GOOGLE_APPS_SCRIPT_URL) || "https://script.google.com/macros/s/AKfycbw3O_GnYcTx4bRYdFD2vCSs26L_Gzl2ZIZd18dyJmZAEE442hvhqp7j1C4W6cFX_DWM/exec",
   list: (base) => `${base}?action=list`,
   submit: (base) => `${base}?action=submit`,
   update: (base) => `${base}?action=update`,
