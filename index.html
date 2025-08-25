@@ -1,17 +1,14 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <meta charset="UTF-8" />
+    <meta charset="utf-8" />
     <meta
       name="viewport"
       content="width=device-width, initial-scale=1, viewport-fit=cover"
     />
-    <title>Aptella – Reseller Deal Registration</title>
+    <title>Aptella — Reseller Deal Registration</title>
 
-    <!-- Brand favicon (optional) -->
-    <link rel="icon" href="/aptella-logo.png" />
-
-    <!-- Leaflet (map) -->
+    <!-- Leaflet + MarkerCluster via CDN (no bundling headaches) -->
     <link
       rel="stylesheet"
       href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
@@ -24,31 +21,20 @@
       crossorigin=""
     ></script>
 
-    <!-- Base styles (no Tailwind needed) -->
-    <link rel="stylesheet" href="/src/index.css" />
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"
+    />
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"
+    />
+    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+
+    <link rel="icon" href="/favicon.ico" />
   </head>
   <body>
-    <!-- Top brand bar -->
-    <header class="brandbar">
-      <div class="brandbar-inner">
-        <img
-          src="/aptella-logo.png"
-          alt="Aptella"
-          class="brand-logo"
-          decoding="async"
-        />
-        <div class="brand-meta">
-          <span>Master Distributor</span>
-          <span class="sep">•</span>
-          <span>Xgrids</span>
-        </div>
-      </div>
-    </header>
-
-    <!-- App root -->
     <div id="root"></div>
-
-    <!-- Your bundle -->
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
