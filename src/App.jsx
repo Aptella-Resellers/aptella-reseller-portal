@@ -1,8 +1,16 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 
-/** --------- CONFIG --------- */
+/* =========================================================
+   CONFIG
+   ======================================================= */
 const GAS_URL =
   "https://script.google.com/macros/s/AKfycbw3O_GnYcTx4bRYdFD2vCSs26L_Gzl2ZIZd18dyJmZAEE442hvhqp7j1C4W6cFX_DWM/exec";
+
+const ADMIN_PASSWORD = "aptella-admin"; // <— change to your real password
+const EMAIL_EVIDENCE = "admin.asia@aptella.com";
+
+// try not to inline huge payloads; if files exceed this we fallback
+const MAX_INLINE_ATTACH_MB = 8;
 
 const BRAND = {
   primaryBtn: "btn-navy",
@@ -36,7 +44,7 @@ const XGRIDS_SOLUTIONS = [
   "Xgrids Drone Kit",
 ];
 
-/** Capital defaults for lat/lng */
+/** Default lat/lng for capitals */
 const CAPITALS = {
   Singapore: [1.3521, 103.8198],
   Indonesia: [-6.2088, 106.8456],
@@ -44,9 +52,9 @@ const CAPITALS = {
   Philippines: [14.5995, 120.9842],
 };
 
-const EMAIL_EVIDENCE = "admin.asia@aptella.com";
-
-/** Utilities */
+/* =========================================================
+   UTILITIES
+   ======================================================= */
 const today = () => {
   const d = new Date();
   const m = String(d.getMonth() + 1).padStart(2, "0");
@@ -90,7 +98,17 @@ async function fetchJson(url, opts = {}) {
   return json;
 }
 
-/** ------------------ Reseller Form ------------------ */
+/* =========================================================
+   LOGIN / AUTH HELPERS
+   ======================================================= */
+const AUTH_KEY = "aptella_admin_ok";
+const isAuthed = () => localStorage.getItem(AUTH_KEY) === "1";
+const setAuthed = (v) =>
+  v ? localStorage.setItem(AUTH_KEY, "1") : localStorage.removeItem(AUTH_KEY);
+
+/* =========================================================
+   R E S E L L E R   F O R M
+   ======================================================= */
 function ResellerForm({ onSubmitted }) {
   const [form, setForm] = useState({
     resellerCountry: "",
@@ -118,7 +136,6 @@ function ResellerForm({ onSubmitted }) {
     evidenceFiles: [],
     emailEvidence: true,
   });
-
   const [errors, setErrors] = useState({});
 
   /** default lat/lng on country pick */
@@ -184,25 +201,45 @@ function ResellerForm({ onSubmitted }) {
     e.preventDefault();
     if (!validate()) return;
 
-    const payload = {
+    // compute total size
+    const totalBytes = (form.evidenceFiles || []).reduce((n, f) => n + (f.size || 0), 0);
+    const totalMB = totalBytes / (1024 * 1024);
+
+    const payloadBase = {
       id: uid(),
       submittedAt: today(),
       ...form,
       value: Number(form.value),
-      attachments: form.evidenceFiles?.length
-        ? await filesToBase64(form.evidenceFiles)
-        : [],
     };
 
+    // 1) Try full JSON (with attachments) if "small enough"
     try {
+      const payload =
+        totalMB > MAX_INLINE_ATTACH_MB
+          ? { ...payloadBase, attachments: [] } // skip if huge
+          : {
+              ...payloadBase,
+              attachments: await filesToBase64(form.evidenceFiles || []),
+            };
+
       await fetchJson(`${GAS_URL}?action=submit`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      alert("Submitted. Synced to Google Sheets.");
-      onSubmitted?.(payload);
-      // reset
+
+      if (totalMB > MAX_INLINE_ATTACH_MB && form.evidenceFiles?.length) {
+        alert(
+          `Submitted. Attachments not sent because total size (${totalMB.toFixed(
+            1
+          )}MB) is large. Please email the files to ${EMAIL_EVIDENCE}.`
+        );
+      } else {
+        alert("Submitted. Synced to Google Sheets.");
+      }
+
+      onSubmitted?.(payloadBase);
+      // reset (keep country/currency for convenience)
       setForm((f) => ({
         ...f,
         resellerName: "",
@@ -211,7 +248,6 @@ function ResellerForm({ onSubmitted }) {
         resellerPhone: "",
         customerName: "",
         customerCity: "",
-        currency: f.currency,
         value: "",
         solution: "",
         solutionOther: "",
@@ -223,8 +259,41 @@ function ResellerForm({ onSubmitted }) {
         notes: "",
         evidenceFiles: [],
       }));
+      return;
     } catch (err) {
-      alert(`Submitted locally. Google Sheets sync failed: ${err.message}`);
+      // 2) Fallback: send only meta; ask user to email files
+      try {
+        await fetchJson(`${GAS_URL}?action=submit`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...payloadBase, attachments: [] }),
+        });
+        alert(
+          `Submitted (metadata only). Please email evidence files to ${EMAIL_EVIDENCE}.\nReason: ${err.message}`
+        );
+        onSubmitted?.(payloadBase);
+        setForm((f) => ({
+          ...f,
+          resellerName: "",
+          resellerContact: "",
+          resellerEmail: "",
+          resellerPhone: "",
+          customerName: "",
+          customerCity: "",
+          value: "",
+          solution: "",
+          solutionOther: "",
+          industry: "",
+          stage: "Qualified",
+          probability: 35,
+          lat: "",
+          lng: "",
+          notes: "",
+          evidenceFiles: [],
+        }));
+      } catch (err2) {
+        alert(`Submitted locally. Google Sheets sync failed: ${err2.message}`);
+      }
     }
   };
 
@@ -235,6 +304,7 @@ function ResellerForm({ onSubmitted }) {
     <div className="container">
       <div className="card card-pad">
         <h2 style={{ margin: "0 0 12px 0" }}>Reseller Deal Registration</h2>
+
         <form onSubmit={submit} className="grid grid-2">
           {/* Reseller country (orange accent) */}
           <div>
@@ -356,7 +426,6 @@ function ResellerForm({ onSubmitted }) {
             </select>
           </div>
 
-          {/* Solution + Industry */}
           <div>
             <label>{t("Solution offered (Xgrids) *", "Solusi Xgrids *")}</label>
             <select
@@ -407,7 +476,7 @@ function ResellerForm({ onSubmitted }) {
             </select>
           </div>
 
-          {/* Expected close date + Open Map placed UNDER it */}
+          {/* Expected close date + Open Map + lat/lng */}
           <div>
             <label>{t("Expected close date *", "Perkiraan tanggal penutupan *")}</label>
             <input
@@ -463,7 +532,6 @@ function ResellerForm({ onSubmitted }) {
             />
           </div>
 
-          {/* Stage / Probability */}
           <div>
             <label>{t("Sales stage", "Tahap penjualan")}</label>
             <select name="stage" value={form.stage} onChange={handle} className="input">
@@ -571,7 +639,7 @@ function ResellerForm({ onSubmitted }) {
           </div>
 
           <div style={{ gridColumn: "1 / -1", display: "flex", gap: 10 }}>
-            <button className={`btn ${BRAND.primaryBtn}`} type="submit">
+            <button className={"btn " + BRAND.primaryBtn} type="submit">
               Submit Registration
             </button>
             <button
@@ -597,18 +665,24 @@ function ResellerForm({ onSubmitted }) {
             >
               Reset
             </button>
-        </div>
+          </div>
         </form>
       </div>
     </div>
   );
 }
 
-/** ------------------ Admin ------------------ */
+/* =========================================================
+   A D M I N   P A N E L  (search + sort + auth)
+   ======================================================= */
 function AdminPanel() {
   const [rows, setRows] = useState([]);
   const [fxOpen, setFxOpen] = useState(false);
   const [fx, setFx] = useState({ SGD: 1.05, IDR: 0.00009 });
+  const [q, setQ] = useState("");
+  const [sortKey, setSortKey] = useState("submittedAt");
+  const [sortDir, setSortDir] = useState("desc"); // asc | desc
+
   const mapRef = useRef(null);
   const leafletRef = useRef(null);
 
@@ -626,21 +700,21 @@ function AdminPanel() {
   const initMap = () => {
     try {
       const L = window.L;
-      if (!L) return;
-      if (!mapRef.current) return;
+      if (!L || !mapRef.current) return;
 
       if (leafletRef.current) {
         leafletRef.current.remove();
         leafletRef.current = null;
       }
-      const m = L.map(mapRef.current).setView([ -2.5, 118 ], 5);
+      const m = L.map(mapRef.current).setView([-2.5, 118], 5);
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         maxZoom: 18,
-        attribution: '&copy; OpenStreetMap contributors',
+        attribution: "&copy; OpenStreetMap contributors",
       }).addTo(m);
 
-      (rows || []).forEach(r => {
-        const lat = Number(r.lat), lng = Number(r.lng);
+      (rows || []).forEach((r) => {
+        const lat = Number(r.lat),
+          lng = Number(r.lng);
         if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
         const marker = L.marker([lat, lng]).addTo(m);
         marker.bindPopup(
@@ -648,23 +722,71 @@ function AdminPanel() {
         );
       });
       leafletRef.current = m;
-    } catch {/* ignore */}
+    } catch {
+      /* ignore */
+    }
   };
 
-  useEffect(() => { refresh(); /* eslint-disable */ }, []);
+  useEffect(() => {
+    refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    initMap();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows]);
 
   const totalAUD = useMemo(() => {
-    // If row.currency !== AUD, convert using fx (to AUD)
     let sum = 0;
-    rows.forEach(r => {
+    rows.forEach((r) => {
       const v = Number(r.value || 0);
       const cur = r.currency || "AUD";
       if (cur === "AUD") sum += v;
       else if (fx && fx[cur]) sum += v * Number(fx[cur]);
-      else sum += v; // fallback
+      else sum += v;
     });
     return Math.round(sum * 100) / 100;
   }, [rows, fx]);
+
+  const filtered = useMemo(() => {
+    const term = q.trim().toLowerCase();
+    let arr = [...rows];
+    if (term) {
+      arr = arr.filter((r) => {
+        const fields = [
+          r.customerName,
+          r.customerLocation,
+          r.solution,
+          r.stage,
+          r.status,
+        ]
+          .join(" ")
+          .toLowerCase();
+        return fields.includes(term);
+      });
+    }
+    const key = sortKey;
+    arr.sort((a, b) => {
+      let va = a[key],
+        vb = b[key];
+      // numeric for value
+      if (key === "value") {
+        va = Number(va || 0);
+        vb = Number(vb || 0);
+      } else if (key === "submittedAt" || key === "expectedCloseDate") {
+        va = new Date(va || 0).getTime();
+        vb = new Date(vb || 0).getTime();
+      } else {
+        va = String(va || "");
+        vb = String(vb || "");
+      }
+      if (va < vb) return sortDir === "asc" ? -1 : 1;
+      if (va > vb) return sortDir === "asc" ? 1 : -1;
+      return 0;
+    });
+    return arr;
+  }, [rows, q, sortKey, sortDir]);
 
   const approveRow = async (id) => {
     try {
@@ -673,7 +795,9 @@ function AdminPanel() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id }),
       });
-      setRows(prev => prev.map(r => r.id === id ? { ...r, status: "approved" } : r));
+      setRows((prev) =>
+        prev.map((r) => (r.id === id ? { ...r, status: "approved" } : r))
+      );
     } catch (e) {
       alert(`Update failed: ${e.message}`);
     }
@@ -685,7 +809,9 @@ function AdminPanel() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id }),
       });
-      setRows(prev => prev.map(r => r.id === id ? { ...r, status: "closed" } : r));
+      setRows((prev) =>
+        prev.map((r) => (r.id === id ? { ...r, status: "closed" } : r))
+      );
     } catch (e) {
       alert(`Update failed: ${e.message}`);
     }
@@ -704,16 +830,74 @@ function AdminPanel() {
     }
   };
 
+  const SortTh = ({ k, children }) => (
+    <th
+      onClick={() => {
+        if (sortKey === k) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+        else {
+          setSortKey(k);
+          setSortDir("asc");
+        }
+      }}
+      style={{ cursor: "pointer", userSelect: "none" }}
+      title="Click to sort"
+    >
+      {children}{" "}
+      {sortKey === k ? (sortDir === "asc" ? "▲" : "▼") : <span style={{ opacity: 0.3 }}>↕</span>}
+    </th>
+  );
+
   return (
     <div className="container">
-      {/* Stats row */}
-      <div className="stats" style={{ marginBottom: 12 }}>
-        <div className="stat"><div className="k">Total registrations</div><div className="v">{rows.length || 0}</div></div>
-        <div className="stat"><div className="k">Pending review</div><div className="v">{rows.filter(r=>!r.status || r.status==='pending').length}</div></div>
-        <div className="stat"><div className="k">Total value (AUD)</div><div className="v">A$ {totalAUD.toLocaleString()}</div></div>
-        <div style={{ marginLeft:"auto", display:"flex", gap:8 }}>
-          <button className="btn btn-navy" onClick={refresh}>Refresh</button>
-          <button className="btn btn-ghost" onClick={()=>setFxOpen(true)}>FX Settings</button>
+      {/* Top strip: search + buttons */}
+      <div className="card card-pad" style={{ marginBottom: 12 }}>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+          <input
+            className="input"
+            placeholder="Search customer / location / solution…"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            style={{ minWidth: 260 }}
+          />
+          <select
+            className="input"
+            value={`${sortKey}:${sortDir}`}
+            onChange={(e) => {
+              const [k, d] = e.target.value.split(":");
+              setSortKey(k);
+              setSortDir(d);
+            }}
+          >
+            <option value="submittedAt:desc">Submitted (newest)</option>
+            <option value="submittedAt:asc">Submitted (oldest)</option>
+            <option value="expectedCloseDate:asc">Expected (earliest)</option>
+            <option value="expectedCloseDate:desc">Expected (latest)</option>
+            <option value="customerName:asc">Customer (A→Z)</option>
+            <option value="customerName:desc">Customer (Z→A)</option>
+            <option value="customerLocation:asc">Location (A→Z)</option>
+            <option value="customerLocation:desc">Location (Z→A)</option>
+            <option value="solution:asc">Solution (A→Z)</option>
+            <option value="solution:desc">Solution (Z→A)</option>
+            <option value="value:desc">Value (high→low)</option>
+            <option value="value:asc">Value (low→high)</option>
+            <option value="stage:asc">Stage (A→Z)</option>
+            <option value="stage:desc">Stage (Z→A)</option>
+            <option value="status:asc">Status (A→Z)</option>
+            <option value="status:desc">Status (Z→A)</option>
+          </select>
+
+          <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+            <div className="stat">
+              <div className="k">Total (AUD)</div>
+              <div className="v">A$ {totalAUD.toLocaleString()}</div>
+            </div>
+            <button className="btn btn-navy" onClick={refresh}>
+              Refresh
+            </button>
+            <button className="btn btn-ghost" onClick={() => setFxOpen(true)}>
+              FX Settings
+            </button>
+          </div>
         </div>
       </div>
 
@@ -724,55 +908,72 @@ function AdminPanel() {
         </div>
 
         <div className="admin-table card">
-          <div className="card-pad" style={{ paddingBottom:0 }}>
-            <div style={{ overflowX:"auto" }}>
+          <div className="card-pad" style={{ paddingBottom: 0 }}>
+            <div style={{ overflowX: "auto" }}>
               <table className="table">
                 <thead>
                   <tr>
-                    <th>Submitted</th>
-                    <th>Expected</th>
-                    <th>Customer</th>
-                    <th>Location</th>
-                    <th>Solution</th>
-                    <th>Value</th>
-                    <th>Stage</th>
-                    <th>Status</th>
+                    <SortTh k="submittedAt">Submitted</SortTh>
+                    <SortTh k="expectedCloseDate">Expected</SortTh>
+                    <SortTh k="customerName">Customer</SortTh>
+                    <SortTh k="customerLocation">Location</SortTh>
+                    <SortTh k="solution">Solution</SortTh>
+                    <SortTh k="value">Value</SortTh>
+                    <SortTh k="stage">Stage</SortTh>
+                    <SortTh k="status">Status</SortTh>
                     <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {(rows||[]).length === 0 ? (
-                    <tr><td colSpan={9} style={{ padding:16, color:'#6b7280' }}>No rows match the filters.</td></tr>
-                  ) : (rows.map(r => (
-                    <tr key={r.id}>
-                      <td>{niceDate(r.submittedAt)}</td>
-                      <td>{niceDate(r.expectedCloseDate)}</td>
-                      <td>{r.customerName || "-"}</td>
-                      <td>{r.customerLocation || "-"}</td>
-                      <td>{r.solution === "Other" ? (r.solutionOther || "Other") : (r.solution || "-")}</td>
-                      <td>
-                        {r.currency || "AUD"} {Number(r.value||0).toLocaleString()}
-                      </td>
-                      <td>{r.stage || "-"}</td>
-                      <td>
-                        {r.status === "approved" ? (
-                          <span className="badge badge-green">approved</span>
-                        ) : r.status === "closed" ? (
-                          <span className="badge badge-red">closed</span>
-                        ) : (
-                          <span className="badge badge-blue">pending</span>
-                        )}
-                      </td>
-                      <td style={{ display:"flex", gap:8 }}>
-                        {r.status !== "approved" && r.status !== "closed" && (
-                          <button className="btn btn-orange" onClick={()=>approveRow(r.id)}>Approve</button>
-                        )}
-                        {r.status !== "closed" && (
-                          <button className="btn btn-ghost" onClick={()=>closeRow(r.id)}>Close</button>
-                        )}
+                  {filtered.length === 0 ? (
+                    <tr>
+                      <td colSpan={9} style={{ padding: 16, color: "#6b7280" }}>
+                        No rows match the filters.
                       </td>
                     </tr>
-                  )))}
+                  ) : (
+                    filtered.map((r) => (
+                      <tr key={r.id}>
+                        <td>{niceDate(r.submittedAt)}</td>
+                        <td>{niceDate(r.expectedCloseDate)}</td>
+                        <td>{r.customerName || "-"}</td>
+                        <td>{r.customerLocation || "-"}</td>
+                        <td>
+                          {r.solution === "Other"
+                            ? r.solutionOther || "Other"
+                            : r.solution || "-"}
+                        </td>
+                        <td>
+                          {r.currency || "AUD"} {Number(r.value || 0).toLocaleString()}
+                        </td>
+                        <td>{r.stage || "-"}</td>
+                        <td>
+                          {r.status === "approved" ? (
+                            <span className="badge badge-green">approved</span>
+                          ) : r.status === "closed" ? (
+                            <span className="badge badge-red">closed</span>
+                          ) : (
+                            <span className="badge badge-blue">pending</span>
+                          )}
+                        </td>
+                        <td style={{ display: "flex", gap: 8 }}>
+                          {r.status !== "approved" && r.status !== "closed" && (
+                            <button
+                              className="btn btn-orange"
+                              onClick={() => approveRow(r.id)}
+                            >
+                              Approve
+                            </button>
+                          )}
+                          {r.status !== "closed" && (
+                            <button className="btn btn-ghost" onClick={() => closeRow(r.id)}>
+                              Close
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
@@ -782,33 +983,76 @@ function AdminPanel() {
 
       {/* FX Settings modal */}
       {fxOpen && (
-        <div className="modal" onClick={()=>setFxOpen(false)}>
-          <div className="modal-card" onClick={e=>e.stopPropagation()}>
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-              <h3 style={{ margin:0 }}>FX Rates → AUD</h3>
-              <button className="btn btn-ghost" onClick={()=>setFxOpen(false)}>Close</button>
+        <div className="modal" onClick={() => setFxOpen(false)}>
+          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+            <div
+              style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}
+            >
+              <h3 style={{ margin: 0 }}>FX Rates → AUD</h3>
+              <button className="btn btn-ghost" onClick={() => setFxOpen(false)}>
+                Close
+              </button>
             </div>
-            <div style={{ marginTop:12 }}>
-              {Object.entries(fx).map(([k,v])=>(
-                <div key={k} style={{ display:"grid", gridTemplateColumns:"140px 1fr auto", gap:8, marginBottom:8 }}>
-                  <input className="input" value={k} onChange={e=>{
-                    const nk = e.target.value.toUpperCase();
-                    setFx(cur=>{
-                      const copy = {...cur}; const val = copy[k]; delete copy[k]; copy[nk] = val; return copy;
-                    });
-                  }}/>
-                  <input className="input" type="number" step="0.000001" value={v}
-                    onChange={e=>setFx(cur=>({ ...cur, [k]: Number(e.target.value) }))}/>
-                  <button className="btn btn-ghost" onClick={()=>setFx(cur=>{ const copy={...cur}; delete copy[k]; return copy; })}>
+            <div style={{ marginTop: 12 }}>
+              {Object.entries(fx).map(([k, v]) => (
+                <div
+                  key={k}
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "140px 1fr auto",
+                    gap: 8,
+                    marginBottom: 8,
+                  }}
+                >
+                  <input
+                    className="input"
+                    value={k}
+                    onChange={(e) => {
+                      const nk = e.target.value.toUpperCase();
+                      setFx((cur) => {
+                        const copy = { ...cur };
+                        const val = copy[k];
+                        delete copy[k];
+                        copy[nk] = val;
+                        return copy;
+                      });
+                    }}
+                  />
+                  <input
+                    className="input"
+                    type="number"
+                    step="0.000001"
+                    value={v}
+                    onChange={(e) => setFx((cur) => ({ ...cur, [k]: Number(e.target.value) }))}
+                  />
+                  <button
+                    className="btn btn-ghost"
+                    onClick={() =>
+                      setFx((cur) => {
+                        const copy = { ...cur };
+                        delete copy[k];
+                        return copy;
+                      })
+                    }
+                  >
                     Remove
                   </button>
                 </div>
               ))}
-              <button className="btn btn-ghost" onClick={()=>setFx(cur=>({ ...cur, USD: cur.USD || 0.67 }))}>Add Row</button>
+              <button
+                className="btn btn-ghost"
+                onClick={() => setFx((cur) => ({ ...cur, USD: cur.USD || 0.67 }))}
+              >
+                Add Row
+              </button>
             </div>
-            <div style={{ display:"flex", justifyContent:"flex-end", gap:8, marginTop:12 }}>
-              <button className="btn btn-ghost" onClick={()=>setFxOpen(false)}>Cancel</button>
-              <button className="btn btn-navy" onClick={saveFx}>Save</button>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 12 }}>
+              <button className="btn btn-ghost" onClick={() => setFxOpen(false)}>
+                Cancel
+              </button>
+              <button className="btn btn-navy" onClick={saveFx}>
+                Save
+              </button>
             </div>
           </div>
         </div>
@@ -817,14 +1061,36 @@ function AdminPanel() {
   );
 }
 
-/** ------------------ Shell (tabs) ------------------ */
+/* =========================================================
+   S H E L L  (tabs + auth)
+   ======================================================= */
 function Shell() {
   const [tab, setTab] = useState("reseller"); // reseller | admin
+  const [authed, setAuth] = useState(isAuthed());
+  const [askPass, setAskPass] = useState(false);
+  const [pass, setPass] = useState("");
+
+  const doLogin = () => {
+    if (pass === ADMIN_PASSWORD) {
+      setAuthed(true);
+      setAuth(true);
+      setAskPass(false);
+      setPass("");
+      setTab("admin");
+    } else {
+      alert("Incorrect password.");
+    }
+  };
+  const doLogout = () => {
+    setAuthed(false);
+    setAuth(false);
+    setTab("reseller");
+  };
 
   return (
     <>
-      <div className="container" style={{ paddingTop:0 }}>
-        <div className="pills" style={{ justifyContent:"flex-end" }}>
+      <div className="container" style={{ paddingTop: 0 }}>
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
           <button
             className={"pill " + (tab === "reseller" ? "is-active-reseller" : "")}
             onClick={() => setTab("reseller")}
@@ -833,17 +1099,56 @@ function Shell() {
           </button>
           <button
             className={"pill " + (tab === "admin" ? "is-active-admin" : "")}
-            onClick={() => setTab("admin")}
+            onClick={() => {
+              if (!authed) setAskPass(true);
+              else setTab("admin");
+            }}
           >
             Admin
           </button>
+          {authed ? (
+            <button className="pill" onClick={doLogout}>
+              Logout
+            </button>
+          ) : (
+            <button className="pill" onClick={() => setAskPass(true)}>
+              Login
+            </button>
+          )}
         </div>
       </div>
 
       {tab === "reseller" ? (
-        <ResellerForm onSubmitted={()=>{/* no-op */}} />
-      ) : (
+        <ResellerForm onSubmitted={() => {}} />
+      ) : authed ? (
         <AdminPanel />
+      ) : (
+        <div className="container">
+          <div className="card card-pad">Please log in to access the Admin panel.</div>
+        </div>
+      )}
+
+      {askPass && (
+        <div className="modal" onClick={() => setAskPass(false)}>
+          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ marginTop: 0 }}>Admin Login</h3>
+            <input
+              className="input"
+              type="password"
+              value={pass}
+              onChange={(e) => setPass(e.target.value)}
+              placeholder="Enter admin password"
+            />
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 12 }}>
+              <button className="btn btn-ghost" onClick={() => setAskPass(false)}>
+                Cancel
+              </button>
+              <button className="btn btn-navy" onClick={doLogin}>
+                Sign in
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </>
   );
