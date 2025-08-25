@@ -6,40 +6,21 @@
       name="viewport"
       content="width=device-width, initial-scale=1, viewport-fit=cover"
     />
-    <meta name="theme-color" content="#0e3446" />
-    <title>Aptella — Reseller Deal Registration</title>
+    <title>Aptella • Reseller Deal Registration</title>
 
-    <!-- Favicon / icons (served from public/) -->
-    <link rel="icon" type="image/png" href="/aptella-reseller-portal/aptella-logo.png" />
-    <link rel="apple-touch-icon" href="/aptella-reseller-portal/aptella-logo.png" />
+    <!-- Brand font (optional) -->
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
 
-    <!-- System font stack for speed -->
-    <style>
-      html,body { height: 100%; }
-      body {
-        margin: 0;
-        font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto,
-          Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
-        color: #0f172a;
-        background: #f6f9fb;
-      }
-      /* Nice fade-in while React mounts */
-      #root{opacity:0;transition:opacity .25s ease}
-      #root.ready{opacity:1}
-    </style>
+    <!-- You do NOT need Leaflet CSS here if you import it inside App.jsx; leaving this out keeps the build simpler -->
   </head>
   <body>
-    <noscript>This app requires JavaScript to run.</noscript>
     <div id="root"></div>
-
-    <!-- Vite entry -->
-    <script type="module">
-      import '/aptella-reseller-portal/src/main.jsx';
-      // lift the fade-in
-      window.addEventListener('DOMContentLoaded', () => {
-        const r = document.getElementById('root');
-        r && r.classList.add('ready');
-      });
-    </script>
+    <!-- IMPORTANT: the entry must be /src/main.jsx (root-relative), not /aptella-reseller-portal/src/main.jsx -->
+    <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
