@@ -2,25 +2,13 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1, viewport-fit=cover"
-    />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>Aptella • Reseller Deal Registration</title>
-
-    <!-- Brand font (optional) -->
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"
-      rel="stylesheet"
-    />
-
-    <!-- You do NOT need Leaflet CSS here if you import it inside App.jsx; leaving this out keeps the build simpler -->
   </head>
   <body>
     <div id="root"></div>
-    <!-- IMPORTANT: the entry must be /src/main.jsx (root-relative), not /aptella-reseller-portal/src/main.jsx -->
+    <!-- IMPORTANT: do NOT prefix with /aptella-reseller-portal/ -->
     <script type="module" src="/src/main.jsx"></script>
+    <!-- (You can also use: <script type="module" src="./src/main.jsx"></script>) -->
   </body>
 </html>
