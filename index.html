@@ -4,48 +4,42 @@
     <meta charset="UTF-8" />
     <meta
       name="viewport"
-      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
     />
+    <meta name="theme-color" content="#0e3446" />
     <title>Aptella — Reseller Deal Registration</title>
-    <link rel="icon" href="/favicon.ico" />
+
+    <!-- Favicon / icons (served from public/) -->
+    <link rel="icon" type="image/png" href="/aptella-reseller-portal/aptella-logo.png" />
+    <link rel="apple-touch-icon" href="/aptella-reseller-portal/aptella-logo.png" />
+
+    <!-- System font stack for speed -->
     <style>
-      :root{
-        --aptella-navy:#0e3446;
-        --aptella-navy-dark:#0b2938;
-        --aptella-orange:#f0a03a;
-        --bg:#f6f9fb;
+      html,body { height: 100%; }
+      body {
+        margin: 0;
+        font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto,
+          Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+        color: #0f172a;
+        background: #f6f9fb;
       }
-      html,body{height:100%;}
-      body{margin:0;background:var(--bg);color:#0f172a;font-family:Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;}
-      .nav-wrap{border-bottom:1px solid #e5e7eb;}
-      .nav-inner{max-width:1152px;margin:0 auto;padding:14px 16px;}
-      .brand-logo-lg{height:48px; /* bigger logo */
-        filter: drop-shadow(0 1px 0 rgba(0,0,0,.05));
-      }
-      .brand-badge{font-size:12px;color:#64748b;border-left:1px solid #e5e7eb;padding-left:10px}
-      .hero{
-        background:linear-gradient(135deg, var(--aptella-navy) 0%, #12384c 65%, #0e3446 100%);
-        color:white;
-      }
-      .hero-inner{max-width:1152px;margin:0 auto;padding:26px 16px 24px 16px;}
-      .card{box-shadow:0 8px 24px rgba(2,8,23,.06),0 1px 2px rgba(2,8,23,.05);border:1px solid #e5e7eb;}
-      .btn-primary{background:var(--aptella-navy);}
-      .btn-primary:hover{background:var(--aptella-navy-dark);}
-      .btn-ghost{background:white;border:1px solid #e5e7eb}
-      .thead-orange th{color:var(--aptella-orange);font-weight:600;border-bottom:1px solid #fde6c5}
-      /* inputs feel like aptella.com */
-      label[aria-required="true"]::after{content:" *";color:#ef4444}
-      input[type="text"],input[type="email"],input[type="number"],input[type="date"],select,textarea{
-        background:#fff;border-color:#e5e7eb;
-      }
-      input[aria-invalid="true"],select[aria-invalid="true"],textarea[aria-invalid="true"]{border-color:#ef4444}
-      /* subtle orange accents on reseller */
-      a, .link{color:var(--aptella-orange)}
-      .file-accent::-webkit-file-upload-button{background:#fff5e9;border:1px solid #fed7aa;color:#b45309}
+      /* Nice fade-in while React mounts */
+      #root{opacity:0;transition:opacity .25s ease}
+      #root.ready{opacity:1}
     </style>
   </head>
   <body>
+    <noscript>This app requires JavaScript to run.</noscript>
     <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
+
+    <!-- Vite entry -->
+    <script type="module">
+      import '/aptella-reseller-portal/src/main.jsx';
+      // lift the fade-in
+      window.addEventListener('DOMContentLoaded', () => {
+        const r = document.getElementById('root');
+        r && r.classList.add('ready');
+      });
+    </script>
   </body>
 </html>
