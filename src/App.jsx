@@ -1,88 +1,32 @@
-// src/App.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import logoUrl from "./assets/aptella-logo.svg"; // make sure this file exists
+import logoUrl from "./assets/aptella-logo.svg";
 
-/***** CONFIG *****/
-const GAS_URL =
-  "https://script.google.com/macros/s/AKfycbw3O_GnYcTx4bRYdFD2vCSs26L_Gzl2ZIZd18dyJmZAEE442hvhqp7j1C4W6cFX_DWM/exec";
-const ADMIN_PASSWORD = "Aptella2025!"; // simple frontend gate only
+/** =========================
+ * Config & simple constants
+ * ========================= */
+const GAS_URL = "https://script.google.com/macros/s/AKfycbw3O_GnYcTx4bRYdFD2vCSs26L_Gzl2ZIZd18dyJmZAEE442hvhqp7j1C4W6cFX_DWM/exec";
+const ADMIN_PASSWORD = "Aptella2025!";
 
-// Aptella brand (use hex so no Tailwind config is required)
-const BRAND = {
+const APTELLA = {
   navy: "#0e3446",
   navyDark: "#0b2938",
-  orange: "#f0a03a",
-  primaryBtn: "bg-[#0e3446] hover:bg-[#0b2938]",
-  orangeBtn: "bg-[#f0a03a] hover:brightness-95",
+  orange: "#f39b33", // close to aptella.com orange
+  orangeDark: "#d9851f",
 };
 
-/***** UTILITIES *****/
-const todayLocalISO = () => {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${dd}`;
-};
-const addDays = (dateISO, days) => {
-  const d = new Date(dateISO);
-  d.setDate(d.getDate() + Number(days || 0));
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${dd}`;
-};
-const withinNext60Days = (dateISO) => {
-  if (!dateISO) return false;
-  const today = new Date(todayLocalISO());
-  const target = new Date(dateISO);
-  const diffDays = (target - today) / (1000 * 60 * 60 * 24);
-  return diffDays >= 0 && diffDays <= 60;
-};
-const uid = () =>
-  Math.random().toString(36).slice(2) + Date.now().toString(36);
+const COUNTRIES = [
+  { name: "Select Country", code: "", currency: "", capital: "", lat: null, lng: null },
+  { name: "Singapore", code: "SG", currency: "SGD", capital: "Singapore", lat: 1.3521, lng: 103.8198 },
+  { name: "Malaysia", code: "MY", currency: "MYR", capital: "Kuala Lumpur", lat: 3.139, lng: 101.6869 },
+  { name: "Indonesia", code: "ID", currency: "IDR", capital: "Jakarta", lat: -6.2088, lng: 106.8456 },
+  { name: "Philippines", code: "PH", currency: "PHP", capital: "Manila", lat: 14.5995, lng: 120.9842 },
+];
 
-async function getJSON(url) {
-  const res = await fetch(url, { method: "GET" });
-  const text = await res.text();
-  let json = null;
-  try {
-    json = JSON.parse(text);
-  } catch {
-    throw new Error(`Bad JSON: ${text.slice(0, 200)}`);
-  }
-  if (!res.ok || json?.ok === false) {
-    throw new Error(json?.error || `HTTP ${res.status} ${res.statusText}`);
-  }
-  return json;
-}
-async function postJSON(url, body) {
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body || {}),
-  });
-  const text = await res.text();
-  let json = null;
-  try {
-    json = JSON.parse(text);
-  } catch {
-    throw new Error(`Bad JSON: ${text.slice(0, 200)}`);
-  }
-  if (!res.ok || json?.ok === false) {
-    throw new Error(json?.error || `HTTP ${res.status} ${res.statusText}`);
-  }
-  return json;
-}
+const INDUSTRIES = [
+  "Construction", "Oil & Gas", "Mining", "Telecom", "Government",
+  "Education", "Utilities", "Transportation", "Manufacturing", "Other",
+];
 
-/***** DOMAIN CONSTANTS *****/
-const COUNTRY_CONFIG = {
-  Singapore: { capital: "Singapore", currency: "SGD", lat: 1.3521, lng: 103.8198 },
-  Malaysia: { capital: "Kuala Lumpur", currency: "MYR", lat: 3.139, lng: 101.6869 },
-  Indonesia: { capital: "Jakarta", currency: "IDR", lat: -6.2088, lng: 106.8456 },
-  Philippines: { capital: "Manila", currency: "PHP", lat: 14.5995, lng: 120.9842 },
-};
-const CURRENCIES = ["SGD", "MYR", "IDR", "PHP", "AUD", "USD"];
 const STAGES = [
   { key: "qualified", label: "Qualified" },
   { key: "proposal", label: "Proposal" },
@@ -90,572 +34,471 @@ const STAGES = [
   { key: "won", label: "Won" },
   { key: "lost", label: "Lost" },
 ];
+
 const PROB_BY_STAGE = { qualified: 35, proposal: 55, negotiation: 70, won: 100, lost: 0 };
 
-// Xgrids solutions + "Other"
-const XGRIDS_SOLUTIONS = ["Xgrids L2 PRO", "Xgrids K1", "Xgrids PortalCam", "Xgrids Drone Kit", "Other"];
-const INDUSTRIES = [
-  "Architecture, Engineering, Construction",
-  "Mining",
-  "Oil & Gas",
-  "Utilities / Energy",
-  "Government",
-  "Telecoms",
-  "Transport / Logistics",
-  "Education",
-  "Other",
+const SUPPORT_OPTIONS = [
+  "Pre-sales engineer",
+  "Demo / loan unit",
+  "Pricing exception",
+  "Marketing materials",
+  "Partner training",
+  "On-site customer visit",
+  "Extended lock request",
 ];
 
-/***** LEAFLET LOADER (CDN, no bundler import) *****/
-let _leafletPromise;
-function loadLeaflet() {
-  if (window.L) return Promise.resolve(window.L);
-  if (_leafletPromise) return _leafletPromise;
-  _leafletPromise = new Promise((resolve, reject) => {
-    const css = document.createElement("link");
-    css.rel = "stylesheet";
-    css.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
-    document.head.appendChild(css);
+// Bahasa map for key labels
+const I18N_ID = {
+  "Reseller Country": "Negara Anda",
+  "Reseller Location": "Lokasi Reseller",
+  "Currency": "Mata Uang",
+  "Reseller company": "Perusahaan Reseller",
+  "Primary contact": "Kontak Utama",
+  "Contact email": "Email Kontak",
+  "Contact phone": "Telepon Kontak",
+  "Customer name": "Nama Pelanggan",
+  "Customer City": "Kota Pelanggan",
+  "Customer Country": "Negara Pelanggan",
+  "Map option (paste lat, lng or click helper)":
+    "Opsi peta (tempel lat, lng atau klik pembantu)",
+  "Tip: use the link to pick a point, copy coordinates back here.":
+    "Tip: gunakan tautan untuk memilih titik, salin koordinat kembali di sini.",
+  "Solution offered (Xgrids)": "Solusi yang ditawarkan (Xgrids)",
+  "Expected close date": "Perkiraan tanggal penutupan",
+  "Industry": "Industri",
+  "Deal value": "Nilai transaksi",
+  "Sales stage": "Tahap penjualan",
+  "Probability (%)": "Probabilitas (%)",
+  "Competitors": "Pesaing",
+  "Support requested": "Dukungan dibutuhkan",
+  "Evidence (required)": "Bukti (wajib)",
+  "Notes": "Catatan",
+  "Send me reminders for updates": "Kirim pengingat untuk pembaruan",
+  "Submit Registration": "Kirim Pendaftaran",
+};
 
-    const s = document.createElement("script");
-    s.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
-    s.async = true;
-    s.onload = () => resolve(window.L);
-    s.onerror = () => reject(new Error("Leaflet failed to load"));
-    document.body.appendChild(s);
+const XGRIDS_SOLUTIONS = [
+  "Xgrids L2 PRO",
+  "Xgrids K1",
+  "Xgrids PortalCam",
+  "Xgrids Drone Kit",
+  "Other…" // triggers free text field
+];
+
+/** =========================
+ * Utilities
+ * ========================= */
+const fmtDate = (d) => {
+  try {
+    const x = new Date(d);
+    const y = x.getFullYear();
+    const m = String(x.getMonth() + 1).padStart(2, "0");
+    const dd = String(x.getDate()).padStart(2, "0");
+    return `${y}-${m}-${dd}`;
+  } catch {
+    return d || "";
+  }
+};
+const todayISO = () => fmtDate(new Date());
+const daysUntil = (iso) => {
+  const t = new Date(fmtDate(iso));
+  const n = new Date(fmtDate(new Date()));
+  return Math.round((t - n) / (1000 * 60 * 60 * 24));
+};
+
+const loadLeafletOnce = (() => {
+  let p;
+  return () => {
+    if (window.L) return Promise.resolve(window.L);
+    if (p) return p;
+    p = new Promise((resolve, reject) => {
+      const css = document.createElement("link");
+      css.rel = "stylesheet";
+      css.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+      document.head.appendChild(css);
+
+      const s = document.createElement("script");
+      s.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+      s.onload = () => resolve(window.L);
+      s.onerror = () => reject(new Error("Leaflet failed to load"));
+      document.body.appendChild(s);
+    });
+    return p;
+  };
+})();
+
+/** Fetch helpers that always return JSON or throw */
+async function getJSON(url) {
+  const res = await fetch(url, { method: "GET", mode: "cors", cache: "no-cache", credentials: "omit" });
+  const text = await res.text();
+  let json = null;
+  try { json = JSON.parse(text); } catch { throw new Error(`Bad JSON: ${text.slice(0,200)}`); }
+  if (!res.ok || json?.ok === false) throw new Error(json?.error || `HTTP ${res.status} ${res.statusText}`);
+  return json;
+}
+async function postJSON(url, body) {
+  const res = await fetch(url, {
+    method: "POST",
+    mode: "cors",
+    cache: "no-cache",
+    credentials: "omit",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body || {}),
   });
-  return _leafletPromise;
+  const text = await res.text();
+  let json = null;
+  try { json = JSON.parse(text); } catch { throw new Error(`Bad JSON: ${text.slice(0,200)}`); }
+  if (!res.ok || json?.ok === false) throw new Error(json?.error || `HTTP ${res.status} ${res.statusText}`);
+  return json;
 }
 
-/***** SMALL UI PRIMITIVES *****/
-const Card = ({ children }) => (
-  <div className="rounded-2xl border border-gray-200 bg-white shadow-sm">{children}</div>
-);
-const CardHeader = ({ title, subtitle, right }) => (
-  <div className="flex items-center justify-between p-4 border-b">
-    <div>
-      <h3 className="text-lg font-semibold text-[#0e3446]">{title}</h3>
-      {subtitle && <p className="text-xs text-gray-500">{subtitle}</p>}
-    </div>
-    {right}
-  </div>
-);
-const CardBody = ({ children }) => <div className="p-4">{children}</div>;
-const Label = ({ children, required, htmlFor }) => (
-  <label htmlFor={htmlFor} className="text-sm font-medium text-[#0e3446]">
-    {children} {required && <span className="text-red-600">*</span>}
-  </label>
-);
-const Input = (props) => (
-  <input
-    {...props}
-    className={
-      "px-3 py-2 rounded-xl border focus:outline-none focus:ring-2 focus:ring-[#0e3446] " +
-      (props.className || "")
-    }
-  />
-);
-const Select = (props) => (
-  <select
-    {...props}
-    className={
-      "px-3 py-2 rounded-xl border bg-white focus:outline-none focus:ring-2 focus:ring-[#0e3446] " +
-      (props.className || "")
-    }
-  />
-);
-const Textarea = (props) => (
-  <textarea
-    {...props}
-    className={
-      "px-3 py-2 rounded-xl border focus:outline-none focus:ring-2 focus:ring-[#0e3446] " +
-      (props.className || "")
-    }
-  />
-);
-
-/***** FX SETTINGS DRAWER *****/
-function AdminSettings({ open, onClose, rows, onChange, onSave, saving }) {
-  if (!open) return null;
+/** =========================
+ * Branding shell
+ * ========================= */
+function Shell({ children }) {
   return (
-    <div className="fixed inset-0 z-[9999] bg-black/40 flex items-center justify-center">
-      <div className="bg-white w-[min(680px,95vw)] rounded-2xl shadow-xl">
-        <CardHeader
-          title="FX Rates → AUD"
-          subtitle="Used for Value (AUD) calculation"
-          right={
-            <button onClick={onClose} className="px-3 py-1.5 rounded-lg bg-gray-100">
-              Close
-            </button>
-          }
-        />
-        <CardBody>
-          <div className="grid grid-cols-3 gap-2 text-sm font-medium mb-2">
-            <div>Currency</div>
-            <div>Rate to AUD</div>
-            <div></div>
-          </div>
-          {(rows || []).map((r, idx) => (
-            <div key={idx} className="grid grid-cols-3 gap-2 items-center mb-1">
-              <Input
-                value={r.ccy}
-                onChange={(e) => {
-                  const val = e.target.value.toUpperCase();
-                  const copy = [...rows];
-                  copy[idx] = { ...copy[idx], ccy: val };
-                  onChange(copy);
-                }}
-              />
-              <Input
-                type="number"
-                step="0.000001"
-                value={r.rateToAUD}
-                onChange={(e) => {
-                  const val = Number(e.target.value);
-                  const copy = [...rows];
-                  copy[idx] = { ...copy[idx], rateToAUD: isNaN(val) ? "" : val };
-                  onChange(copy);
-                }}
-              />
-              <button
-                className="text-red-600 text-sm"
-                onClick={() => {
-                  const copy = rows.filter((_, j) => j !== idx);
-                  onChange(copy);
-                }}
-              >
-                Remove
-              </button>
+    <div className="min-h-screen" style={{ background: "#f7fafc", color: "#0f172a" }}>
+      <header className="w-full bg-white border-b" style={{ borderColor: "#e5e7eb" }}>
+        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <img src={logoUrl} alt="Aptella" className="h-10 w-auto" />
+            <div>
+              <div className="text-2xl font-bold tracking-tight" style={{ color: APTELLA.navy }}>
+                Aptella Master Distributor
+              </div>
+              <div className="text-sm" style={{ color: "#334155" }}>
+                Reseller Deal Registration Portal
+              </div>
             </div>
-          ))}
-          <div className="mt-2 flex justify-between">
-            <button
-              className="px-3 py-1.5 rounded-lg bg-gray-100"
-              onClick={() => onChange([...(rows || []), { ccy: "SGD", rateToAUD: 1.0 }])}
-            >
-              Add Row
-            </button>
-            <button
-              disabled={saving}
-              onClick={onSave}
-              className={`px-3 py-1.5 rounded-lg text-white ${BRAND.primaryBtn}`}
-            >
-              {saving ? "Saving…" : "Save FX"}
-            </button>
           </div>
-        </CardBody>
-      </div>
+        </div>
+      </header>
+      <main className="max-w-7xl mx-auto px-4 py-6">{children}</main>
     </div>
   );
 }
 
-/***** SUBMISSION FORM *****/
-function SubmissionForm({ onLocalSave, onSyncOne, existingItems, onLocale }) {
-  const [form, setForm] = useState({
-    resellerCountry: "",
-    resellerLocation: "",
-    resellerName: "",
-    resellerContact: "",
-    resellerEmail: "",
-    resellerPhone: "",
-    customerName: "",
-    customerLocation: "",
-    city: "",
-    country: "",
-    lat: "",
-    lng: "",
-    industry: "",
-    currency: "",
-    value: "",
-    solution: "",
-    solutionOther: "",
-    stage: "qualified",
-    probability: PROB_BY_STAGE["qualified"],
-    expectedCloseDate: addDays(todayLocalISO(), 14),
-    competitors: [],
-    notes: "",
-    evidenceLinks: [],
-    remindersOptIn: false,
-    accept: false,
+/** =========================
+ * Reseller Form
+ * ========================= */
+function ResellerForm({ onSubmitted, onSyncOne }) {
+  const [form, setForm] = useState(() => {
+    const def = COUNTRIES[0];
+    return {
+      resellerCountry: def.name,
+      resellerLocation: "",
+      currency: "",
+      lat: def.lat,
+      lng: def.lng,
+
+      resellerName: "",
+      resellerContact: "",
+      resellerEmail: "",
+      resellerPhone: "",
+
+      customerName: "",
+      city: "",
+      country: "",
+      customerLocation: "",
+
+      industry: "",
+      value: "",
+      solution: "",
+      solutionOther: "",
+      stage: "qualified",
+      probability: PROB_BY_STAGE["qualified"],
+      expectedCloseDate: todayISO(),
+
+      supports: [],
+      competitors: "",
+      notes: "",
+      evidenceFiles: [],
+      remindersOptIn: false,
+    };
   });
-  const [errors, setErrors] = useState({});
+
   const isID = form.resellerCountry === "Indonesia";
 
-  // Bahasa toggle
   useEffect(() => {
-    if (typeof onLocale === "function") onLocale(isID ? "id" : "en");
-  }, [isID, onLocale]);
-
-  // auto currency/lat/lng based on resellerCountry
-  useEffect(() => {
-    const cfg = COUNTRY_CONFIG[form.resellerCountry];
-    if (!cfg) return;
+    // When reseller country changes, preload currency + capital lat/lng + resellerLocation
+    const cfg = COUNTRIES.find((c) => c.name === form.resellerCountry);
     setForm((f) => ({
       ...f,
-      currency: cfg.currency,
-      resellerLocation: cfg.capital,
-      lat: cfg.lat,
-      lng: cfg.lng,
+      currency: cfg?.currency || "",
+      resellerLocation: cfg?.capital || "",
+      lat: cfg?.lat ?? f.lat,
+      lng: cfg?.lng ?? f.lng,
     }));
   }, [form.resellerCountry]);
 
-  // auto probability by stage
   useEffect(() => {
+    // Keep probability in sync with stage (unless user edits later)
     setForm((f) => ({ ...f, probability: PROB_BY_STAGE[f.stage] ?? f.probability }));
   }, [form.stage]);
 
-  const addEvidenceLink = () => {
-    const link = prompt(
-      isID
-        ? "Tempel tautan bukti (email/penawaran/foto yang dapat diverifikasi)"
-        : "Paste a link to your evidence (verifiable email/quote/photo)"
-    );
-    if (!link) return;
-    try {
-      new URL(link);
-    } catch {
-      alert(isID ? "Masukkan URL yang valid" : "Enter a valid URL");
-      return;
-    }
-    setForm((f) => ({ ...f, evidenceLinks: [...f.evidenceLinks, link] }));
+  // If customer Country changes, default lat/lng to that capital (if blank or 0)
+  useEffect(() => {
+    const cfg = COUNTRIES.find((c) => c.name === form.country);
+    if (!cfg) return;
+    setForm((f) => {
+      const lat = (f.lat === null || f.lat === "" || Number(f.lat) === 0) ? cfg.lat : f.lat;
+      const lng = (f.lng === null || f.lng === "" || Number(f.lng) === 0) ? cfg.lng : f.lng;
+      const loc = `${f.city || cfg.capital || ""}${cfg.name ? `, ${cfg.name}` : ""}`;
+      return { ...f, currency: f.currency || cfg.currency, customerLocation: loc, lat, lng };
+    });
+  }, [form.country, form.city]);
+
+  const handleChange = (e) => {
+    const { name, type, value, checked } = e.target;
+    setForm((f) => ({ ...f, [name]: type === "checkbox" ? checked : value }));
   };
 
-  // Simple dup hint
-  const dupWarning = useMemo(() => {
-    if (!form.customerName || !form.solution || !form.expectedCloseDate) return "";
-    const target = new Date(form.expectedCloseDate);
-    const min = new Date(target);
-    const max = new Date(target);
-    min.setDate(min.getDate() - 14);
-    max.setDate(max.getDate() + 14);
-    const hit = (existingItems || []).find(
-      (x) =>
-        x.customerName?.trim()?.toLowerCase() === form.customerName.trim().toLowerCase() &&
-        x.solution?.trim()?.toLowerCase() === form.solution.trim().toLowerCase() &&
-        new Date(x.expectedCloseDate) >= min &&
-        new Date(x.expectedCloseDate) <= max
-    );
-    return hit ? `Possible duplicate: ${hit.customerName} (${hit.id})` : "";
-  }, [form.customerName, form.solution, form.expectedCloseDate, existingItems]);
+  const toggleSupport = (label) => {
+    setForm((f) => {
+      const s = new Set(f.supports);
+      if (s.has(label)) s.delete(label);
+      else s.add(label);
+      return { ...f, supports: [...s] };
+    });
+  };
+
+  const onFiles = (e) => {
+    const files = Array.from(e.target.files || []);
+    setForm((f) => ({ ...f, evidenceFiles: files }));
+  };
+
+  const validEmail = (s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s || "");
 
   function validate() {
-    const e = {};
-    if (!form.resellerCountry) e.resellerCountry = "Required";
-    if (!form.resellerLocation) e.resellerLocation = "Required";
-    if (!form.resellerName) e.resellerName = "Required";
-    if (!form.resellerContact) e.resellerContact = "Required";
-    if (!form.resellerEmail || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.resellerEmail))
-      e.resellerEmail = "Valid email required";
-    if (!form.customerName) e.customerName = "Required";
-    if (!form.city) e.city = "Required";
-    if (!form.country) e.country = "Required";
-    if (!form.solution) e.solution = "Required";
-    if (form.solution === "Other" && !form.solutionOther) e.solutionOther = "Please specify";
-    const v = Number(String(form.value).replace(/[^0-9.-]+/g, ""));
-    if (!v || v <= 0) e.value = "Enter a positive amount";
-    if (!form.expectedCloseDate || !withinNext60Days(form.expectedCloseDate))
-      e.expectedCloseDate = "Within next 60 days";
-    if (!form.evidenceLinks?.length) e.evidence = "Evidence link is mandatory";
-    if (!form.accept) e.accept = "You must confirm";
-    setErrors(e);
-    return Object.keys(e).length === 0;
+    const errs = {};
+    // Mandatory greying style is done via UI; here we validate
+    if (!form.resellerCountry || form.resellerCountry === "Select Country") errs.resellerCountry = "Required";
+    if (!form.resellerLocation) errs.resellerLocation = "Required";
+    if (!form.currency) errs.currency = "Required";
+    if (!form.resellerName) errs.resellerName = "Required";
+    if (!form.resellerContact) errs.resellerContact = "Required";
+    if (!validEmail(form.resellerEmail)) errs.resellerEmail = "Valid email required";
+    if (!form.customerName) errs.customerName = "Required";
+    if (!form.country) errs.country = "Required";
+    if (!form.city) errs.city = "Required";
+    if (!form.solution) errs.solution = "Required";
+    if (form.solution === "Other…" && !form.solutionOther) errs.solutionOther = "Please describe";
+    if (!form.value || Number(form.value) <= 0) errs.value = "Enter positive amount";
+    if (!form.expectedCloseDate) errs.expectedCloseDate = "Required";
+    // Evidence mandatory
+    if (!form.evidenceFiles || form.evidenceFiles.length === 0) errs.evidence = "Evidence file is required";
+
+    return errs;
   }
 
-  async function submit(e) {
+  const filesToBase64 = async (files) => {
+    const MAX = 20 * 1024 * 1024;
+    let total = 0;
+    const out = [];
+    for (const f of files || []) {
+      const buf = await f.arrayBuffer();
+      total += buf.byteLength;
+      if (total > MAX) throw new Error("Attachments exceed 20MB total.");
+      const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
+      out.push({ name: f.name, type: f.type || "application/octet-stream", data: b64 });
+    }
+    return out;
+  };
+
+  const submit = async (e) => {
     e.preventDefault();
-    if (!validate()) return;
-    // minimal payload for reliability
-    const payload = {
-      id: uid(),
-      submittedAt: todayLocalISO(),
+    const errs = validate();
+    if (Object.keys(errs).length) {
+      alert("Please fix the highlighted errors before submitting.");
+      return;
+    }
+    const id = Math.random().toString(36).slice(2);
+    const record = {
+      id,
+      submittedAt: todayISO(),
+
       resellerCountry: form.resellerCountry,
       resellerLocation: form.resellerLocation,
       resellerName: form.resellerName,
       resellerContact: form.resellerContact,
       resellerEmail: form.resellerEmail,
       resellerPhone: form.resellerPhone,
+
       customerName: form.customerName,
-      customerCity: form.city,
-      customerCountry: form.country,
+      city: form.city,
+      country: form.country,
       customerLocation: `${form.city}, ${form.country}`,
-      lat: form.lat,
-      lng: form.lng,
+
+      lat: Number(form.lat),
+      lng: Number(form.lng),
+
       industry: form.industry,
       currency: form.currency,
       value: String(form.value),
+
       solution: form.solution,
-      solutionOther: form.solutionOther,
+      solutionOther: form.solution === "Other…" ? form.solutionOther : "",
+
       stage: form.stage,
-      probability: form.probability,
-      expectedCloseDate: form.expectedCloseDate,
+      probability: Number(form.probability),
+      expectedCloseDate: fmtDate(form.expectedCloseDate),
+
       status: "pending",
       remindersOptIn: !!form.remindersOptIn,
+
+      competitors: form.competitors,
       notes: form.notes,
-      competitors: (form.competitors || []).join(", "),
-      evidenceLinks: (form.evidenceLinks || []).join(" "),
+      evidenceLinks: "", // kept for compatibility; we’re enforcing files
     };
-    // local echo
-    onLocalSave(payload);
-    // sync to GAS
+
     try {
-      await postJSON(`${GAS_URL}?action=submit`, payload);
-      alert("Submitted and synced to Google Sheets.");
+      // Optimistic local add
+      onSubmitted(record);
+
+      // Attachments (optional email flow; GAS may ignore)
+      const attachments = await filesToBase64(form.evidenceFiles);
+      const payload = { action: "submit", ...record, attachments, emailEvidence: true, evidenceTo: "admin.asia@aptella.com" };
+
+      const res = await postJSON(`${GAS_URL}?action=submit`, payload);
+      if (res?.ok) {
+        alert("Submitted and synced to Google Sheets.");
+        onSyncOne && onSyncOne(record); // stamp syncedAt locally
+        // Reset
+        e.target.reset();
+        setForm((f) => ({ ...f, evidenceFiles: [] }));
+      } else {
+        alert(`Submitted locally. Google Sheets sync failed: ${res?.error || "unknown error"}`);
+      }
     } catch (err) {
-      console.error(err);
       alert(`Submitted locally. Google Sheets sync failed: ${err.message || err}`);
     }
-    // reset minimal
-    setForm((f) => ({
-      ...f,
-      customerName: "",
-      value: "",
-      solution: "",
-      solutionOther: "",
-      notes: "",
-      competitors: [],
-      evidenceLinks: [],
-      accept: false,
-    }));
-  }
+  };
+
+  const label = (en) => (isID ? (I18N_ID[en] || en) : en);
+  const requiredBoxCls = "bg-gray-100 border border-gray-300"; // greyed like aptella.com
+  const resellerAccentCls = "bg-[#FFF7ED] border border-[#FED7AA]"; // soft Aptella orange wash for reseller inputs
 
   return (
-    <Card>
-      <CardHeader
-        title="Register Upcoming Deal (within 60 days)"
-        subtitle="Fields marked * are mandatory"
-      />
-      <CardBody>
-        {dupWarning && (
-          <div className="rounded-xl border border-yellow-200 bg-yellow-50 text-yellow-900 p-3 mb-4 text-sm">
-            {dupWarning}
-          </div>
-        )}
+    <div className="bg-white rounded-2xl shadow p-6 border" style={{ borderColor: "#e5e7eb" }}>
+      <div className="text-lg font-semibold mb-4" style={{ color: APTELLA.navy }}>
+        {isID ? "Daftarkan Deal (dalam 60 hari)" : "Register Upcoming Deal (within 60 days)"}
+      </div>
 
-        <form onSubmit={submit} className="grid gap-6">
-          {/* Country + location + currency */}
-          <div className="grid md:grid-cols-3 gap-4">
-            <div className="grid gap-2">
-              <Label htmlFor="resellerCountry" required>
-                {isID ? "Negara Anda" : "Reseller Country"}
-              </Label>
-              <Select
-                id="resellerCountry"
-                value={form.resellerCountry}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, resellerCountry: e.target.value }))
-                }
-                className="border-2"
-              >
-                <option value="">{isID ? "Pilih negara" : "Select country"}</option>
-                <option>Singapore</option>
-                <option>Malaysia</option>
-                <option>Indonesia</option>
-                <option>Philippines</option>
-              </Select>
-              {errors.resellerCountry && (
-                <p className="text-xs text-red-600">{errors.resellerCountry}</p>
-              )}
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="resellerLocation" required>
-                {isID ? "Lokasi Reseller" : "Reseller Location"}
-              </Label>
-              <Input
-                id="resellerLocation"
-                value={form.resellerLocation}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, resellerLocation: e.target.value }))
-                }
-                placeholder={isID ? "mis. Jakarta" : "e.g., Jakarta"}
-                className="border-2"
-              />
-              {errors.resellerLocation && (
-                <p className="text-xs text-red-600">{errors.resellerLocation}</p>
-              )}
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="currency">{isID ? "Mata Uang" : "Currency"}</Label>
-              <Select
-                id="currency"
-                value={form.currency}
-                onChange={(e) => setForm((f) => ({ ...f, currency: e.target.value }))}
-                className="border-2"
-              >
-                {CURRENCIES.map((c) => (
-                  <option key={c}>{c}</option>
-                ))}
-              </Select>
-            </div>
+      <form onSubmit={submit} className="grid gap-6">
+        {/* Country / Location / Currency */}
+        <div className="grid md:grid-cols-3 gap-4">
+          <div>
+            <label className="text-sm font-medium">{label("Reseller Country")} *</label>
+            <select
+              name="resellerCountry"
+              value={form.resellerCountry}
+              onChange={handleChange}
+              className={`w-full px-3 py-2 rounded-xl ${resellerAccentCls}`}
+            >
+              {COUNTRIES.map((c) => (
+                <option key={c.name} value={c.name}>
+                  {c.name || "Select Country"}
+                </option>
+              ))}
+            </select>
           </div>
 
-          {/* Reseller contact block */}
-          <div className="grid md:grid-cols-2 gap-4">
-            <div className="grid gap-2">
-              <Label htmlFor="resellerName" required>
-                {isID ? "Perusahaan Reseller" : "Reseller company"}
-              </Label>
-              <Input
-                id="resellerName"
-                value={form.resellerName}
-                onChange={(e) => setForm((f) => ({ ...f, resellerName: e.target.value }))}
-                placeholder="Alpha Solutions Pte Ltd"
-                className="border-2"
-              />
-              {errors.resellerName && (
-                <p className="text-xs text-red-600">{errors.resellerName}</p>
-              )}
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="resellerContact" required>
-                {isID ? "Kontak Utama" : "Primary contact"}
-              </Label>
-              <Input
-                id="resellerContact"
-                value={form.resellerContact}
-                onChange={(e) => setForm((f) => ({ ...f, resellerContact: e.target.value }))}
-                placeholder={isID ? "Nama lengkap" : "Full name"}
-                className="border-2"
-              />
-              {errors.resellerContact && (
-                <p className="text-xs text-red-600">{errors.resellerContact}</p>
-              )}
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="resellerEmail" required>
-                {isID ? "Email Kontak" : "Contact email"}
-              </Label>
-              <Input
-                id="resellerEmail"
-                type="email"
-                value={form.resellerEmail}
-                onChange={(e) => setForm((f) => ({ ...f, resellerEmail: e.target.value }))}
-                placeholder="name@company.com"
-                className="border-2"
-              />
-              {errors.resellerEmail && (
-                <p className="text-xs text-red-600">{errors.resellerEmail}</p>
-              )}
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="resellerPhone">{isID ? "Telepon" : "Contact phone"}</Label>
-              <Input
-                id="resellerPhone"
-                value={form.resellerPhone}
-                onChange={(e) => setForm((f) => ({ ...f, resellerPhone: e.target.value }))}
-                placeholder="+65 1234 5678"
-                className="border-2"
-              />
-            </div>
+          <div>
+            <label className="text-sm font-medium">{label("Reseller Location")} *</label>
+            <input
+              name="resellerLocation"
+              value={form.resellerLocation}
+              onChange={handleChange}
+              placeholder="e.g., Jakarta"
+              className={`w-full px-3 py-2 rounded-xl ${resellerAccentCls}`}
+            />
           </div>
 
-          {/* Customer + location */}
-          <div className="grid md:grid-cols-3 gap-4">
-            <div className="grid gap-2">
-              <Label htmlFor="customerName" required>
-                {isID ? "Nama Pelanggan" : "Customer name"}
-              </Label>
-              <Input
-                id="customerName"
-                value={form.customerName}
-                onChange={(e) => setForm((f) => ({ ...f, customerName: e.target.value }))}
-                placeholder="End customer / project owner"
-                className="border-2"
-              />
-              {errors.customerName && (
-                <p className="text-xs text-red-600">{errors.customerName}</p>
-              )}
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="city" required>
-                {isID ? "Kota Pelanggan" : "Customer City"}
-              </Label>
-              <Input
-                id="city"
-                value={form.city}
-                onChange={(e) =>
-                  setForm((f) => ({
-                    ...f,
-                    city: e.target.value,
-                    customerLocation: `${e.target.value}${f.country ? ", " + f.country : ""}`,
-                  }))
-                }
-                placeholder="Jakarta"
-                className="border-2"
-              />
-              {errors.city && <p className="text-xs text-red-600">{errors.city}</p>}
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="country" required>
-                {isID ? "Negara Pelanggan" : "Customer Country"}
-              </Label>
-              <Select
-                id="country"
-                value={form.country}
-                onChange={(e) =>
-                  setForm((f) => ({
-                    ...f,
-                    country: e.target.value,
-                    customerLocation: `${f.city ? f.city + ", " : ""}${e.target.value}`,
-                  }))
-                }
-                className="border-2"
-              >
-                <option value="">{isID ? "Pilih negara" : "Select country"}</option>
-                <option>Indonesia</option>
-                <option>Singapore</option>
-                <option>Malaysia</option>
-                <option>Philippines</option>
-              </Select>
-              {errors.country && <p className="text-xs text-red-600">{errors.country}</p>}
-            </div>
+          <div>
+            <label className="text-sm font-medium">{label("Currency")} *</label>
+            <input
+              name="currency"
+              value={form.currency}
+              onChange={handleChange}
+              className={`w-full px-3 py-2 rounded-xl ${requiredBoxCls}`}
+              placeholder="SGD / MYR / IDR / PHP"
+            />
+          </div>
+        </div>
+
+        {/* Reseller contact */}
+        <div className="grid md:grid-cols-2 gap-4">
+          <div>
+            <label className="text-sm font-medium">{label("Reseller company")} *</label>
+            <input name="resellerName" value={form.resellerName} onChange={handleChange} className={`w-full px-3 py-2 rounded-xl ${requiredBoxCls}`} />
+          </div>
+          <div>
+            <label className="text-sm font-medium">{label("Primary contact")} *</label>
+            <input name="resellerContact" value={form.resellerContact} onChange={handleChange} className={`w-full px-3 py-2 rounded-xl ${requiredBoxCls}`} />
+          </div>
+          <div>
+            <label className="text-sm font-medium">{label("Contact email")} *</label>
+            <input type="email" name="resellerEmail" value={form.resellerEmail} onChange={handleChange} className={`w-full px-3 py-2 rounded-xl ${requiredBoxCls}`} />
+          </div>
+          <div>
+            <label className="text-sm font-medium">{label("Contact phone")}</label>
+            <input name="resellerPhone" value={form.resellerPhone} onChange={handleChange} className="w-full px-3 py-2 rounded-xl border border-gray-300" />
+          </div>
+        </div>
+
+        {/* Customer */}
+        <div className="grid md:grid-cols-2 gap-4">
+          <div>
+            <label className="text-sm font-medium">{label("Customer name")} *</label>
+            <input name="customerName" value={form.customerName} onChange={handleChange} className={`w-full px-3 py-2 rounded-xl ${requiredBoxCls}`} />
+          </div>
+          <div>
+            <label className="text-sm font-medium">{label("Customer City")} *</label>
+            <input
+              name="city"
+              value={form.city}
+              onChange={handleChange}
+              placeholder="Jakarta"
+              className={`w-full px-3 py-2 rounded-xl ${requiredBoxCls}`}
+            />
+          </div>
+          <div>
+            <label className="text-sm font-medium">{label("Customer Country")} *</label>
+            <select
+              name="country"
+              value={form.country}
+              onChange={handleChange}
+              className={`w-full px-3 py-2 rounded-xl ${requiredBoxCls}`}
+            >
+              <option value="">Select country</option>
+              {COUNTRIES.slice(1).map((c) => (
+                <option key={c.name} value={c.name}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
           </div>
 
-          {/* Map helper + expected close */}
-          <div className="grid md:grid-cols-3 gap-4">
-            <div className="grid gap-2 md:col-span-2">
-              <Label required>{isID ? "Solusi (Xgrids)" : "Solution offered (Xgrids)"}</Label>
-              <Select
-                value={form.solution}
-                onChange={(e) => setForm((f) => ({ ...f, solution: e.target.value }))}
-                className="border-2"
-              >
-                <option value="">{isID ? "Pilih solusi" : "Select a solution"}</option>
-                {XGRIDS_SOLUTIONS.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </Select>
-              {form.solution === "Other" && (
-                <Input
-                  placeholder={isID ? "Tuliskan solusi Xgrids" : "Specify Xgrids solution"}
-                  value={form.solutionOther}
-                  onChange={(e) => setForm((f) => ({ ...f, solutionOther: e.target.value }))}
-                  className="border-2 mt-2"
-                />
-              )}
-              <a
-                className="text-[#0e3446] underline text-sm mt-1 inline-block"
-                href="https://www.aptella.com/asia/product-brands/xgrids-asia/"
-                target="_blank"
-                rel="noreferrer"
-              >
-                Learn about Xgrids solutions
-              </a>
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="expectedCloseDate" required>
-                {isID ? "Perkiraan Tgl Penutupan" : "Expected close date"}
-              </Label>
-              <Input
-                id="expectedCloseDate"
-                type="date"
-                value={form.expectedCloseDate}
-                onChange={(e) => setForm((f) => ({ ...f, expectedCloseDate: e.target.value }))}
-                className="border-2"
+          <div>
+            <label className="text-sm font-medium">{label("Map option (paste lat, lng or click helper)")}</label>
+            <div className="flex gap-2">
+              <input
+                name="lat"
+                value={form.lat ?? ""}
+                onChange={handleChange}
+                placeholder="lat"
+                className="w-full px-3 py-2 rounded-xl border border-gray-300"
+              />
+              <input
+                name="lng"
+                value={form.lng ?? ""}
+                onChange={handleChange}
+                placeholder="lng"
+                className="w-full px-3 py-2 rounded-xl border border-gray-300"
               />
               <a
-                className={"px-3 py-2 rounded-xl text-white text-sm mt-2 inline-block " + BRAND.primaryBtn}
+                className="px-3 py-2 rounded-xl text-white text-sm"
+                style={{ background: APTELLA.navy }}
                 href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
                   (form.city || "") + "," + (form.country || "")
                 )}`}
@@ -665,209 +508,257 @@ function SubmissionForm({ onLocalSave, onSyncOne, existingItems, onLocale }) {
                 Open Map
               </a>
             </div>
-          </div>
-
-          {/* Industry / value / stage */}
-          <div className="grid md:grid-cols-3 gap-4">
-            <div className="grid gap-2">
-              <Label htmlFor="industry">{isID ? "Industri" : "Industry"}</Label>
-              <Select
-                id="industry"
-                value={form.industry}
-                onChange={(e) => setForm((f) => ({ ...f, industry: e.target.value }))}
-                className="border-2"
-              >
-                <option value="">{isID ? "Pilih industri" : "Select industry"}</option>
-                {INDUSTRIES.map((i) => (
-                  <option key={i} value={i}>
-                    {i}
-                  </option>
-                ))}
-              </Select>
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="value" required>
-                {isID ? "Nilai transaksi" : "Deal value"}
-              </Label>
-              <Input
-                id="value"
-                type="number"
-                min="0"
-                step="0.01"
-                value={form.value}
-                onChange={(e) => setForm((f) => ({ ...f, value: e.target.value }))}
-                placeholder="e.g., 25000"
-                className="border-2"
-              />
-              {errors.value && <p className="text-xs text-red-600">{errors.value}</p>}
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="stage">{isID ? "Tahap penjualan" : "Sales stage"}</Label>
-              <Select
-                id="stage"
-                value={form.stage}
-                onChange={(e) => setForm((f) => ({ ...f, stage: e.target.value }))}
-                className="border-2"
-              >
-                {STAGES.map((s) => (
-                  <option key={s.key} value={s.key}>
-                    {s.label}
-                  </option>
-                ))}
-              </Select>
+            <div className="text-xs text-gray-600 mt-1">
+              {label("Tip: use the link to pick a point, copy coordinates back here.")}
             </div>
           </div>
+        </div>
 
-          {/* Evidence (mandatory) */}
-          <div className="grid gap-2">
-            <Label required>{isID ? "Bukti (tautan diperlukan)" : "Evidence link (required)"}</Label>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={addEvidenceLink}
-                className={"px-3 py-2 rounded-xl text-white " + BRAND.orangeBtn}
+        {/* Xgrids + dates + industry + value */}
+        <div className="grid md:grid-cols-3 gap-4">
+          <div className="md:col-span-2">
+            <label className="text-sm font-medium">{label("Solution offered (Xgrids)")} *</label>
+            <div className="grid gap-2">
+              <select
+                name="solution"
+                value={form.solution}
+                onChange={handleChange}
+                className={`w-full px-3 py-2 rounded-xl ${requiredBoxCls}`}
               >
-                + {isID ? "Tambah Tautan Bukti" : "Add Evidence Link"}
-              </button>
-              {form.evidenceLinks?.length > 0 && (
-                <span className="text-sm text-gray-600">
-                  {form.evidenceLinks.length} link(s) added
-                </span>
+                <option value="">Select an Xgrids solution</option>
+                {XGRIDS_SOLUTIONS.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+              {form.solution === "Other…" && (
+                <input
+                  name="solutionOther"
+                  value={form.solutionOther}
+                  onChange={handleChange}
+                  placeholder="Describe the solution"
+                  className="w-full px-3 py-2 rounded-xl border border-gray-300"
+                />
               )}
+              <a
+                href="https://www.aptella.com/asia/product-brands/xgrids-asia/"
+                target="_blank"
+                rel="noreferrer"
+                className="text-sm underline"
+                style={{ color: APTELLA.navy }}
+              >
+                Learn about Xgrids solutions
+              </a>
             </div>
-            <p className="text-xs text-gray-600">
-              {isID
-                ? "Untuk lampiran file, emailkan ke admin.asia@aptella.com"
-                : "For file attachments, email them to admin.asia@aptella.com"}
-            </p>
-            {errors.evidence && <p className="text-xs text-red-600">{errors.evidence}</p>}
           </div>
 
-          {/* Notes & consents */}
-          <div className="grid gap-2">
-            <Label htmlFor="notes">{isID ? "Catatan" : "Notes"}</Label>
-            <Textarea
-              id="notes"
-              rows={3}
-              value={form.notes}
-              onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
-              placeholder={
-                isID
-                  ? "Persyaratan utama, ruang lingkup teknis, dll."
-                  : "Key requirements, technical scope, etc."
-              }
-              className="border-2"
+          <div>
+            <label className="text-sm font-medium">{label("Expected close date")} *</label>
+            <div className="flex gap-2">
+              <input
+                type="date"
+                name="expectedCloseDate"
+                value={form.expectedCloseDate}
+                onChange={handleChange}
+                className={`w-full px-3 py-2 rounded-xl ${requiredBoxCls}`}
+              />
+              <a
+                className="px-3 py-2 rounded-xl text-white text-sm"
+                style={{ background: APTELLA.orange }}
+                href="https://maps.google.com"
+                target="_blank"
+                rel="noreferrer"
+                title="Open Maps"
+              >
+                Maps
+              </a>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid md:grid-cols-3 gap-4">
+          <div>
+            <label className="text-sm font-medium">{label("Industry")}</label>
+            <select
+              name="industry"
+              value={form.industry}
+              onChange={handleChange}
+              className="w-full px-3 py-2 rounded-xl border border-gray-300"
+            >
+              <option value="">Select industry</option>
+              {INDUSTRIES.map((i) => (
+                <option key={i} value={i}>
+                  {i}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="text-sm font-medium">{label("Deal value")} *</label>
+            <input
+              type="number"
+              name="value"
+              value={form.value}
+              onChange={handleChange}
+              placeholder="25000"
+              className={`w-full px-3 py-2 rounded-xl ${requiredBoxCls}`}
             />
           </div>
 
-          <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-            <label className="flex items-center gap-2 text-sm">
+          <div>
+            <label className="text-sm font-medium">{label("Sales stage")}</label>
+            <select name="stage" value={form.stage} onChange={handleChange} className="w-full px-3 py-2 rounded-xl border border-gray-300">
+              {STAGES.map((s) => (
+                <option key={s.key} value={s.key}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
+            <div className="mt-2">
+              <label className="text-sm font-medium">{label("Probability (%)")}</label>
               <input
-                type="checkbox"
-                checked={!!form.remindersOptIn}
-                onChange={(e) => setForm((f) => ({ ...f, remindersOptIn: e.target.checked }))}
+                type="number"
+                name="probability"
+                min={0}
+                max={100}
+                value={form.probability}
+                onChange={handleChange}
+                className="w-full px-3 py-2 rounded-xl border border-gray-300"
               />
-              {isID ? "Kirim pengingat pembaruan" : "Send me reminders for updates"}
-            </label>
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={!!form.accept}
-                onChange={(e) => setForm((f) => ({ ...f, accept: e.target.checked }))}
-              />
-              {isID
-                ? "Saya mengonfirmasi data akurat dan setuju penyimpanan untuk pengelolaan deal"
-                : "I confirm details are accurate and consent to data storage for deal management"}
-            </label>
+            </div>
           </div>
-          {errors.accept && <p className="text-xs text-red-600 -mt-3">{errors.accept}</p>}
+        </div>
 
-          <div className="flex items-center gap-3">
-            <button type="submit" className={"px-4 py-2 rounded-xl text-white " + BRAND.primaryBtn}>
-              {isID ? "Kirim Pendaftaran" : "Submit Registration"}
-            </button>
-            <button
-              type="button"
-              onClick={() =>
-                setForm((f) => ({
-                  ...f,
-                  customerName: "",
-                  value: "",
-                  solution: "",
-                  solutionOther: "",
-                  evidenceLinks: [],
-                  notes: "",
-                  accept: false,
-                }))
-              }
-              className="px-4 py-2 rounded-xl bg-gray-200"
-            >
-              {isID ? "Reset" : "Reset"}
-            </button>
+        {/* Competitors / Support */}
+        <div>
+          <label className="text-sm font-medium">{label("Competitors")}</label>
+          <input
+            name="competitors"
+            value={form.competitors}
+            onChange={handleChange}
+            placeholder="Comma-separated"
+            className="w-full px-3 py-2 rounded-xl border border-gray-300"
+          />
+        </div>
+
+        <div>
+          <label className="text-sm font-medium">{label("Support requested")}</label>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
+            {SUPPORT_OPTIONS.map((opt) => (
+              <label key={opt} className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={form.supports.includes(opt)}
+                  onChange={() => toggleSupport(opt)}
+                />
+                {opt}
+              </label>
+            ))}
           </div>
-        </form>
-      </CardBody>
-    </Card>
+        </div>
+
+        {/* Evidence (mandatory) + Notes + Reminders */}
+        <div>
+          <label className="text-sm font-medium">{label("Evidence (required)")} *</label>
+          <input type="file" multiple onChange={onFiles} className="block w-full text-sm" />
+          <div className="text-xs text-gray-600 mt-1">
+            Email attached files to Aptella (admin.asia@aptella.com)
+          </div>
+        </div>
+
+        <div>
+          <label className="text-sm font-medium">{label("Notes")}</label>
+          <textarea
+            name="notes"
+            rows={4}
+            value={form.notes}
+            onChange={handleChange}
+            className="w-full px-3 py-2 rounded-xl border border-gray-300"
+            placeholder="Key requirements, scope, timelines, etc."
+          />
+        </div>
+
+        <div className="flex items-center gap-3">
+          <label className="text-sm flex items-center gap-2">
+            <input type="checkbox" name="remindersOptIn" checked={!!form.remindersOptIn} onChange={handleChange} />
+            {label("Send me reminders for updates")}
+          </label>
+
+          <button
+            type="submit"
+            className="px-4 py-2 rounded-xl text-white"
+            style={{ background: APTELLA.navy }}
+          >
+            {label("Submit Registration")}
+          </button>
+        </div>
+      </form>
+    </div>
   );
 }
 
-/***** ADMIN PANEL *****/
+/** =========================
+ * Admin Panel (map + table + FX)
+ * ========================= */
 function AdminPanel({ items, setItems }) {
+  const [adminAuthed, setAdminAuthed] = useState(false);
   const [search, setSearch] = useState("");
-  const [countryFilter, setCountryFilter] = useState("All");
-  const [sortBy, setSortBy] = useState("submittedAt");
+  const [sortKey, setSortKey] = useState("submittedAt");
   const [sortDir, setSortDir] = useState("desc");
   const [fxOpen, setFxOpen] = useState(false);
   const [fxRows, setFxRows] = useState([]);
   const [savingFx, setSavingFx] = useState(false);
-
-  const mapRef = useRef(null);
-  const leafletMap = useRef(null);
   const fxToAUD = useRef({ AUD: 1 });
 
+  // Leaflet map
+  const mapRef = useRef(null);
+  const mapObj = useRef(null);
+  const markersRef = useRef([]);
+
+  // Ensure init sheet
+  useEffect(() => {
+    (async () => {
+      try { await getJSON(`${GAS_URL}?action=init`); } catch {}
+    })();
+  }, []);
+
+  // Load rows on open
   const handleRefresh = async () => {
     try {
-      const json = await getJSON(`${GAS_URL}?action=list`);
-      const rows = json.rows || [];
+      const res = await getJSON(`${GAS_URL}?action=list`);
+      const rows = (res.rows || []).map((r) => ({
+        ...r,
+        submittedAt: fmtDate(r.submittedAt || ""),
+        expectedCloseDate: fmtDate(r.expectedCloseDate || ""),
+        value: r.value === "" ? "" : Number(r.value),
+      }));
       setItems(rows);
-      // compute FX once list is pulled (local cache used when computing AUD)
     } catch (e) {
       alert(`Refresh failed: ${e.message || e}`);
     }
   };
 
-  // FX: load/save — DROP-IN replacement wired to ?action=fx
+  // FX load/save
   const loadFx = async () => {
     try {
-      const json = await getJSON(`${GAS_URL}?action=fx`);
-      const rows = json.rows || [];
+      const res = await getJSON(`${GAS_URL}?action=fx`);
+      const rows = res.rows || [];
       setFxRows(rows.length ? rows : [{ ccy: "SGD", rateToAUD: 1.05 }]);
-      fxToAUD.current = Object.fromEntries(
-        (rows || []).map((r) => [
-          String(r.ccy || "").toUpperCase(),
-          Number(r.rateToAUD) || 1,
-        ])
-      );
+      fxToAUD.current = Object.fromEntries(rows.map((r) => [String(r.ccy || "").toUpperCase(), Number(r.rateToAUD) || 1]));
       setFxOpen(true);
     } catch (e) {
       alert(`FX load failed: ${e.message || e}`);
     }
   };
-
   const saveFx = async () => {
     try {
       setSavingFx(true);
       const clean = (fxRows || [])
         .filter((r) => r && r.ccy)
-        .map((r) => ({
-          ccy: String(r.ccy).toUpperCase(),
-          rateToAUD: Number(r.rateToAUD) || "",
-        }));
-      const json = await postJSON(`${GAS_URL}?action=fx`, { rows: clean });
-      const saved = json.rows || clean;
-      fxToAUD.current = Object.fromEntries(
-        saved.map((r) => [String(r.ccy || "").toUpperCase(), Number(r.rateToAUD) || 1])
-      );
+        .map((r) => ({ ccy: String(r.ccy).toUpperCase(), rateToAUD: Number(r.rateToAUD) || "" }));
+      await postJSON(`${GAS_URL}?action=fx`, { rows: clean });
       setFxOpen(false);
       await handleRefresh();
     } catch (e) {
@@ -877,185 +768,226 @@ function AdminPanel({ items, setItems }) {
     }
   };
 
-  // Approve / Close write-backs
-  const setStatus = async (id, status) => {
+  // Map aggregation + draw
+  const visible = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    let rows = items.slice();
+    if (q) {
+      rows = rows.filter((r) => {
+        const hay = [
+          r.customerName,
+          r.customerLocation,
+          r.city,
+          r.country,
+          r.solution,
+          r.solutionOther,
+          r.stage,
+          r.status,
+        ]
+          .join(" ")
+          .toLowerCase();
+        return hay.includes(q);
+      });
+    }
+    const cmp = (a, b) => {
+      const A = a[sortKey] ?? "";
+      const B = b[sortKey] ?? "";
+      if (A < B) return sortDir === "asc" ? -1 : 1;
+      if (A > B) return sortDir === "asc" ? 1 : -1;
+      return 0;
+    };
+    rows.sort(cmp);
+    return rows;
+  }, [items, search, sortKey, sortDir]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const L = await loadLeafletOnce();
+        if (cancelled) return;
+
+        // Init map once
+        if (!mapObj.current) {
+          mapObj.current = L.map(mapRef.current).setView([1.35, 103.82], 5);
+          L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+            maxZoom: 19,
+            attribution: '&copy; OpenStreetMap',
+          }).addTo(mapObj.current);
+        }
+
+        // Clear markers
+        markersRef.current.forEach((m) => mapObj.current.removeLayer(m));
+        markersRef.current = [];
+
+        // Aggregate by city+country
+        const totals = new Map();
+        const fx = fxToAUD.current || { AUD: 1 };
+        for (const r of visible) {
+          const key = `${r.city || ""}__${r.country || ""}`;
+          const cur = r.currency || "AUD";
+          const rate = Number(fx[String(cur).toUpperCase()] || (cur === "AUD" ? 1 : 1));
+          const val = Number(r.value || 0) * (isNaN(rate) ? 1 : rate);
+          const prev = totals.get(key) || { lat: r.lat, lng: r.lng, count: 0, valueAUD: 0, city: r.city, country: r.country };
+          totals.set(key, { ...prev, count: prev.count + 1, valueAUD: prev.valueAUD + (isNaN(val) ? 0 : val) });
+        }
+
+        // Add markers
+        totals.forEach((t) => {
+          const size = Math.max(8, Math.sqrt(t.valueAUD) * 0.5); // scale
+          const m = L.circleMarker([Number(t.lat) || 0, Number(t.lng) || 0], {
+            radius: size,
+            color: APTELLA.orange,
+            fillColor: APTELLA.orange,
+            fillOpacity: 0.35,
+            weight: 2,
+          }).addTo(mapObj.current);
+          m.bindPopup(
+            `<div style="min-width:220px">
+              <div><b>${t.city || ""}${t.country ? ", " + t.country : ""}</b></div>
+              <div>Total registrations: ${t.count}</div>
+              <div>Total value (AUD): ${t.valueAUD.toLocaleString(undefined, {maximumFractionDigits:0})}</div>
+            </div>`
+          );
+          markersRef.current.push(m);
+        });
+
+      } catch (e) {
+        console.warn("Map init failed:", e);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [visible]);
+
+  const rowColor = (r) => {
+    // Colors per requirement:
+    // accepted = green, closed/lost = red, not yet approved = blue, approaching 60 days = orange
+    const approved = r.status === "approved";
+    const closed = r.status === "closed" || r.status === "lost";
+    if (closed) return "bg-red-50";
+    if (approved) {
+      // near expiry -> orange
+      const d = daysUntil(r.expectedCloseDate);
+      if (!isNaN(d) && d <= 7) return "bg-orange-50";
+      return "bg-green-50";
+    }
+    return "bg-blue-50";
+  };
+
+  const doUpdate = async (id, patch) => {
     try {
-      await postJSON(`${GAS_URL}?action=update`, { id, status });
-      setItems((prev) => prev.map((r) => (r.id === id ? { ...r, status } : r)));
+      const res = await postJSON(`${GAS_URL}?action=update`, { id, ...patch });
+      if (res?.ok) {
+        setItems((prev) => prev.map((x) => (x.id === id ? { ...x, ...patch } : x)));
+        return true;
+      }
+      throw new Error(res?.error || "update failed");
     } catch (e) {
       alert(`Update failed: ${e.message || e}`);
+      return false;
     }
   };
 
-  // Derived table with filters + search + sort + computed AUD
-  const visible = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    const arr = (items || [])
-      .filter((r) => (countryFilter === "All" ? true : r.country === countryFilter))
-      .filter((r) =>
-        !q
-          ? true
-          : [
-              r.submittedAt,
-              r.customerName,
-              r.customerLocation,
-              r.solution,
-              r.resellerName,
-            ]
-              .join(" ")
-              .toLowerCase()
-              .includes(q)
-      )
-      .map((r) => {
-        const raw = Number(String(r.value || "").replace(/[^0-9.-]+/g, ""));
-        const rate =
-          fxToAUD.current[String(r.currency || "").toUpperCase()] ??
-          (String(r.currency || "").toUpperCase() === "AUD" ? 1 : 1);
-        const valueAUD = isNaN(raw) ? "" : raw * rate;
-        return { ...r, _valueAUD: valueAUD };
-      })
-      .sort((a, b) => {
-        const dir = sortDir === "asc" ? 1 : -1;
-        if (sortBy === "value") return ((a._valueAUD || 0) - (b._valueAUD || 0)) * dir;
-        if (sortBy === "submittedAt")
-          return (new Date(a.submittedAt) - new Date(b.submittedAt)) * dir;
-        if (sortBy === "expectedCloseDate")
-          return (new Date(a.expectedCloseDate) - new Date(b.expectedCloseDate)) * dir;
-        return String(a[sortBy] || "").localeCompare(String(b[sortBy] || "")) * dir;
-      });
-    return arr;
-  }, [items, search, countryFilter, sortBy, sortDir]);
-
-  // Map init/update
-  useEffect(() => {
-    let cancelled = false;
-    loadLeaflet()
-      .then((L) => {
-        if (cancelled) return;
-        if (!leafletMap.current) {
-          const el = mapRef.current;
-          if (!el) return;
-          leafletMap.current = L.map(el).setView([1.3521, 103.8198], 5); // region
-          L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-            attribution: "&copy; OpenStreetMap",
-            maxZoom: 18,
-          }).addTo(leafletMap.current);
-        }
-        // clear old layers except tile
-        leafletMap.current.eachLayer((layer) => {
-          if (!layer.getAttribution) leafletMap.current.removeLayer(layer);
-        });
-        // add circles
-        const Lmap = leafletMap.current;
-        const Lg = window.L;
-        const groups = new Map();
-        for (const r of visible) {
-          const key = `${r.city}|${r.country}|${r.lat}|${r.lng}`;
-          const prev = groups.get(key) || { total: 0, count: 0, any: r };
-          prev.total += Number(r._valueAUD || 0);
-          prev.count += 1;
-          groups.set(key, prev);
-        }
-        groups.forEach((g) => {
-          const lat = Number(g.any.lat) || 0;
-          const lng = Number(g.any.lng) || 0;
-          const radius = Math.min(40000, Math.max(8000, Math.sqrt(g.total || 0) * 20));
-          const colorByStatus = (s) => {
-            if (s === "approved") return "green";
-            if (s === "closed" || s === "lost") return "red";
-            return "blue";
-          };
-          const status = g.any.status || "pending";
-          const circle = Lg.circle([lat, lng], {
-            radius,
-            color: colorByStatus(status),
-            fillOpacity: 0.25,
-          }).addTo(Lmap);
-          circle.bindPopup(
-            `<div style="min-width:180px">
-               <div><strong>${g.any.city || "Unknown"}, ${g.any.country || ""}</strong></div>
-               <div>Deals: ${g.count}</div>
-               <div>Total AUD: ${Math.round(g.total).toLocaleString()}</div>
-             </div>`
-          );
-        });
-      })
-      .catch((e) => console.warn("Map init failed:", e));
-    return () => void (cancelled = true);
-  }, [visible]);
-
   return (
-    <>
-      {/* Controls */}
-      <div className="sticky top-2 z-30 bg-white/90 backdrop-blur rounded-xl border p-3 mb-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <Select value={countryFilter} onChange={(e) => setCountryFilter(e.target.value)}>
-              <option>All</option>
-              <option>Singapore</option>
-              <option>Malaysia</option>
-              <option>Indonesia</option>
-              <option>Philippines</option>
-            </Select>
-            <Input
-              placeholder="Search…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-            <Select value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
-              <option value="submittedAt">Submitted</option>
-              <option value="expectedCloseDate">Expected</option>
-              <option value="customerName">Customer</option>
-              <option value="customerLocation">Location</option>
-              <option value="solution">Solution</option>
-              <option value="value">Value (AUD)</option>
-              <option value="stage">Stage</option>
-              <option value="status">Status</option>
-            </Select>
-            <Select value={sortDir} onChange={(e) => setSortDir(e.target.value)}>
-              <option value="desc">Desc</option>
-              <option value="asc">Asc</option>
-            </Select>
-          </div>
-          <div className="flex items-center gap-2">
-            <button onClick={handleRefresh} className={"px-3 py-2 rounded-lg text-white " + BRAND.primaryBtn}>
-              Refresh
-            </button>
-            <button onClick={loadFx} className={"px-3 py-2 rounded-lg text-white " + BRAND.orangeBtn}>
-              FX Settings
+    <div className="space-y-4">
+      {/* Admin gate */}
+      {!adminAuthed ? (
+        <div className="bg-white rounded-2xl shadow p-6 border" style={{ borderColor: "#e5e7eb" }}>
+          <div className="text-lg font-semibold mb-3" style={{ color: APTELLA.navy }}>Admin Login</div>
+          <div className="flex gap-2">
+            <input id="adminPass" type="password" className="px-3 py-2 rounded-xl border border-gray-300" placeholder="Enter admin password" />
+            <button
+              className="px-4 py-2 rounded-xl text-white"
+              style={{ background: APTELLA.navy }}
+              onClick={() => {
+                const v = document.getElementById("adminPass").value;
+                if (v === ADMIN_PASSWORD) setAdminAuthed(true);
+                else alert("Incorrect password.");
+              }}
+            >
+              Login
             </button>
           </div>
         </div>
-      </div>
+      ) : (
+        <>
+          {/* Controls */}
+          <div className="bg-white rounded-2xl shadow p-4 border" style={{ borderColor: "#e5e7eb" }}>
+            <div className="flex flex-wrap items-center gap-3 justify-between">
+              <div className="flex items-center gap-2">
+                <button
+                  className="px-3 py-2 rounded-xl text-white"
+                  style={{ background: APTELLA.navy }}
+                  onClick={handleRefresh}
+                >
+                  Refresh
+                </button>
+                <button
+                  className="px-3 py-2 rounded-xl text-white"
+                  style={{ background: APTELLA.orange }}
+                  onClick={loadFx}
+                >
+                  FX Settings
+                </button>
+              </div>
 
-      {/* Map */}
-      <div
-        ref={mapRef}
-        className="w-full rounded-2xl border"
-        style={{ height: 380, background: "#eef2f6" }}
-      >
-        {!window.L && (
-          <div className="p-3 text-sm text-gray-600">Loading map…</div>
-        )}
-      </div>
+              <div className="flex items-center gap-2">
+                <input
+                  placeholder="Search…"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="px-3 py-2 rounded-xl border border-gray-300"
+                />
+                <select
+                  value={sortKey}
+                  onChange={(e) => setSortKey(e.target.value)}
+                  className="px-3 py-2 rounded-xl border border-gray-300"
+                >
+                  <option value="submittedAt">Submitted</option>
+                  <option value="expectedCloseDate">Expected</option>
+                  <option value="customerName">Customer</option>
+                  <option value="customerLocation">Location</option>
+                  <option value="solution">Solution</option>
+                  <option value="value">Value</option>
+                  <option value="stage">Stage</option>
+                  <option value="status">Status</option>
+                </select>
+                <select
+                  value={sortDir}
+                  onChange={(e) => setSortDir(e.target.value)}
+                  className="px-3 py-2 rounded-xl border border-gray-300"
+                >
+                  <option value="asc">Asc</option>
+                  <option value="desc">Desc</option>
+                </select>
+                <button
+                  className="px-3 py-2 rounded-xl text-white"
+                  style={{ background: APTELLA.navyDark }}
+                  onClick={() => setAdminAuthed(false)}
+                >
+                  Logout
+                </button>
+              </div>
+            </div>
+          </div>
 
-      {/* Table */}
-      <Card className="mt-4">
-        <CardHeader
-          title="Registered Deals"
-          subtitle="Approve or Close to update status"
-        />
-        <CardBody>
-          <div className="overflow-x-auto">
+          {/* Map */}
+          <div className="bg-white rounded-2xl shadow border" style={{ borderColor: "#e5e7eb" }}>
+            <div className="p-4 text-sm font-medium" style={{ color: APTELLA.navy }}>Opportunities Map (AUD bubble size)</div>
+            <div ref={mapRef} style={{ height: 420 }} />
+          </div>
+
+          {/* Table */}
+          <div className="bg-white rounded-2xl shadow border overflow-x-auto" style={{ borderColor: "#e5e7eb" }}>
             <table className="min-w-full text-sm">
-              <thead>
-                <tr className="bg-[#fdf4e6] text-[#0e3446]">
+              <thead style={{ background: APTELLA.orange, color: "white" }}>
+                <tr>
                   <th className="p-3 text-left">Submitted</th>
                   <th className="p-3 text-left">Expected</th>
                   <th className="p-3 text-left">Customer</th>
                   <th className="p-3 text-left">Location</th>
                   <th className="p-3 text-left">Solution</th>
-                  <th className="p-3 text-left">Value (AUD)</th>
+                  <th className="p-3 text-left">Value</th>
                   <th className="p-3 text-left">Stage</th>
                   <th className="p-3 text-left">Status</th>
                   <th className="p-3 text-left">Actions</th>
@@ -1063,44 +995,31 @@ function AdminPanel({ items, setItems }) {
               </thead>
               <tbody>
                 {visible.map((r) => (
-                  <tr key={r.id} className="border-b">
-                    <td className="p-3">{String(r.submittedAt || "").slice(0, 10)}</td>
-                    <td className="p-3">{String(r.expectedCloseDate || "").slice(0, 10)}</td>
-                    <td className="p-3">{r.customerName || "-"}</td>
-                    <td className="p-3">{r.customerLocation || "-"}</td>
-                    <td className="p-3">{r.solution || "-"}</td>
-                    <td className="p-3">
-                      {r._valueAUD !== "" ? Math.round(r._valueAUD).toLocaleString() : "-"}
-                    </td>
-                    <td className="p-3">{r.stage || "-"}</td>
-                    <td className="p-3">
-                      <span
-                        className={
-                          "px-2 py-1 rounded-md text-white " +
-                          (r.status === "approved"
-                            ? "bg-green-600"
-                            : r.status === "closed" || r.status === "lost"
-                            ? "bg-red-600"
-                            : "bg-blue-600")
-                        }
-                      >
-                        {r.status || "pending"}
-                      </span>
-                    </td>
+                  <tr key={r.id} className={`border-b ${rowColor(r)}`}>
+                    <td className="p-3">{fmtDate(r.submittedAt)}</td>
+                    <td className="p-3">{fmtDate(r.expectedCloseDate)}</td>
+                    <td className="p-3">{r.customerName}</td>
+                    <td className="p-3">{r.customerLocation}</td>
+                    <td className="p-3">{r.solution === "Other…" ? (r.solutionOther || "Other") : r.solution}</td>
+                    <td className="p-3">{r.currency} {Number(r.value || 0).toLocaleString()}</td>
+                    <td className="p-3">{r.stage}</td>
+                    <td className="p-3 capitalize">{r.status}</td>
                     <td className="p-3">
                       <div className="flex gap-2">
-                        {r.status !== "approved" && (
+                        {r.status !== "approved" && r.status !== "closed" && (
                           <button
-                            className="px-2.5 py-1.5 rounded-md bg-green-600 text-white"
-                            onClick={() => setStatus(r.id, "approved")}
+                            className="px-2.5 py-1.5 rounded-lg text-white"
+                            style={{ background: "#16a34a" }}
+                            onClick={() => doUpdate(r.id, { status: "approved" })}
                           >
                             Approve
                           </button>
                         )}
                         {r.status !== "closed" && (
                           <button
-                            className="px-2.5 py-1.5 rounded-md bg-red-600 text-white"
-                            onClick={() => setStatus(r.id, "closed")}
+                            className="px-2.5 py-1.5 rounded-lg text-white"
+                            style={{ background: "#ef4444" }}
+                            onClick={() => doUpdate(r.id, { status: "closed" })}
                           >
                             Close
                           </button>
@@ -1111,145 +1030,116 @@ function AdminPanel({ items, setItems }) {
                 ))}
                 {visible.length === 0 && (
                   <tr>
-                    <td colSpan={9} className="p-6 text-center text-gray-500">
-                      No rows. Click Refresh.
-                    </td>
+                    <td className="p-4 text-gray-500" colSpan={9}>No rows</td>
                   </tr>
                 )}
               </tbody>
             </table>
           </div>
-        </CardBody>
-      </Card>
 
-      <AdminSettings
-        open={fxOpen}
-        onClose={() => setFxOpen(false)}
-        rows={fxRows}
-        onChange={setFxRows}
-        onSave={saveFx}
-        saving={savingFx}
-      />
-    </>
-  );
-}
-
-/***** ROOT APP *****/
-function AppShell() {
-  const [tab, setTab] = useState("reseller"); // 'reseller' | 'admin'
-  const [items, setItems] = useState([]);
-  const [locale, setLocale] = useState("en");
-  const [authed, setAuthed] = useState(false);
-  const [pwd, setPwd] = useState("");
-
-  const tryLogin = () => {
-    if (pwd === ADMIN_PASSWORD) {
-      setAuthed(true);
-      setPwd("");
-      setTab("admin");
-    } else {
-      alert("Wrong password");
-    }
-  };
-  const logout = () => setAuthed(false);
-
-  // simple self-test
-  useEffect(() => {
-    try {
-      if (addDays("2025-01-01", 1) !== "2025-01-02") throw new Error("addDays");
-      if (!withinNext60Days(addDays(todayLocalISO(), 14))) throw new Error("within60");
-      console.log("✅ Self-tests passed");
-    } catch (e) {
-      console.warn("⚠️ Self-tests failed:", e);
-    }
-  }, []);
-
-  return (
-    <div>
-      {/* Top bar */}
-      <div
-        className="w-full border-b"
-        style={{ background: "#ffffff" }}
-      >
-        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <img
-              src={logoUrl}
-              alt="Aptella"
-              style={{ height: 36, width: "auto" }}
-            />
-            <div className="h-6 w-px bg-gray-300 mx-1" />
-            <div className="text-sm text-[#0e3446]">
-              Master Distributor Deal Registration
-            </div>
-          </div>
-          <nav className="flex items-center gap-2">
-            <button
-              className={
-                "px-3 py-2 rounded-lg " +
-                (tab === "reseller" ? "bg-[#0e3446] text-white" : "bg-gray-100 text-[#0e3446]")
-              }
-              onClick={() => setTab("reseller")}
-            >
-              Reseller
-            </button>
-            <button
-              className={
-                "px-3 py-2 rounded-lg " +
-                (tab === "admin" ? "bg-[#0e3446] text-white" : "bg-gray-100 text-[#0e3446]")
-              }
-              onClick={() => setTab("admin")}
-            >
-              Admin
-            </button>
-            {authed ? (
-              <button className={"px-3 py-2 rounded-lg text-white " + BRAND.orangeBtn} onClick={logout}>
-                Logout
-              </button>
-            ) : (
-              <></>
-            )}
-          </nav>
-        </div>
-      </div>
-
-      {/* Body */}
-      <div className="max-w-7xl mx-auto px-4 py-6">
-        {tab === "reseller" && (
-          <SubmissionForm
-            onLocalSave={(row) => setItems((prev) => [row, ...prev])}
-            onSyncOne={() => {}}
-            existingItems={items}
-            onLocale={setLocale}
-          />
-        )}
-        {tab === "admin" &&
-          (authed ? (
-            <AdminPanel items={items} setItems={setItems} />
-          ) : (
-            <Card>
-              <CardHeader title="Admin Login" subtitle="Enter the admin password" />
-              <CardBody>
-                <div className="flex items-center gap-2">
-                  <Input
-                    type="password"
-                    placeholder="Password"
-                    value={pwd}
-                    onChange={(e) => setPwd(e.target.value)}
-                  />
+          {/* FX Drawer */}
+          {fxOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.45)" }}>
+              <div className="bg-white rounded-2xl shadow-xl w-[min(680px,95vw)] p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="text-lg font-semibold" style={{ color: APTELLA.navy }}>FX Rates → AUD</div>
+                  <button className="px-2 py-1 rounded-lg border" onClick={() => setFxOpen(false)}>Close</button>
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-sm font-medium mb-2">
+                  <div>Currency</div><div>Rate to AUD</div><div></div>
+                </div>
+                <div className="space-y-2 max-h-[50vh] overflow-auto">
+                  {fxRows.map((row, i) => (
+                    <div key={i} className="grid grid-cols-3 gap-2 items-center">
+                      <input
+                        value={row.ccy}
+                        onChange={(e) => {
+                          const v = e.target.value.toUpperCase();
+                          setFxRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, ccy: v } : r)));
+                        }}
+                        className="px-2 py-1 rounded border"
+                      />
+                      <input
+                        type="number"
+                        step="0.000001"
+                        value={row.rateToAUD}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setFxRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, rateToAUD: v } : r)));
+                        }}
+                        className="px-2 py-1 rounded border"
+                      />
+                      <button
+                        className="text-red-600 text-sm"
+                        onClick={() => setFxRows((prev) => prev.filter((_, idx) => idx !== i))}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-3 flex items-center gap-2">
                   <button
-                    className={"px-3 py-2 rounded-lg text-white " + BRAND.primaryBtn}
-                    onClick={tryLogin}
+                    className="px-3 py-1.5 rounded-lg border"
+                    onClick={() => setFxRows((prev) => [...prev, { ccy: "USD", rateToAUD: 1.0 }])}
                   >
-                    Login
+                    Add Row
+                  </button>
+                  <div className="flex-1" />
+                  <button
+                    disabled={savingFx}
+                    className="px-3 py-1.5 rounded-lg text-white"
+                    style={{ background: APTELLA.navy }}
+                    onClick={saveFx}
+                  >
+                    {savingFx ? "Saving…" : "Save"}
                   </button>
                 </div>
-              </CardBody>
-            </Card>
-          ))}
-      </div>
+              </div>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }
 
-export default AppShell;
+/** =========================
+ * Root App
+ * ========================= */
+export default function App() {
+  const [items, setItems] = useState([]);
+
+  const onSubmitted = (rec) => setItems((prev) => [rec, ...prev]);
+  const onSyncOne = (rec) =>
+    setItems((prev) => prev.map((r) => (r.id === rec.id ? { ...r, syncedAt: todayISO() } : r)));
+
+  const [tab, setTab] = useState("reseller");
+
+  return (
+    <Shell>
+      <div className="mb-4 flex items-center gap-2">
+        <button
+          className="px-3 py-2 rounded-xl text-white"
+          style={{ background: tab === "reseller" ? APTELLA.navy : "#e5e7eb", color: tab === "reseller" ? "white" : APTELLA.navy }}
+          onClick={() => setTab("reseller")}
+        >
+          Reseller
+        </button>
+        <button
+          className="px-3 py-2 rounded-xl text-white"
+          style={{ background: tab === "admin" ? APTELLA.navy : "#e5e7eb", color: tab === "admin" ? "white" : APTELLA.navy }}
+          onClick={() => setTab("admin")}
+        >
+          Admin
+        </button>
+      </div>
+
+      {tab === "reseller" ? (
+        <ResellerForm onSubmitted={onSubmitted} onSyncOne={onSyncOne} />
+      ) : (
+        <AdminPanel items={items} setItems={setItems} />
+      )}
+    </Shell>
+  );
+}
