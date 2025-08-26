@@ -2,83 +2,12 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Aptella brand tokens */
-:root{
-  --aptella-navy:#0e3446;
-  --aptella-navy-600:#0b2938;
-  --aptella-orange:#f0a03a;
-  --ink:#0f172a;
-  --muted:#6b7280;
-  --panel:#f7fafc;
-  --ring:#e5e7eb;
+/* Components you want to style with @apply must live inside a layer */
+@layer components {
+  .btn-primary {
+    @apply px-3 py-2 rounded-lg text-white bg-aptella-navy hover:bg-aptella-navy-dark;
+  }
+  .btn-secondary {
+    @apply px-3 py-2 rounded-lg bg-gray-100 text-aptella-navy;
+  }
 }
-
-html,body,#root{height:100%;}
-body{color:var(--ink); background:var(--panel);}
-
-/* Layout helpers */
-.container{max-width:1200px; margin:0 auto; padding:20px;}
-.card{background:#fff; border:1px solid var(--ring); border-radius:16px; box-shadow:0 2px 6px rgba(15,23,42,.06);}
-
-/* Brand header */
-.brandbar{
-  background:#fff; border-bottom:1px solid var(--ring);
-}
-.brand{
-  display:flex; align-items:center; gap:14px; font-weight:700; color:var(--aptella-navy);
-}
-.brand img{height:28px; width:auto;}
-.kicker{color:var(--muted); font-weight:500;}
-
-/* Buttons */
-.btn{border-radius:12px; padding:.6rem .9rem; border:1px solid var(--ring); background:#f8fafc;}
-.btn:hover{background:#eef2f7;}
-.btn.primary{background:var(--aptella-navy); color:#fff; border:none;}
-.btn.primary:hover{background:var(--aptella-navy-600);}
-.btn.orange{background:var(--aptella-orange); color:#102a38; border:none; font-weight:700;}
-.btn.orange:hover{filter:brightness(.95)}
-
-/* Inputs */
-.input, select, textarea{
-  width:100%;
-  border:1px solid var(--ring);
-  border-radius:12px;
-  padding:.65rem .75rem;
-  background:#fff;
-}
-.input[required], select[required], textarea[required]{background:#f9fafb;}
-.input.orange{border-color:var(--aptella-orange); box-shadow:0 0 0 2px rgba(240,160,58,.15);}
-
-/* Map */
-.map-wrap{width:100%; height:480px; border-radius:16px; overflow:hidden;}
-@media (max-width: 960px){ .map-wrap{height:360px;} }
-
-/* Bubble markers */
-.bubble-icon{background:transparent; border:none;}
-.bubble{
-  background:var(--aptella-orange); color:#102a38; font-weight:800;
-  border:3px solid #fff; border-radius:9999px; padding:10px 14px;
-  box-shadow:0 8px 18px rgba(0,0,0,.25);
-  transform:translate(-50%,-50%); position:relative; left:50%; top:50%;
-  white-space:nowrap; font-size:.95rem;
-}
-
-/* Tiny badges */
-.badge{display:inline-block; border-radius:9999px; padding:.2rem .5rem; font-size:.75rem; font-weight:700}
-.badge.blue{background:#e0f2fe; color:#075985}
-.badge.green{background:#dcfce7; color:#14532d}
-.badge.red{background:#fee2e2; color:#7f1d1d}
-
-/* Table */
-.table{width:100%; border-collapse:separate; border-spacing:0;}
-.table th, .table td{padding:.7rem .75rem; border-bottom:1px solid var(--ring); background:#fff;}
-.table thead th{position:sticky; top:0; background:#fff8ee; color:#7a4a11; border-bottom:2px solid var(--aptella-orange); z-index:1; font-weight:800}
-.table .actions{display:flex; gap:8px;}
-
-/* Drawer modal */
-.scrim{position:fixed; inset:0; background:rgba(0,0,0,.45); display:flex; align-items:center; justify-content:center; z-index:50;}
-.modal{background:#fff; border-radius:16px; border:1px solid var(--ring); width:min(640px,94vw); padding:18px;}
-.modal h3{font-weight:800; color:var(--aptella-navy);}
-
-/* Footer */
-.footer{color:var(--muted); font-size:.85rem; margin-top:18px;}
