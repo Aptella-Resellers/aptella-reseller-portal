@@ -6,14 +6,18 @@
       name="viewport"
       content="width=device-width, initial-scale=1, viewport-fit=cover"
     />
+    <meta name="theme-color" content="#0e3446" />
     <title>Aptella Reseller Portal</title>
-    <!-- optional: only include this if you actually add the file -->
-    <link rel="icon" href="/aptella-reseller-portal/favicon.ico" />
+    <!-- Optional favicon:
+         If you add public/favicon.ico, uncomment the next line -->
+    <!-- <link rel="icon" href="/aptella-reseller-portal/favicon.ico" /> -->
   </head>
   <body>
     <div id="root"></div>
-    <!-- IMPORTANT: this is the ONLY script tag you need in source.
-         Vite rewrites it to the hashed bundle during build. -->
-    <script type="module" src="/aptella-reseller-portal/src/main.jsx"></script>
+
+    <!-- IMPORTANT: Do not change this. Vite will replace it with the
+         correct hashed asset during `npm run build`, honoring your
+         `base` in vite.config.js -->
+    <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
