@@ -1,1145 +1,958 @@
+// src/App.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
 import logoUrl from "./assets/aptella-logo.svg";
 
-/** =========================
- * Config & simple constants
- * ========================= */
-const GAS_URL = "https://script.google.com/macros/s/AKfycbw3O_GnYcTx4bRYdFD2vCSs26L_Gzl2ZIZd18dyJmZAEE442hvhqp7j1C4W6cFX_DWM/exec";
+// ====== CONFIG ======
+const GAS_URL =
+  "https://script.google.com/macros/s/AKfycbw3O_GnYcTx4bRYdFD2vCSs26L_Gzl2ZIZd18dyJmZAEE442hvhqp7j1C4W6cFX_DWM/exec";
 const ADMIN_PASSWORD = "Aptella2025!";
 
-const APTELLA = {
-  navy: "#0e3446",
-  navyDark: "#0b2938",
-  orange: "#f39b33", // close to aptella.com orange
-  orangeDark: "#d9851f",
+// capitals + currency (used by Reseller form)
+const COUNTRY_META = {
+  Singapore: { lat: 1.3521, lng: 103.8198, currency: "SGD" },
+  Malaysia: { lat: 3.139, lng: 101.6869, currency: "MYR" },
+  Indonesia: { lat: -6.2088, lng: 106.8456, currency: "IDR" },
+  Philippines: { lat: 14.5995, lng: 120.9842, currency: "PHP" },
 };
-
-const COUNTRIES = [
-  { name: "Select Country", code: "", currency: "", capital: "", lat: null, lng: null },
-  { name: "Singapore", code: "SG", currency: "SGD", capital: "Singapore", lat: 1.3521, lng: 103.8198 },
-  { name: "Malaysia", code: "MY", currency: "MYR", capital: "Kuala Lumpur", lat: 3.139, lng: 101.6869 },
-  { name: "Indonesia", code: "ID", currency: "IDR", capital: "Jakarta", lat: -6.2088, lng: 106.8456 },
-  { name: "Philippines", code: "PH", currency: "PHP", capital: "Manila", lat: 14.5995, lng: 120.9842 },
-];
-
-const INDUSTRIES = [
-  "Construction", "Oil & Gas", "Mining", "Telecom", "Government",
-  "Education", "Utilities", "Transportation", "Manufacturing", "Other",
-];
 
 const STAGES = [
-  { key: "qualified", label: "Qualified" },
-  { key: "proposal", label: "Proposal" },
-  { key: "negotiation", label: "Negotiation" },
-  { key: "won", label: "Won" },
-  { key: "lost", label: "Lost" },
+  { key: "qualified", label: "Qualified", probability: 35 },
+  { key: "negotiation", label: "Negotiation", probability: 70 },
+  { key: "committed", label: "Committed", probability: 90 },
 ];
 
-const PROB_BY_STAGE = { qualified: 35, proposal: 55, negotiation: 70, won: 100, lost: 0 };
-
-const SUPPORT_OPTIONS = [
-  "Pre-sales engineer",
-  "Demo / loan unit",
-  "Pricing exception",
-  "Marketing materials",
-  "Partner training",
-  "On-site customer visit",
-  "Extended lock request",
-];
-
-// Bahasa map for key labels
-const I18N_ID = {
-  "Reseller Country": "Negara Anda",
-  "Reseller Location": "Lokasi Reseller",
-  "Currency": "Mata Uang",
-  "Reseller company": "Perusahaan Reseller",
-  "Primary contact": "Kontak Utama",
-  "Contact email": "Email Kontak",
-  "Contact phone": "Telepon Kontak",
-  "Customer name": "Nama Pelanggan",
-  "Customer City": "Kota Pelanggan",
-  "Customer Country": "Negara Pelanggan",
-  "Map option (paste lat, lng or click helper)":
-    "Opsi peta (tempel lat, lng atau klik pembantu)",
-  "Tip: use the link to pick a point, copy coordinates back here.":
-    "Tip: gunakan tautan untuk memilih titik, salin koordinat kembali di sini.",
-  "Solution offered (Xgrids)": "Solusi yang ditawarkan (Xgrids)",
-  "Expected close date": "Perkiraan tanggal penutupan",
-  "Industry": "Industri",
-  "Deal value": "Nilai transaksi",
-  "Sales stage": "Tahap penjualan",
-  "Probability (%)": "Probabilitas (%)",
-  "Competitors": "Pesaing",
-  "Support requested": "Dukungan dibutuhkan",
-  "Evidence (required)": "Bukti (wajib)",
-  "Notes": "Catatan",
-  "Send me reminders for updates": "Kirim pengingat untuk pembaruan",
-  "Submit Registration": "Kirim Pendaftaran",
-};
-
-const XGRIDS_SOLUTIONS = [
+const SOLUTIONS = [
   "Xgrids L2 PRO",
   "Xgrids K1",
-  "Xgrids PortalCam",
-  "Xgrids Drone Kit",
-  "Other…" // triggers free text field
+  "Xgrids K3",
+  "Xgrids L1",
+  "Other",
 ];
 
-/** =========================
- * Utilities
- * ========================= */
-const fmtDate = (d) => {
-  try {
-    const x = new Date(d);
-    const y = x.getFullYear();
-    const m = String(x.getMonth() + 1).padStart(2, "0");
-    const dd = String(x.getDate()).padStart(2, "0");
-    return `${y}-${m}-${dd}`;
-  } catch {
-    return d || "";
+function classNames(...xs) {
+  return xs.filter(Boolean).join(" ");
+}
+
+async function apiGET(params) {
+  const url = `${GAS_URL}?${new URLSearchParams(params).toString()}`;
+  const res = await fetch(url, { method: "GET" });
+  if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
+  const json = await res.json();
+  if (!json || json.ok === false) {
+    throw new Error(json && json.error ? json.error : "Unknown error");
   }
-};
-const todayISO = () => fmtDate(new Date());
-const daysUntil = (iso) => {
-  const t = new Date(fmtDate(iso));
-  const n = new Date(fmtDate(new Date()));
-  return Math.round((t - n) / (1000 * 60 * 60 * 24));
-};
-
-const loadLeafletOnce = (() => {
-  let p;
-  return () => {
-    if (window.L) return Promise.resolve(window.L);
-    if (p) return p;
-    p = new Promise((resolve, reject) => {
-      const css = document.createElement("link");
-      css.rel = "stylesheet";
-      css.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
-      document.head.appendChild(css);
-
-      const s = document.createElement("script");
-      s.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
-      s.onload = () => resolve(window.L);
-      s.onerror = () => reject(new Error("Leaflet failed to load"));
-      document.body.appendChild(s);
-    });
-    return p;
-  };
-})();
-
-/** Fetch helpers that always return JSON or throw */
-async function getJSON(url) {
-  const res = await fetch(url, { method: "GET", mode: "cors", cache: "no-cache", credentials: "omit" });
-  const text = await res.text();
-  let json = null;
-  try { json = JSON.parse(text); } catch { throw new Error(`Bad JSON: ${text.slice(0,200)}`); }
-  if (!res.ok || json?.ok === false) throw new Error(json?.error || `HTTP ${res.status} ${res.statusText}`);
   return json;
 }
-async function postJSON(url, body) {
-  const res = await fetch(url, {
+
+async function apiPOST(body) {
+  const res = await fetch(GAS_URL, {
     method: "POST",
-    mode: "cors",
-    cache: "no-cache",
-    credentials: "omit",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body || {}),
+    body: JSON.stringify(body),
   });
-  const text = await res.text();
-  let json = null;
-  try { json = JSON.parse(text); } catch { throw new Error(`Bad JSON: ${text.slice(0,200)}`); }
-  if (!res.ok || json?.ok === false) throw new Error(json?.error || `HTTP ${res.status} ${res.statusText}`);
+  if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
+  const json = await res.json();
+  if (!json || json.ok === false) {
+    throw new Error(json && json.error ? json.error : "Unknown error");
+  }
   return json;
 }
 
-/** =========================
- * Branding shell
- * ========================= */
-function Shell({ children }) {
-  return (
-    <div className="min-h-screen" style={{ background: "#f7fafc", color: "#0f172a" }}>
-      <header className="w-full bg-white border-b" style={{ borderColor: "#e5e7eb" }}>
-        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <img src={logoUrl} alt="Aptella" className="h-10 w-auto" />
-            <div>
-              <div className="text-2xl font-bold tracking-tight" style={{ color: APTELLA.navy }}>
-                Aptella Master Distributor
-              </div>
-              <div className="text-sm" style={{ color: "#334155" }}>
-                Reseller Deal Registration Portal
-              </div>
-            </div>
-          </div>
-        </div>
-      </header>
-      <main className="max-w-7xl mx-auto px-4 py-6">{children}</main>
-    </div>
-  );
+function niceDate(d) {
+  if (!d) return "";
+  // accept "yyyy-mm-dd" or ISO
+  const dt = typeof d === "string" && d.length <= 10 ? new Date(`${d}T00:00:00`) : new Date(d);
+  if (isNaN(dt)) return "";
+  const y = dt.getFullYear();
+  const m = String(dt.getMonth() + 1).padStart(2, "0");
+  const day = String(dt.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
-/** =========================
- * Reseller Form
- * ========================= */
-function ResellerForm({ onSubmitted, onSyncOne }) {
-  const [form, setForm] = useState(() => {
-    const def = COUNTRIES[0];
-    return {
-      resellerCountry: def.name,
-      resellerLocation: "",
-      currency: "",
-      lat: def.lat,
-      lng: def.lng,
-
-      resellerName: "",
-      resellerContact: "",
-      resellerEmail: "",
-      resellerPhone: "",
-
-      customerName: "",
-      city: "",
-      country: "",
-      customerLocation: "",
-
-      industry: "",
-      value: "",
-      solution: "",
-      solutionOther: "",
-      stage: "qualified",
-      probability: PROB_BY_STAGE["qualified"],
-      expectedCloseDate: todayISO(),
-
-      supports: [],
-      competitors: "",
-      notes: "",
-      evidenceFiles: [],
-      remindersOptIn: false,
-    };
+// ===================== Reseller Form ======================
+function ResellerForm({ onSubmitted }) {
+  const [form, setForm] = useState({
+    resellerCountry: "",
+    resellerLocation: "",
+    currency: "SGD",
+    resellerName: "",
+    resellerContact: "",
+    resellerEmail: "",
+    resellerPhone: "",
+    customerName: "",
+    customerCity: "",
+    customerCountry: "",
+    lat: "",
+    lng: "",
+    expectedCloseDate: "",
+    industry: "",
+    stage: "qualified",
+    probability: 35,
+    value: "",
+    solution: "",
+    solutionOther: "",
+    competitors: "",
+    notes: "",
+    supports: [], // array
+    emailEvidence: true,
   });
-
-  const isID = form.resellerCountry === "Indonesia";
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    // When reseller country changes, preload currency + capital lat/lng + resellerLocation
-    const cfg = COUNTRIES.find((c) => c.name === form.resellerCountry);
-    setForm((f) => ({
-      ...f,
-      currency: cfg?.currency || "",
-      resellerLocation: cfg?.capital || "",
-      lat: cfg?.lat ?? f.lat,
-      lng: cfg?.lng ?? f.lng,
-    }));
+    // default capitals + currency
+    if (form.resellerCountry && COUNTRY_META[form.resellerCountry]) {
+      const m = COUNTRY_META[form.resellerCountry];
+      setForm((f) => ({
+        ...f,
+        lat: m.lat,
+        lng: m.lng,
+        currency: m.currency,
+      }));
+    }
   }, [form.resellerCountry]);
 
   useEffect(() => {
-    // Keep probability in sync with stage (unless user edits later)
-    setForm((f) => ({ ...f, probability: PROB_BY_STAGE[f.stage] ?? f.probability }));
+    const st = STAGES.find((s) => s.key === form.stage);
+    if (st) setForm((f) => ({ ...f, probability: st.probability }));
   }, [form.stage]);
 
-  // If customer Country changes, default lat/lng to that capital (if blank or 0)
-  useEffect(() => {
-    const cfg = COUNTRIES.find((c) => c.name === form.country);
-    if (!cfg) return;
-    setForm((f) => {
-      const lat = (f.lat === null || f.lat === "" || Number(f.lat) === 0) ? cfg.lat : f.lat;
-      const lng = (f.lng === null || f.lng === "" || Number(f.lng) === 0) ? cfg.lng : f.lng;
-      const loc = `${f.city || cfg.capital || ""}${cfg.name ? `, ${cfg.name}` : ""}`;
-      return { ...f, currency: f.currency || cfg.currency, customerLocation: loc, lat, lng };
-    });
-  }, [form.country, form.city]);
-
-  const handleChange = (e) => {
-    const { name, type, value, checked } = e.target;
-    setForm((f) => ({ ...f, [name]: type === "checkbox" ? checked : value }));
-  };
-
-  const toggleSupport = (label) => {
-    setForm((f) => {
-      const s = new Set(f.supports);
-      if (s.has(label)) s.delete(label);
-      else s.add(label);
-      return { ...f, supports: [...s] };
-    });
-  };
-
-  const onFiles = (e) => {
-    const files = Array.from(e.target.files || []);
-    setForm((f) => ({ ...f, evidenceFiles: files }));
-  };
-
-  const validEmail = (s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s || "");
-
-  function validate() {
-    const errs = {};
-    // Mandatory greying style is done via UI; here we validate
-    if (!form.resellerCountry || form.resellerCountry === "Select Country") errs.resellerCountry = "Required";
-    if (!form.resellerLocation) errs.resellerLocation = "Required";
-    if (!form.currency) errs.currency = "Required";
-    if (!form.resellerName) errs.resellerName = "Required";
-    if (!form.resellerContact) errs.resellerContact = "Required";
-    if (!validEmail(form.resellerEmail)) errs.resellerEmail = "Valid email required";
-    if (!form.customerName) errs.customerName = "Required";
-    if (!form.country) errs.country = "Required";
-    if (!form.city) errs.city = "Required";
-    if (!form.solution) errs.solution = "Required";
-    if (form.solution === "Other…" && !form.solutionOther) errs.solutionOther = "Please describe";
-    if (!form.value || Number(form.value) <= 0) errs.value = "Enter positive amount";
-    if (!form.expectedCloseDate) errs.expectedCloseDate = "Required";
-    // Evidence mandatory
-    if (!form.evidenceFiles || form.evidenceFiles.length === 0) errs.evidence = "Evidence file is required";
-
-    return errs;
+  function toggleSupport(v) {
+    setForm((f) =>
+      f.supports.includes(v)
+        ? { ...f, supports: f.supports.filter((x) => x !== v) }
+        : { ...f, supports: [...f.supports, v] }
+    );
   }
 
-  const filesToBase64 = async (files) => {
-    const MAX = 20 * 1024 * 1024;
-    let total = 0;
-    const out = [];
-    for (const f of files || []) {
-      const buf = await f.arrayBuffer();
-      total += buf.byteLength;
-      if (total > MAX) throw new Error("Attachments exceed 20MB total.");
-      const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
-      out.push({ name: f.name, type: f.type || "application/octet-stream", data: b64 });
-    }
-    return out;
-  };
-
-  const submit = async (e) => {
-    e.preventDefault();
-    const errs = validate();
-    if (Object.keys(errs).length) {
-      alert("Please fix the highlighted errors before submitting.");
+  async function submit() {
+    if (!form.resellerCountry || !form.resellerLocation || !form.customerName || !form.expectedCloseDate || !form.solution) {
+      alert("Please complete all required fields.");
       return;
     }
-    const id = Math.random().toString(36).slice(2);
-    const record = {
-      id,
-      submittedAt: todayISO(),
-
-      resellerCountry: form.resellerCountry,
-      resellerLocation: form.resellerLocation,
-      resellerName: form.resellerName,
-      resellerContact: form.resellerContact,
-      resellerEmail: form.resellerEmail,
-      resellerPhone: form.resellerPhone,
-
-      customerName: form.customerName,
-      city: form.city,
-      country: form.country,
-      customerLocation: `${form.city}, ${form.country}`,
-
-      lat: Number(form.lat),
-      lng: Number(form.lng),
-
-      industry: form.industry,
-      currency: form.currency,
-      value: String(form.value),
-
-      solution: form.solution,
-      solutionOther: form.solution === "Other…" ? form.solutionOther : "",
-
-      stage: form.stage,
-      probability: Number(form.probability),
-      expectedCloseDate: fmtDate(form.expectedCloseDate),
-
-      status: "pending",
-      remindersOptIn: !!form.remindersOptIn,
-
-      competitors: form.competitors,
-      notes: form.notes,
-      evidenceLinks: "", // kept for compatibility; we’re enforcing files
-    };
-
-    try {
-      // Optimistic local add
-      onSubmitted(record);
-
-      // Attachments (optional email flow; GAS may ignore)
-      const attachments = await filesToBase64(form.evidenceFiles);
-      const payload = { action: "submit", ...record, attachments, emailEvidence: true, evidenceTo: "admin.asia@aptella.com" };
-
-      const res = await postJSON(`${GAS_URL}?action=submit`, payload);
-      if (res?.ok) {
-        alert("Submitted and synced to Google Sheets.");
-        onSyncOne && onSyncOne(record); // stamp syncedAt locally
-        // Reset
-        e.target.reset();
-        setForm((f) => ({ ...f, evidenceFiles: [] }));
-      } else {
-        alert(`Submitted locally. Google Sheets sync failed: ${res?.error || "unknown error"}`);
-      }
-    } catch (err) {
-      alert(`Submitted locally. Google Sheets sync failed: ${err.message || err}`);
+    if (form.solution === "Other" && !form.solutionOther.trim()) {
+      alert("Please specify the Other solution.");
+      return;
     }
-  };
-
-  const label = (en) => (isID ? (I18N_ID[en] || en) : en);
-  const requiredBoxCls = "bg-gray-100 border border-gray-300"; // greyed like aptella.com
-  const resellerAccentCls = "bg-[#FFF7ED] border border-[#FED7AA]"; // soft Aptella orange wash for reseller inputs
+    setSaving(true);
+    try {
+      const payload = {
+        action: "submit",
+        row: {
+          resellerCountry: form.resellerCountry,
+          resellerLocation: form.resellerLocation,
+          currency: form.currency,
+          resellerName: form.resellerName,
+          resellerContact: form.resellerContact,
+          resellerEmail: form.resellerEmail,
+          resellerPhone: form.resellerPhone,
+          customerName: form.customerName,
+          customerLocation:
+            (form.customerCity || "") +
+            (form.customerCountry ? `, ${form.customerCountry}` : ""),
+          city: form.customerCity || "",
+          country: form.customerCountry || "",
+          lat: Number(form.lat) || "",
+          lng: Number(form.lng) || "",
+          industry: form.industry || "",
+          value: Number(String(form.value).replace(/[^\d.]/g, "")) || 0,
+          solution: form.solution,
+          solutionOther: form.solution === "Other" ? form.solutionOther : "",
+          stage: form.stage,
+          probability: Number(form.probability) || 0,
+          expectedCloseDate: niceDate(form.expectedCloseDate),
+          status: "pending",
+          confidential: false,
+          remindersOptIn: false,
+          supports: form.supports, // array; GAS will join with "; "
+          competitors: form.competitors || "",
+          notes: form.notes || "",
+          evidenceLinks: [],
+          emailEvidence: !!form.emailEvidence,
+        },
+      };
+      const j = await apiPOST(payload);
+      alert("Submitted! ID: " + j.id);
+      onSubmitted && onSubmitted();
+    } catch (e) {
+      alert("Submitted locally. Google Sheets sync failed: " + e.message);
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
-    <div className="bg-white rounded-2xl shadow p-6 border" style={{ borderColor: "#e5e7eb" }}>
-      <div className="text-lg font-semibold mb-4" style={{ color: APTELLA.navy }}>
-        {isID ? "Daftarkan Deal (dalam 60 hari)" : "Register Upcoming Deal (within 60 days)"}
-      </div>
+    <div className="mx-auto max-w-6xl p-4">
+      <header className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-3">
+          <img src={logoUrl} alt="Aptella" className="h-7" />
+          <div className="text-sm text-slate-500">Master Distributor • Xgrids</div>
+        </div>
+        <div className="rounded-full border px-3 py-1 text-xs bg-white text-slate-700">
+          Reseller
+        </div>
+      </header>
 
-      <form onSubmit={submit} className="grid gap-6">
-        {/* Country / Location / Currency */}
-        <div className="grid md:grid-cols-3 gap-4">
-          <div>
-            <label className="text-sm font-medium">{label("Reseller Country")} *</label>
-            <select
-              name="resellerCountry"
-              value={form.resellerCountry}
-              onChange={handleChange}
-              className={`w-full px-3 py-2 rounded-xl ${resellerAccentCls}`}
-            >
-              {COUNTRIES.map((c) => (
-                <option key={c.name} value={c.name}>
-                  {c.name || "Select Country"}
-                </option>
-              ))}
-            </select>
-          </div>
+      <h2 className="text-xl font-semibold mb-3">
+        Register Upcoming Deal <span className="text-aptella-orange">(within 60 days)</span>
+      </h2>
 
-          <div>
-            <label className="text-sm font-medium">{label("Reseller Location")} *</label>
-            <input
-              name="resellerLocation"
-              value={form.resellerLocation}
-              onChange={handleChange}
-              placeholder="e.g., Jakarta"
-              className={`w-full px-3 py-2 rounded-xl ${resellerAccentCls}`}
-            />
-          </div>
-
-          <div>
-            <label className="text-sm font-medium">{label("Currency")} *</label>
-            <input
-              name="currency"
-              value={form.currency}
-              onChange={handleChange}
-              className={`w-full px-3 py-2 rounded-xl ${requiredBoxCls}`}
-              placeholder="SGD / MYR / IDR / PHP"
-            />
-          </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-white p-4 rounded-xl shadow">
+        {/* Country & Location */}
+        <div>
+          <label className="text-sm font-medium">Reseller Country *</label>
+          <select
+            className="mt-1 w-full rounded-lg border bg-white p-2 focus:outline-none"
+            value={form.resellerCountry}
+            onChange={(e) =>
+              setForm((f) => ({ ...f, resellerCountry: e.target.value }))
+            }
+          >
+            <option value="">Select country</option>
+            {Object.keys(COUNTRY_META).map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="text-sm font-medium">Reseller Location *</label>
+          <input
+            className="mt-1 w-full rounded-lg border bg-white p-2"
+            placeholder="e.g., Singapore"
+            value={form.resellerLocation}
+            onChange={(e) =>
+              setForm((f) => ({ ...f, resellerLocation: e.target.value }))
+            }
+          />
         </div>
 
-        {/* Reseller contact */}
-        <div className="grid md:grid-cols-2 gap-4">
-          <div>
-            <label className="text-sm font-medium">{label("Reseller company")} *</label>
-            <input name="resellerName" value={form.resellerName} onChange={handleChange} className={`w-full px-3 py-2 rounded-xl ${requiredBoxCls}`} />
-          </div>
-          <div>
-            <label className="text-sm font-medium">{label("Primary contact")} *</label>
-            <input name="resellerContact" value={form.resellerContact} onChange={handleChange} className={`w-full px-3 py-2 rounded-xl ${requiredBoxCls}`} />
-          </div>
-          <div>
-            <label className="text-sm font-medium">{label("Contact email")} *</label>
-            <input type="email" name="resellerEmail" value={form.resellerEmail} onChange={handleChange} className={`w-full px-3 py-2 rounded-xl ${requiredBoxCls}`} />
-          </div>
-          <div>
-            <label className="text-sm font-medium">{label("Contact phone")}</label>
-            <input name="resellerPhone" value={form.resellerPhone} onChange={handleChange} className="w-full px-3 py-2 rounded-xl border border-gray-300" />
-          </div>
+        {/* Currency */}
+        <div>
+          <label className="text-sm font-medium">Currency *</label>
+          <select
+            className="mt-1 w-full rounded-lg border bg-white p-2"
+            value={form.currency}
+            onChange={(e) => setForm((f) => ({ ...f, currency: e.target.value }))}
+          >
+            {["AUD", "SGD", "MYR", "IDR", "PHP", "USD"].map((x) => (
+              <option key={x} value={x}>
+                {x}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Contacts */}
+        <div>
+          <label className="text-sm font-medium">Reseller company *</label>
+          <input
+            className="mt-1 w-full rounded-lg border bg-white p-2"
+            value={form.resellerName}
+            onChange={(e) => setForm((f) => ({ ...f, resellerName: e.target.value }))}
+          />
+        </div>
+        <div>
+          <label className="text-sm font-medium">Primary contact *</label>
+          <input
+            className="mt-1 w-full rounded-lg border bg-white p-2"
+            value={form.resellerContact}
+            onChange={(e) =>
+              setForm((f) => ({ ...f, resellerContact: e.target.value }))
+            }
+          />
+        </div>
+        <div>
+          <label className="text-sm font-medium">Contact email *</label>
+          <input
+            className="mt-1 w-full rounded-lg border bg-white p-2"
+            value={form.resellerEmail}
+            onChange={(e) =>
+              setForm((f) => ({ ...f, resellerEmail: e.target.value }))
+            }
+          />
+        </div>
+        <div>
+          <label className="text-sm font-medium">Contact phone</label>
+          <input
+            className="mt-1 w-full rounded-lg border bg-white p-2"
+            value={form.resellerPhone}
+            onChange={(e) =>
+              setForm((f) => ({ ...f, resellerPhone: e.target.value }))
+            }
+          />
         </div>
 
         {/* Customer */}
-        <div className="grid md:grid-cols-2 gap-4">
-          <div>
-            <label className="text-sm font-medium">{label("Customer name")} *</label>
-            <input name="customerName" value={form.customerName} onChange={handleChange} className={`w-full px-3 py-2 rounded-xl ${requiredBoxCls}`} />
-          </div>
-          <div>
-            <label className="text-sm font-medium">{label("Customer City")} *</label>
-            <input
-              name="city"
-              value={form.city}
-              onChange={handleChange}
-              placeholder="Jakarta"
-              className={`w-full px-3 py-2 rounded-xl ${requiredBoxCls}`}
-            />
-          </div>
-          <div>
-            <label className="text-sm font-medium">{label("Customer Country")} *</label>
-            <select
-              name="country"
-              value={form.country}
-              onChange={handleChange}
-              className={`w-full px-3 py-2 rounded-xl ${requiredBoxCls}`}
-            >
-              <option value="">Select country</option>
-              {COUNTRIES.slice(1).map((c) => (
-                <option key={c.name} value={c.name}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="text-sm font-medium">{label("Map option (paste lat, lng or click helper)")}</label>
-            <div className="flex gap-2">
-              <input
-                name="lat"
-                value={form.lat ?? ""}
-                onChange={handleChange}
-                placeholder="lat"
-                className="w-full px-3 py-2 rounded-xl border border-gray-300"
-              />
-              <input
-                name="lng"
-                value={form.lng ?? ""}
-                onChange={handleChange}
-                placeholder="lng"
-                className="w-full px-3 py-2 rounded-xl border border-gray-300"
-              />
-              <a
-                className="px-3 py-2 rounded-xl text-white text-sm"
-                style={{ background: APTELLA.navy }}
-                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-                  (form.city || "") + "," + (form.country || "")
-                )}`}
-                target="_blank"
-                rel="noreferrer"
-              >
-                Open Map
-              </a>
-            </div>
-            <div className="text-xs text-gray-600 mt-1">
-              {label("Tip: use the link to pick a point, copy coordinates back here.")}
-            </div>
-          </div>
-        </div>
-
-        {/* Xgrids + dates + industry + value */}
-        <div className="grid md:grid-cols-3 gap-4">
-          <div className="md:col-span-2">
-            <label className="text-sm font-medium">{label("Solution offered (Xgrids)")} *</label>
-            <div className="grid gap-2">
-              <select
-                name="solution"
-                value={form.solution}
-                onChange={handleChange}
-                className={`w-full px-3 py-2 rounded-xl ${requiredBoxCls}`}
-              >
-                <option value="">Select an Xgrids solution</option>
-                {XGRIDS_SOLUTIONS.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </select>
-              {form.solution === "Other…" && (
-                <input
-                  name="solutionOther"
-                  value={form.solutionOther}
-                  onChange={handleChange}
-                  placeholder="Describe the solution"
-                  className="w-full px-3 py-2 rounded-xl border border-gray-300"
-                />
-              )}
-              <a
-                href="https://www.aptella.com/asia/product-brands/xgrids-asia/"
-                target="_blank"
-                rel="noreferrer"
-                className="text-sm underline"
-                style={{ color: APTELLA.navy }}
-              >
-                Learn about Xgrids solutions
-              </a>
-            </div>
-          </div>
-
-          <div>
-            <label className="text-sm font-medium">{label("Expected close date")} *</label>
-            <div className="flex gap-2">
-              <input
-                type="date"
-                name="expectedCloseDate"
-                value={form.expectedCloseDate}
-                onChange={handleChange}
-                className={`w-full px-3 py-2 rounded-xl ${requiredBoxCls}`}
-              />
-              <a
-                className="px-3 py-2 rounded-xl text-white text-sm"
-                style={{ background: APTELLA.orange }}
-                href="https://maps.google.com"
-                target="_blank"
-                rel="noreferrer"
-                title="Open Maps"
-              >
-                Maps
-              </a>
-            </div>
-          </div>
-        </div>
-
-        <div className="grid md:grid-cols-3 gap-4">
-          <div>
-            <label className="text-sm font-medium">{label("Industry")}</label>
-            <select
-              name="industry"
-              value={form.industry}
-              onChange={handleChange}
-              className="w-full px-3 py-2 rounded-xl border border-gray-300"
-            >
-              <option value="">Select industry</option>
-              {INDUSTRIES.map((i) => (
-                <option key={i} value={i}>
-                  {i}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="text-sm font-medium">{label("Deal value")} *</label>
-            <input
-              type="number"
-              name="value"
-              value={form.value}
-              onChange={handleChange}
-              placeholder="25000"
-              className={`w-full px-3 py-2 rounded-xl ${requiredBoxCls}`}
-            />
-          </div>
-
-          <div>
-            <label className="text-sm font-medium">{label("Sales stage")}</label>
-            <select name="stage" value={form.stage} onChange={handleChange} className="w-full px-3 py-2 rounded-xl border border-gray-300">
-              {STAGES.map((s) => (
-                <option key={s.key} value={s.key}>
-                  {s.label}
-                </option>
-              ))}
-            </select>
-            <div className="mt-2">
-              <label className="text-sm font-medium">{label("Probability (%)")}</label>
-              <input
-                type="number"
-                name="probability"
-                min={0}
-                max={100}
-                value={form.probability}
-                onChange={handleChange}
-                className="w-full px-3 py-2 rounded-xl border border-gray-300"
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Competitors / Support */}
         <div>
-          <label className="text-sm font-medium">{label("Competitors")}</label>
+          <label className="text-sm font-medium">Customer name *</label>
           <input
-            name="competitors"
-            value={form.competitors}
-            onChange={handleChange}
-            placeholder="Comma-separated"
-            className="w-full px-3 py-2 rounded-xl border border-gray-300"
+            className="mt-1 w-full rounded-lg border bg-white p-2"
+            value={form.customerName}
+            onChange={(e) =>
+              setForm((f) => ({ ...f, customerName: e.target.value }))
+            }
+          />
+        </div>
+        <div>
+          <label className="text-sm font-medium">Customer Country *</label>
+          <input
+            className="mt-1 w-full rounded-lg border bg-white p-2"
+            placeholder="Select country"
+            value={form.customerCountry}
+            onChange={(e) =>
+              setForm((f) => ({ ...f, customerCountry: e.target.value }))
+            }
+          />
+        </div>
+        <div>
+          <label className="text-sm font-medium">Customer City</label>
+          <input
+            className="mt-1 w-full rounded-lg border bg-white p-2"
+            value={form.customerCity}
+            onChange={(e) =>
+              setForm((f) => ({ ...f, customerCity: e.target.value }))
+            }
+          />
+        </div>
+
+        {/* Map helper */}
+        <div>
+          <label className="text-sm font-medium">
+            Map option (paste lat,lng or use link)
+          </label>
+          <div className="mt-1 flex gap-2">
+            <input
+              className="w-full rounded-lg border bg-white p-2"
+              placeholder="lat"
+              value={form.lat}
+              onChange={(e) => setForm((f) => ({ ...f, lat: e.target.value }))}
+            />
+            <input
+              className="w-full rounded-lg border bg-white p-2"
+              placeholder="lng"
+              value={form.lng}
+              onChange={(e) => setForm((f) => ({ ...f, lng: e.target.value }))}
+            />
+            <a
+              className="rounded-lg bg-aptella-navy px-3 py-2 text-white"
+              href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                `${form.customerCity || ""}, ${form.customerCountry || ""}`
+              )}`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Open Map
+            </a>
+          </div>
+        </div>
+
+        {/* Dates / solution */}
+        <div>
+          <label className="text-sm font-medium">Expected close date *</label>
+          <input
+            type="date"
+            className="mt-1 w-full rounded-lg border bg-white p-2"
+            value={form.expectedCloseDate}
+            onChange={(e) =>
+              setForm((f) => ({ ...f, expectedCloseDate: e.target.value }))
+            }
           />
         </div>
 
         <div>
-          <label className="text-sm font-medium">{label("Support requested")}</label>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
-            {SUPPORT_OPTIONS.map((opt) => (
-              <label key={opt} className="flex items-center gap-2 text-sm">
+          <label className="text-sm font-medium">Solution offered (Xgrids) *</label>
+          <select
+            className="mt-1 w-full rounded-lg border bg-white p-2"
+            value={form.solution}
+            onChange={(e) => setForm((f) => ({ ...f, solution: e.target.value }))}
+          >
+            <option value="">Select an Xgrids solution</option>
+            {SOLUTIONS.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+          <a
+            href="https://www.aptella.com/brand/xgrids/"
+            target="_blank"
+            rel="noreferrer"
+            className="text-xs text-aptella-navy underline"
+          >
+            Learn about Xgrids
+          </a>
+          {form.solution === "Other" && (
+            <input
+              className="mt-2 w-full rounded-lg border bg-white p-2"
+              placeholder="Describe solution"
+              value={form.solutionOther}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, solutionOther: e.target.value }))
+              }
+            />
+          )}
+        </div>
+
+        {/* Industry / Deal value */}
+        <div>
+          <label className="text-sm font-medium">Industry</label>
+          <input
+            className="mt-1 w-full rounded-lg border bg-white p-2"
+            placeholder="Select industry"
+            value={form.industry}
+            onChange={(e) => setForm((f) => ({ ...f, industry: e.target.value }))}
+          />
+        </div>
+
+        <div>
+          <label className="text-sm font-medium">Deal value *</label>
+          <input
+            className="mt-1 w-full rounded-lg border bg-white p-2"
+            placeholder="e.g., 25000"
+            value={form.value}
+            onChange={(e) => setForm((f) => ({ ...f, value: e.target.value }))}
+          />
+        </div>
+
+        {/* Stage / probability */}
+        <div>
+          <label className="text-sm font-medium">Sales stage</label>
+          <select
+            className="mt-1 w-full rounded-lg border bg-white p-2"
+            value={form.stage}
+            onChange={(e) => setForm((f) => ({ ...f, stage: e.target.value }))}
+          >
+            {STAGES.map((s) => (
+              <option key={s.key} value={s.key}>
+                {s.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="text-sm font-medium">Probability (%)</label>
+          <input
+            className="mt-1 w-full rounded-lg border bg-white p-2"
+            value={form.probability}
+            onChange={(e) =>
+              setForm((f) => ({ ...f, probability: e.target.value }))
+            }
+          />
+        </div>
+
+        {/* Competitors */}
+        <div className="md:col-span-2">
+          <label className="text-sm font-medium">Competitors</label>
+          <input
+            className="mt-1 w-full rounded-lg border bg-white p-2"
+            placeholder="Comma separated (optional)"
+            value={form.competitors}
+            onChange={(e) =>
+              setForm((f) => ({ ...f, competitors: e.target.value }))
+            }
+          />
+        </div>
+
+        {/* Support checkboxes */}
+        <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-3">
+          <fieldset className="rounded-lg border p-3">
+            <legend className="text-sm font-medium">Support requested</legend>
+            {[
+              "Pre-sales engineer",
+              "Partner training",
+              "Extended lock request",
+              "Demo / loan unit",
+              "Pricing exception",
+              "On-site customer visit",
+            ].map((label) => (
+              <label key={label} className="mr-4 inline-flex items-center gap-2">
                 <input
                   type="checkbox"
-                  checked={form.supports.includes(opt)}
-                  onChange={() => toggleSupport(opt)}
+                  checked={form.supports.includes(label)}
+                  onChange={() => toggleSupport(label)}
                 />
-                {opt}
+                <span>{label}</span>
               </label>
             ))}
+          </fieldset>
+          <div>
+            <label className="text-sm font-medium">Notes</label>
+            <textarea
+              className="mt-1 w-full rounded-lg border bg-white p-2"
+              rows={4}
+              value={form.notes}
+              onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
+              placeholder="Key requirements, scope, constraints, decision process, etc."
+            />
+            <label className="mt-3 inline-flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={!!form.emailEvidence}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, emailEvidence: e.target.checked }))
+                }
+              />
+              Email attached files to Aptella (admin.asia@aptella.com)
+            </label>
           </div>
         </div>
 
-        {/* Evidence (mandatory) + Notes + Reminders */}
-        <div>
-          <label className="text-sm font-medium">{label("Evidence (required)")} *</label>
-          <input type="file" multiple onChange={onFiles} className="block w-full text-sm" />
-          <div className="text-xs text-gray-600 mt-1">
-            Email attached files to Aptella (admin.asia@aptella.com)
-          </div>
-        </div>
-
-        <div>
-          <label className="text-sm font-medium">{label("Notes")}</label>
-          <textarea
-            name="notes"
-            rows={4}
-            value={form.notes}
-            onChange={handleChange}
-            className="w-full px-3 py-2 rounded-xl border border-gray-300"
-            placeholder="Key requirements, scope, timelines, etc."
-          />
-        </div>
-
-        <div className="flex items-center gap-3">
-          <label className="text-sm flex items-center gap-2">
-            <input type="checkbox" name="remindersOptIn" checked={!!form.remindersOptIn} onChange={handleChange} />
-            {label("Send me reminders for updates")}
-          </label>
-
+        <div className="md:col-span-2 flex justify-end gap-2">
           <button
-            type="submit"
-            className="px-4 py-2 rounded-xl text-white"
-            style={{ background: APTELLA.navy }}
+            disabled={saving}
+            className="rounded-lg bg-slate-100 px-4 py-2"
+            onClick={() => window.location.reload()}
           >
-            {label("Submit Registration")}
+            Reset
+          </button>
+          <button
+            disabled={saving}
+            className="rounded-lg bg-aptella-orange px-4 py-2 text-white"
+            onClick={submit}
+          >
+            {saving ? "Submitting…" : "Submit Registration"}
           </button>
         </div>
-      </form>
+      </div>
     </div>
   );
 }
 
-/** =========================
- * Admin Panel (map + table + FX)
- * ========================= */
-function AdminPanel({ items, setItems }) {
-  const [adminAuthed, setAdminAuthed] = useState(false);
+// ===================== FX Drawer ======================
+function FXDrawer({ open, onClose }) {
+  const [rows, setRows] = useState([]);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    (async () => {
+      try {
+        const j = await apiGET({ action: "fx" });
+        setRows(j.rows || []);
+      } catch (e) {
+        alert("FX load failed: " + e.message);
+      }
+    })();
+  }, [open]);
+
+  function addRow() {
+    setRows((r) => [...r, { currency: "", rateToAUD: "" }]);
+  }
+  function update(i, patch) {
+    setRows((r) => r.map((x, idx) => (idx === i ? { ...x, ...patch } : x)));
+  }
+  function remove(i) {
+    setRows((r) => r.filter((_, idx) => idx !== i));
+  }
+
+  async function save() {
+    setSaving(true);
+    try {
+      const cleaned = rows
+        .filter((r) => r.currency && r.rateToAUD)
+        .map((r) => ({
+          currency: r.currency.trim().toUpperCase(),
+          rateToAUD: Number(r.rateToAUD),
+        }));
+      await apiPOST({ action: "fxsave", rows: cleaned });
+      alert("FX saved");
+      onClose();
+    } catch (e) {
+      alert("FX save failed: " + e.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40">
+      <div className="w-[min(680px,95vw)] rounded-xl bg-white p-4 shadow-xl">
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="text-lg font-semibold">FX Rates to AUD</h3>
+          <button className="rounded-lg bg-slate-100 px-3 py-1.5" onClick={onClose}>
+            Close
+          </button>
+        </div>
+        <div className="grid gap-2">
+          {rows.map((r, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <input
+                className="w-40 rounded-lg border p-2"
+                placeholder="Currency (e.g., SGD)"
+                value={r.currency}
+                onChange={(e) => update(i, { currency: e.target.value })}
+              />
+              <input
+                className="w-40 rounded-lg border p-2"
+                placeholder="Rate to AUD"
+                value={r.rateToAUD}
+                onChange={(e) => update(i, { rateToAUD: e.target.value })}
+              />
+              <button
+                className="rounded-lg bg-red-50 px-3 py-1.5 text-red-700"
+                onClick={() => remove(i)}
+              >
+                Remove
+              </button>
+            </div>
+          ))}
+          <button className="rounded-lg bg-slate-100 px-3 py-1.5" onClick={addRow}>
+            + Add Row
+          </button>
+        </div>
+        <div className="mt-4 flex justify-end gap-2">
+          <button className="rounded-lg bg-slate-100 px-3 py-1.5" onClick={onClose}>
+            Cancel
+          </button>
+          <button
+            disabled={saving}
+            className="rounded-lg bg-aptella-navy px-4 py-1.5 text-white"
+            onClick={save}
+          >
+            {saving ? "Saving…" : "Save"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ===================== Admin ======================
+function Admin() {
+  const [authed, setAuthed] = useState(false);
+  const [fxOpen, setFxOpen] = useState(false);
+  const [rows, setRows] = useState([]);
   const [search, setSearch] = useState("");
   const [sortKey, setSortKey] = useState("submittedAt");
   const [sortDir, setSortDir] = useState("desc");
-  const [fxOpen, setFxOpen] = useState(false);
-  const [fxRows, setFxRows] = useState([]);
-  const [savingFx, setSavingFx] = useState(false);
-  const fxToAUD = useRef({ AUD: 1 });
 
-  // Leaflet map
+  // Map
   const mapRef = useRef(null);
   const mapObj = useRef(null);
-  const markersRef = useRef([]);
+  const markers = useRef([]);
 
-  // Ensure init sheet
   useEffect(() => {
-    (async () => {
-      try { await getJSON(`${GAS_URL}?action=init`); } catch {}
-    })();
+    if (!mapRef.current) return;
+    if (mapObj.current) return;
+
+    const m = L.map(mapRef.current).setView([ -2.5, 118 ], 5);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 18,
+      attribution: "&copy; OpenStreetMap contributors",
+    }).addTo(m);
+    mapObj.current = m;
   }, []);
 
-  // Load rows on open
-  const handleRefresh = async () => {
-    try {
-      const res = await getJSON(`${GAS_URL}?action=list`);
-      const rows = (res.rows || []).map((r) => ({
-        ...r,
-        submittedAt: fmtDate(r.submittedAt || ""),
-        expectedCloseDate: fmtDate(r.expectedCloseDate || ""),
-        value: r.value === "" ? "" : Number(r.value),
-      }));
-      setItems(rows);
-    } catch (e) {
-      alert(`Refresh failed: ${e.message || e}`);
-    }
-  };
+  function drawMapItems(list) {
+    if (!mapObj.current) return;
+    markers.current.forEach((g) => g.remove());
+    markers.current = [];
 
-  // FX load/save
-  const loadFx = async () => {
-    try {
-      const res = await getJSON(`${GAS_URL}?action=fx`);
-      const rows = res.rows || [];
-      setFxRows(rows.length ? rows : [{ ccy: "SGD", rateToAUD: 1.05 }]);
-      fxToAUD.current = Object.fromEntries(rows.map((r) => [String(r.ccy || "").toUpperCase(), Number(r.rateToAUD) || 1]));
-      setFxOpen(true);
-    } catch (e) {
-      alert(`FX load failed: ${e.message || e}`);
-    }
-  };
-  const saveFx = async () => {
-    try {
-      setSavingFx(true);
-      const clean = (fxRows || [])
-        .filter((r) => r && r.ccy)
-        .map((r) => ({ ccy: String(r.ccy).toUpperCase(), rateToAUD: Number(r.rateToAUD) || "" }));
-      await postJSON(`${GAS_URL}?action=fx`, { rows: clean });
-      setFxOpen(false);
-      await handleRefresh();
-    } catch (e) {
-      alert(`FX save failed: ${e.message || e}`);
-    } finally {
-      setSavingFx(false);
-    }
-  };
+    const group = L.layerGroup().addTo(mapObj.current);
+    markers.current.push(group);
 
-  // Map aggregation + draw
-  const visible = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    let rows = items.slice();
-    if (q) {
-      rows = rows.filter((r) => {
-        const hay = [
-          r.customerName,
-          r.customerLocation,
-          r.city,
-          r.country,
-          r.solution,
-          r.solutionOther,
-          r.stage,
-          r.status,
-        ]
-          .join(" ")
-          .toLowerCase();
-        return hay.includes(q);
-      });
-    }
-    const cmp = (a, b) => {
-      const A = a[sortKey] ?? "";
-      const B = b[sortKey] ?? "";
-      if (A < B) return sortDir === "asc" ? -1 : 1;
-      if (A > B) return sortDir === "asc" ? 1 : -1;
-      return 0;
-    };
-    rows.sort(cmp);
-    return rows;
-  }, [items, search, sortKey, sortDir]);
+    list.forEach((r) => {
+      if (!r.lat || !r.lng) return;
+      // modest bubble sizing — avoid huge overlays
+      const aud = Number(r.valueAUD || 0);
+      const radius = Math.min(60, Math.sqrt(aud) * 0.1); // cap 60px
+      L.circle([r.lat, r.lng], {
+        radius: radius * 100, // meters
+        color: "#f0a03a",
+        fillColor: "#f0a03a",
+        fillOpacity: 0.25,
+        weight: 1,
+      })
+        .bindPopup(
+          `<b>${r.customerName || ""}</b><br>${r.location || ""}<br><b>A$ ${(
+            aud || 0
+          ).toLocaleString()}</b>`
+        )
+        .addTo(group);
+    });
+  }
+
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase().trim();
+    let out = rows.filter((r) => {
+      if (!q) return true;
+      return (
+        (r.customerName || "").toLowerCase().includes(q) ||
+        (r.location || "").toLowerCase().includes(q) ||
+        (r.solution || "").toLowerCase().includes(q) ||
+        (r.status || "").toLowerCase().includes(q)
+      );
+    });
+    out.sort((a, b) => {
+      const dir = sortDir === "asc" ? 1 : -1;
+      if (sortKey === "valueAUD") {
+        return dir * ((a.valueAUD || 0) - (b.valueAUD || 0));
+      }
+      const av = a[sortKey] || "";
+      const bv = b[sortKey] || "";
+      return dir * String(av).localeCompare(String(bv));
+    });
+    return out;
+  }, [rows, search, sortKey, sortDir]);
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const L = await loadLeafletOnce();
-        if (cancelled) return;
+    drawMapItems(filtered);
+  }, [filtered]);
 
-        // Init map once
-        if (!mapObj.current) {
-          mapObj.current = L.map(mapRef.current).setView([1.35, 103.82], 5);
-          L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-            maxZoom: 19,
-            attribution: '&copy; OpenStreetMap',
-          }).addTo(mapObj.current);
-        }
-
-        // Clear markers
-        markersRef.current.forEach((m) => mapObj.current.removeLayer(m));
-        markersRef.current = [];
-
-        // Aggregate by city+country
-        const totals = new Map();
-        const fx = fxToAUD.current || { AUD: 1 };
-        for (const r of visible) {
-          const key = `${r.city || ""}__${r.country || ""}`;
-          const cur = r.currency || "AUD";
-          const rate = Number(fx[String(cur).toUpperCase()] || (cur === "AUD" ? 1 : 1));
-          const val = Number(r.value || 0) * (isNaN(rate) ? 1 : rate);
-          const prev = totals.get(key) || { lat: r.lat, lng: r.lng, count: 0, valueAUD: 0, city: r.city, country: r.country };
-          totals.set(key, { ...prev, count: prev.count + 1, valueAUD: prev.valueAUD + (isNaN(val) ? 0 : val) });
-        }
-
-        // Add markers
-        totals.forEach((t) => {
-          const size = Math.max(8, Math.sqrt(t.valueAUD) * 0.5); // scale
-          const m = L.circleMarker([Number(t.lat) || 0, Number(t.lng) || 0], {
-            radius: size,
-            color: APTELLA.orange,
-            fillColor: APTELLA.orange,
-            fillOpacity: 0.35,
-            weight: 2,
-          }).addTo(mapObj.current);
-          m.bindPopup(
-            `<div style="min-width:220px">
-              <div><b>${t.city || ""}${t.country ? ", " + t.country : ""}</b></div>
-              <div>Total registrations: ${t.count}</div>
-              <div>Total value (AUD): ${t.valueAUD.toLocaleString(undefined, {maximumFractionDigits:0})}</div>
-            </div>`
-          );
-          markersRef.current.push(m);
-        });
-
-      } catch (e) {
-        console.warn("Map init failed:", e);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [visible]);
-
-  const rowColor = (r) => {
-    // Colors per requirement:
-    // accepted = green, closed/lost = red, not yet approved = blue, approaching 60 days = orange
-    const approved = r.status === "approved";
-    const closed = r.status === "closed" || r.status === "lost";
-    if (closed) return "bg-red-50";
-    if (approved) {
-      // near expiry -> orange
-      const d = daysUntil(r.expectedCloseDate);
-      if (!isNaN(d) && d <= 7) return "bg-orange-50";
-      return "bg-green-50";
-    }
-    return "bg-blue-50";
-  };
-
-  const doUpdate = async (id, patch) => {
+  async function refresh() {
     try {
-      const res = await postJSON(`${GAS_URL}?action=update`, { id, ...patch });
-      if (res?.ok) {
-        setItems((prev) => prev.map((x) => (x.id === id ? { ...x, ...patch } : x)));
-        return true;
-      }
-      throw new Error(res?.error || "update failed");
+      const j = await apiGET({ action: "list" });
+      const fx = await apiGET({ action: "fx" }).catch(() => ({ rows: [] }));
+      const fxMap = new Map((fx.rows || []).map((r) => [r.currency, r.rateToAUD]));
+
+      const mapped = (j.rows || []).map((r) => {
+        const rate = fxMap.get(r.currency) || (r.currency === "AUD" ? 1 : 0);
+        const valueAUD = rate ? Number(r.value || 0) / Number(rate) : 0;
+        return {
+          ...r,
+          valueAUD,
+          expected: niceDate(r.expectedCloseDate),
+          submitted: niceDate(r.submittedAt),
+        };
+      });
+      setRows(mapped);
     } catch (e) {
-      alert(`Update failed: ${e.message || e}`);
-      return false;
+      alert("Refresh failed: " + e.message);
     }
-  };
+  }
+
+  async function updateStatus(id, status) {
+    try {
+      await apiPOST({ action: "status", id, status });
+      await refresh();
+    } catch (e) {
+      alert("Update failed: " + e.message);
+    }
+  }
+
+  useEffect(() => {
+    if (authed) refresh();
+  }, [authed]);
 
   return (
-    <div className="space-y-4">
-      {/* Admin gate */}
-      {!adminAuthed ? (
-        <div className="bg-white rounded-2xl shadow p-6 border" style={{ borderColor: "#e5e7eb" }}>
-          <div className="text-lg font-semibold mb-3" style={{ color: APTELLA.navy }}>Admin Login</div>
-          <div className="flex gap-2">
-            <input id="adminPass" type="password" className="px-3 py-2 rounded-xl border border-gray-300" placeholder="Enter admin password" />
+    <div className="mx-auto max-w-[1200px] p-4">
+      <header className="mb-3 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <img src={logoUrl} alt="Aptella" className="h-7" />
+          <div>
+            <div className="text-lg font-semibold">Aptella Master Distributor</div>
+            <div className="text-xs text-slate-500">
+              Reseller Deal Registration Portal
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {!authed ? (
             <button
-              className="px-4 py-2 rounded-xl text-white"
-              style={{ background: APTELLA.navy }}
+              className="rounded-lg bg-slate-800 px-3 py-1.5 text-white"
               onClick={() => {
-                const v = document.getElementById("adminPass").value;
-                if (v === ADMIN_PASSWORD) setAdminAuthed(true);
-                else alert("Incorrect password.");
+                const p = prompt("Admin password?");
+                if (p === ADMIN_PASSWORD) setAuthed(true);
+                else alert("Incorrect password");
               }}
             >
-              Login
+              Admin
             </button>
-          </div>
+          ) : (
+            <button
+              className="rounded-lg bg-slate-100 px-3 py-1.5"
+              onClick={() => setAuthed(false)}
+            >
+              Logout
+            </button>
+          )}
+        </div>
+      </header>
+
+      {!authed ? (
+        <div className="rounded-xl bg-white p-6 shadow">
+          <p className="text-sm text-slate-600">
+            Enter the Admin password to view the dashboard.
+          </p>
         </div>
       ) : (
         <>
-          {/* Controls */}
-          <div className="bg-white rounded-2xl shadow p-4 border" style={{ borderColor: "#e5e7eb" }}>
-            <div className="flex flex-wrap items-center gap-3 justify-between">
-              <div className="flex items-center gap-2">
-                <button
-                  className="px-3 py-2 rounded-xl text-white"
-                  style={{ background: APTELLA.navy }}
-                  onClick={handleRefresh}
-                >
-                  Refresh
-                </button>
-                <button
-                  className="px-3 py-2 rounded-xl text-white"
-                  style={{ background: APTELLA.orange }}
-                  onClick={loadFx}
-                >
-                  FX Settings
-                </button>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <input
-                  placeholder="Search…"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="px-3 py-2 rounded-xl border border-gray-300"
-                />
-                <select
-                  value={sortKey}
-                  onChange={(e) => setSortKey(e.target.value)}
-                  className="px-3 py-2 rounded-xl border border-gray-300"
-                >
-                  <option value="submittedAt">Submitted</option>
-                  <option value="expectedCloseDate">Expected</option>
-                  <option value="customerName">Customer</option>
-                  <option value="customerLocation">Location</option>
-                  <option value="solution">Solution</option>
-                  <option value="value">Value</option>
-                  <option value="stage">Stage</option>
-                  <option value="status">Status</option>
-                </select>
-                <select
-                  value={sortDir}
-                  onChange={(e) => setSortDir(e.target.value)}
-                  className="px-3 py-2 rounded-xl border border-gray-300"
-                >
-                  <option value="asc">Asc</option>
-                  <option value="desc">Desc</option>
-                </select>
-                <button
-                  className="px-3 py-2 rounded-xl text-white"
-                  style={{ background: APTELLA.navyDark }}
-                  onClick={() => setAdminAuthed(false)}
-                >
-                  Logout
-                </button>
-              </div>
-            </div>
+          <div className="mb-2 flex items-center gap-2">
+            <button
+              className="rounded-lg bg-slate-800 px-3 py-1.5 text-white"
+              onClick={refresh}
+            >
+              Refresh
+            </button>
+            <button
+              className="rounded-lg bg-aptella-orange px-3 py-1.5 text-white"
+              onClick={() => setFxOpen(true)}
+            >
+              FX Settings
+            </button>
+            <input
+              className="ml-auto w-64 rounded-lg border bg-white p-2"
+              placeholder="Search…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+            <select
+              className="rounded-lg border bg-white p-2"
+              value={sortKey}
+              onChange={(e) => setSortKey(e.target.value)}
+            >
+              <option value="submittedAt">Submitted</option>
+              <option value="expectedCloseDate">Expected</option>
+              <option value="customerName">Customer</option>
+              <option value="location">Location</option>
+              <option value="solution">Solution</option>
+              <option value="valueAUD">Value (AUD)</option>
+              <option value="stage">Stage</option>
+              <option value="status">Status</option>
+            </select>
+            <select
+              className="rounded-lg border bg-white p-2"
+              value={sortDir}
+              onChange={(e) => setSortDir(e.target.value)}
+            >
+              <option value="desc">Desc</option>
+              <option value="asc">Asc</option>
+            </select>
           </div>
 
-          {/* Map */}
-          <div className="bg-white rounded-2xl shadow border" style={{ borderColor: "#e5e7eb" }}>
-            <div className="p-4 text-sm font-medium" style={{ color: APTELLA.navy }}>Opportunities Map (AUD bubble size)</div>
-            <div ref={mapRef} style={{ height: 420 }} />
+          <div className="rounded-xl bg-white p-2 shadow">
+            <div
+              ref={mapRef}
+              className="h-[360px] w-full rounded-lg border"
+              aria-label="Map"
+            />
           </div>
 
-          {/* Table */}
-          <div className="bg-white rounded-2xl shadow border overflow-x-auto" style={{ borderColor: "#e5e7eb" }}>
-            <table className="min-w-full text-sm">
-              <thead style={{ background: APTELLA.orange, color: "white" }}>
+          <div className="mt-3 overflow-auto rounded-xl bg-white shadow">
+            <table className="min-w-[920px] w-full">
+              <thead className="bg-[#f0a03a1a] text-aptella-orange">
                 <tr>
-                  <th className="p-3 text-left">Submitted</th>
-                  <th className="p-3 text-left">Expected</th>
-                  <th className="p-3 text-left">Customer</th>
-                  <th className="p-3 text-left">Location</th>
-                  <th className="p-3 text-left">Solution</th>
-                  <th className="p-3 text-left">Value</th>
-                  <th className="p-3 text-left">Stage</th>
-                  <th className="p-3 text-left">Status</th>
-                  <th className="p-3 text-left">Actions</th>
+                  <th className="p-2 text-left">Submitted</th>
+                  <th className="p-2 text-left">Expected</th>
+                  <th className="p-2 text-left">Customer</th>
+                  <th className="p-2 text-left">Location</th>
+                  <th className="p-2 text-left">Solution</th>
+                  <th className="p-2 text-left">Value</th>
+                  <th className="p-2 text-left">Stage</th>
+                  <th className="p-2 text-left">Status</th>
+                  <th className="p-2 text-left">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {visible.map((r) => (
-                  <tr key={r.id} className={`border-b ${rowColor(r)}`}>
-                    <td className="p-3">{fmtDate(r.submittedAt)}</td>
-                    <td className="p-3">{fmtDate(r.expectedCloseDate)}</td>
-                    <td className="p-3">{r.customerName}</td>
-                    <td className="p-3">{r.customerLocation}</td>
-                    <td className="p-3">{r.solution === "Other…" ? (r.solutionOther || "Other") : r.solution}</td>
-                    <td className="p-3">{r.currency} {Number(r.value || 0).toLocaleString()}</td>
-                    <td className="p-3">{r.stage}</td>
-                    <td className="p-3 capitalize">{r.status}</td>
-                    <td className="p-3">
-                      <div className="flex gap-2">
-                        {r.status !== "approved" && r.status !== "closed" && (
+                {filtered.map((r) => (
+                  <tr key={r.id} className="border-t">
+                    <td className="p-2">{niceDate(r.submittedAt)}</td>
+                    <td className="p-2">{niceDate(r.expectedCloseDate)}</td>
+                    <td className="p-2">{r.customerName || ""}</td>
+                    <td className="p-2">{r.location || ""}</td>
+                    <td className="p-2">
+                      {r.solution}
+                      {r.solution === "Other" && r.solutionOther
+                        ? ` — ${r.solutionOther}`
+                        : ""}
+                    </td>
+                    <td className="p-2">
+                      A${" "}
+                      {(Number(r.valueAUD || 0)).toLocaleString(undefined, {
+                        maximumFractionDigits: 0,
+                      })}
+                    </td>
+                    <td className="p-2">{r.stage}</td>
+                    <td className="p-2">
+                      <span
+                        className={classNames(
+                          "rounded-full px-2 py-0.5 text-xs",
+                          r.status === "approved"
+                            ? "bg-green-100 text-green-700"
+                            : r.status === "closed"
+                            ? "bg-red-100 text-red-700"
+                            : "bg-slate-100 text-slate-700"
+                        )}
+                      >
+                        {r.status || "pending"}
+                      </span>
+                    </td>
+                    <td className="p-2">
+                      <div className="flex items-center gap-2">
+                        {r.status !== "approved" && (
                           <button
-                            className="px-2.5 py-1.5 rounded-lg text-white"
-                            style={{ background: "#16a34a" }}
-                            onClick={() => doUpdate(r.id, { status: "approved" })}
+                            className="rounded-lg bg-green-600 px-3 py-1.5 text-white"
+                            onClick={() => updateStatus(r.id, "approved")}
                           >
                             Approve
                           </button>
                         )}
-                        {r.status !== "closed" && (
-                          <button
-                            className="px-2.5 py-1.5 rounded-lg text-white"
-                            style={{ background: "#ef4444" }}
-                            onClick={() => doUpdate(r.id, { status: "closed" })}
-                          >
-                            Close
-                          </button>
-                        )}
+                        <button
+                          className="rounded-lg bg-red-600 px-3 py-1.5 text-white"
+                          onClick={() => updateStatus(r.id, "closed")}
+                        >
+                          Close
+                        </button>
                       </div>
                     </td>
                   </tr>
                 ))}
-                {visible.length === 0 && (
+                {filtered.length === 0 && (
                   <tr>
-                    <td className="p-4 text-gray-500" colSpan={9}>No rows</td>
+                    <td className="p-4 text-center text-slate-500" colSpan={9}>
+                      No rows match the filter.
+                    </td>
                   </tr>
                 )}
               </tbody>
             </table>
           </div>
 
-          {/* FX Drawer */}
-          {fxOpen && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.45)" }}>
-              <div className="bg-white rounded-2xl shadow-xl w-[min(680px,95vw)] p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="text-lg font-semibold" style={{ color: APTELLA.navy }}>FX Rates → AUD</div>
-                  <button className="px-2 py-1 rounded-lg border" onClick={() => setFxOpen(false)}>Close</button>
-                </div>
-                <div className="grid grid-cols-3 gap-2 text-sm font-medium mb-2">
-                  <div>Currency</div><div>Rate to AUD</div><div></div>
-                </div>
-                <div className="space-y-2 max-h-[50vh] overflow-auto">
-                  {fxRows.map((row, i) => (
-                    <div key={i} className="grid grid-cols-3 gap-2 items-center">
-                      <input
-                        value={row.ccy}
-                        onChange={(e) => {
-                          const v = e.target.value.toUpperCase();
-                          setFxRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, ccy: v } : r)));
-                        }}
-                        className="px-2 py-1 rounded border"
-                      />
-                      <input
-                        type="number"
-                        step="0.000001"
-                        value={row.rateToAUD}
-                        onChange={(e) => {
-                          const v = e.target.value;
-                          setFxRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, rateToAUD: v } : r)));
-                        }}
-                        className="px-2 py-1 rounded border"
-                      />
-                      <button
-                        className="text-red-600 text-sm"
-                        onClick={() => setFxRows((prev) => prev.filter((_, idx) => idx !== i))}
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  ))}
-                </div>
-                <div className="mt-3 flex items-center gap-2">
-                  <button
-                    className="px-3 py-1.5 rounded-lg border"
-                    onClick={() => setFxRows((prev) => [...prev, { ccy: "USD", rateToAUD: 1.0 }])}
-                  >
-                    Add Row
-                  </button>
-                  <div className="flex-1" />
-                  <button
-                    disabled={savingFx}
-                    className="px-3 py-1.5 rounded-lg text-white"
-                    style={{ background: APTELLA.navy }}
-                    onClick={saveFx}
-                  >
-                    {savingFx ? "Saving…" : "Save"}
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
+          <FXDrawer open={fxOpen} onClose={() => setFxOpen(false)} />
         </>
       )}
     </div>
   );
 }
 
-/** =========================
- * Root App
- * ========================= */
+// ===================== Root ======================
 export default function App() {
-  const [items, setItems] = useState([]);
-
-  const onSubmitted = (rec) => setItems((prev) => [rec, ...prev]);
-  const onSyncOne = (rec) =>
-    setItems((prev) => prev.map((r) => (r.id === rec.id ? { ...r, syncedAt: todayISO() } : r)));
-
   const [tab, setTab] = useState("reseller");
-
   return (
-    <Shell>
-      <div className="mb-4 flex items-center gap-2">
-        <button
-          className="px-3 py-2 rounded-xl text-white"
-          style={{ background: tab === "reseller" ? APTELLA.navy : "#e5e7eb", color: tab === "reseller" ? "white" : APTELLA.navy }}
-          onClick={() => setTab("reseller")}
-        >
-          Reseller
-        </button>
-        <button
-          className="px-3 py-2 rounded-xl text-white"
-          style={{ background: tab === "admin" ? APTELLA.navy : "#e5e7eb", color: tab === "admin" ? "white" : APTELLA.navy }}
-          onClick={() => setTab("admin")}
-        >
-          Admin
-        </button>
-      </div>
+    <div className="min-h-screen bg-slate-50">
+      <nav className="mx-auto flex max-w-6xl items-center justify-between p-4">
+        <div className="flex items-center gap-3">
+          <img src={logoUrl} className="h-7" alt="Aptella" />
+          <span className="text-sm text-slate-500">Reseller Deal Registration</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setTab("reseller")}
+            className={classNames(
+              "rounded-lg px-3 py-1.5",
+              tab === "reseller" ? "bg-slate-800 text-white" : "bg-white border"
+            )}
+          >
+            Reseller
+          </button>
+          <button
+            onClick={() => setTab("admin")}
+            className={classNames(
+              "rounded-lg px-3 py-1.5",
+              tab === "admin" ? "bg-slate-800 text-white" : "bg-white border"
+            )}
+          >
+            Admin
+          </button>
+        </div>
+      </nav>
 
-      {tab === "reseller" ? (
-        <ResellerForm onSubmitted={onSubmitted} onSyncOne={onSyncOne} />
-      ) : (
-        <AdminPanel items={items} setItems={setItems} />
-      )}
-    </Shell>
+      {tab === "reseller" ? <ResellerForm /> : <Admin />}
+    </div>
   );
 }
