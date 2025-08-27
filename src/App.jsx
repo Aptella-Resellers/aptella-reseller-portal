@@ -961,17 +961,8 @@ function AdminPanel({ items, setItems, ratesAUD, setRatesAUD }) {
       <Card className="mb-4">
         <CardHeader title="Deal Map" />
         <CardBody>
-          <div
-            ref={mapRef}
-            id="aptella-map"
-            className="w-full h-[360px] rounded-xl border border-gray-200"
-            style={{ zIndex: 0 }}
-          />
-          {!window.L && (
-            <div className="text-sm text-gray-500 mt-2">
-              Map placeholder — include Leaflet CDN in <code>index.html</code>.
-            </div>
-          )}
+         {/* NEW: Use AdminMap instead of custom div */}
+    <AdminMap rows={filtered || items || []} ratesAUD={ratesAUD} height={460} /> 
         </CardBody>
       </Card>
 
