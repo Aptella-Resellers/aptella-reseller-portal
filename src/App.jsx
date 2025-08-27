@@ -12,6 +12,10 @@ const BRAND = {
 
 const ADMIN_PASSWORD = "Aptella2025!";
 
+// ---- Legal links (used in consent clause) ----
+const APTELLA_TERMS_URL = "https://www.aptella.com/terms-and-conditions/";
+const APTELLA_PRIVACY_URL = "https://www.aptella.com/privacy-policy/";
+
 // ---- GAS URL (deploy “Execute as me / Anyone”) ----
 const GAS_URL =
   "https://script.google.com/macros/s/AKfycbw3O_GnYcTx4bRYdFD2vCSs26L_Gzl2ZIZd18dyJmZAEE442hvhqp7j1C4W6cFX_DWM/exec";
@@ -109,10 +113,10 @@ const SUPPORT_OPTIONS = [
 ];
 
 const COUNTRY_CONFIG = {
-  "Singapore": { capital: "Singapore", lat: 1.3521, lng: 103.8198, currency: "SGD" },
-  "Malaysia": { capital: "Kuala Lumpur", lat: 3.139, lng: 101.6869, currency: "MYR" },
-  "Indonesia": { capital: "Jakarta", lat: -6.2088, lng: 106.8456, currency: "IDR" },
-  "Philippines": { capital: "Manila", lat: 14.5995, lng: 120.9842, currency: "PHP" },
+  Singapore: { capital: "Singapore", lat: 1.3521, lng: 103.8198, currency: "SGD" },
+  Malaysia: { capital: "Kuala Lumpur", lat: 3.139, lng: 101.6869, currency: "MYR" },
+  Indonesia: { capital: "Jakarta", lat: -6.2088, lng: 106.8456, currency: "IDR" },
+  Philippines: { capital: "Manila", lat: 14.5995, lng: 120.9842, currency: "PHP" },
 };
 
 // Minimal UI atoms (avoid external component libs)
@@ -150,7 +154,9 @@ function Input(props) {
   return (
     <input
       {...props}
-      className={`w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[${BRAND.orange}] ${props.className || ""}`}
+      className={`w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[${BRAND.orange}] ${
+        props.className || ""
+      }`}
     />
   );
 }
@@ -158,7 +164,9 @@ function Select(props) {
   return (
     <select
       {...props}
-      className={`w-full rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[${BRAND.orange}] ${props.className || ""}`}
+      className={`w-full rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[${BRAND.orange}] ${
+        props.className || ""
+      }`}
     />
   );
 }
@@ -166,7 +174,9 @@ function Textarea(props) {
   return (
     <textarea
       {...props}
-      className={`w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[${BRAND.orange}] ${props.className || ""}`}
+      className={`w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[${BRAND.orange}] ${
+        props.className || ""
+      }`}
     />
   );
 }
@@ -231,11 +241,13 @@ function FxModal({ open, onClose, ratesAUD, onSave, saving }) {
               />
               <button
                 className="text-red-600 text-sm"
-                onClick={() => setLocal((p) => {
-                  const cp = { ...p };
-                  delete cp[ccy];
-                  return cp;
-                })}
+                onClick={() =>
+                  setLocal((p) => {
+                    const cp = { ...p };
+                    delete cp[ccy];
+                    return cp;
+                  })
+                }
               >
                 Remove
               </button>
@@ -296,14 +308,16 @@ function ResellerForm({ onSaved }) {
     remindersOptIn: false,
   });
   const [errors, setErrors] = useState({});
-  const [formBanner, setFormBanner] = useState("");   // NEW: top banner message
+  const [formBanner, setFormBanner] = useState(""); // NEW: top banner message
   const [submitting, setSubmitting] = useState(false);
   const [linkInput, setLinkInput] = useState("");
   const isID = form.resellerCountry === "Indonesia";
 
   const firstErrorRef = useRef(null);
 
-  function t(en, id) { return isID ? id : en; }
+  function t(en, id) {
+    return isID ? id : en;
+  }
 
   useEffect(() => {
     setForm((f) => ({ ...f, probability: PROB_BY_STAGE[f.stage] ?? f.probability }));
@@ -321,7 +335,9 @@ function ResellerForm({ onSaved }) {
         lng: cfg.lng,
         resellerLocation: cfg.capital,
         country: form.resellerCountry,
-        customerLocation: f.city ? `${f.city}, ${form.resellerCountry}` : `${cfg.capital}, ${form.resellerCountry}`,
+        customerLocation: f.city
+          ? `${f.city}, ${form.resellerCountry}`
+          : `${cfg.capital}, ${form.resellerCountry}`,
       }));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -334,7 +350,8 @@ function ResellerForm({ onSaved }) {
   function toggleMulti(listName, value) {
     setForm((f) => {
       const next = new Set(f[listName] || []);
-      if (next.has(value)) next.delete(value); else next.add(value);
+      if (next.has(value)) next.delete(value);
+      else next.add(value);
       return { ...f, [listName]: Array.from(next) };
     });
   }
@@ -345,22 +362,28 @@ function ResellerForm({ onSaved }) {
 
   function validate() {
     const e = {};
-    const req = (k, msg) => { if (!form[k]) e[k] = msg; };
+    const req = (k, msg) => {
+      if (!form[k]) e[k] = msg;
+    };
     req("resellerCountry", t("Required", "Wajib"));
     req("resellerLocation", t("Required", "Wajib"));
     req("resellerName", t("Required", "Wajib"));
     req("resellerContact", t("Required", "Wajib"));
-    if (!form.resellerEmail || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.resellerEmail)) e.resellerEmail = t("Valid email required", "Email valid wajib");
+    if (!form.resellerEmail || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.resellerEmail))
+      e.resellerEmail = t("Valid email required", "Email valid wajib");
     req("customerName", t("Required", "Wajib"));
     req("city", t("Required", "Wajib"));
     req("country", t("Required", "Wajib"));
-    if (!form.solution || (form.solution === "OTHER" && !form.otherSolution)) e.solution = t("Required", "Wajib");
-    if (!form.value || Number(form.value) <= 0) e.value = t("Enter a positive amount", "Masukkan nilai positif");
+    if (!form.solution || (form.solution === "OTHER" && !form.otherSolution))
+      e.solution = t("Required", "Wajib");
+    if (!form.value || Number(form.value) <= 0)
+      e.value = t("Enter a positive amount", "Masukkan nilai positif");
     req("expectedCloseDate", t("Required", "Wajib"));
 
     const hasFiles = (form.evidenceFiles || []).length > 0;
     const hasLinks = (form.evidenceLinks || []).length > 0;
-    if (!hasFiles && !hasLinks) e.evidence = t("Evidence file or link is required", "Bukti (file/tautan) wajib");
+    if (!hasFiles && !hasLinks)
+      e.evidence = t("Evidence file or link is required", "Bukti (file/tautan) wajib");
 
     setErrors(e);
     // Build banner + scroll to first error
@@ -389,7 +412,10 @@ function ResellerForm({ onSaved }) {
         evidence: "evidenceFiles",
       };
       const el = document.getElementById(idMap[firstKey] || idMap.evidence);
-      if (el) { el.scrollIntoView({ behavior: "smooth", block: "center" }); el.focus?.(); }
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        el.focus?.();
+      }
       return false;
     }
     setFormBanner("");
@@ -418,7 +444,7 @@ function ResellerForm({ onSaved }) {
       industry: form.industry || "",
       currency: form.currency || "",
       value: Number(form.value || 0),
-      solution: form.solution === "OTHER" ? (form.otherSolution || "") : form.solution,
+      solution: form.solution === "OTHER" ? form.otherSolution || "" : form.solution,
       stage: form.stage || "qualified",
       probability: Number(form.probability || 0),
       expectedCloseDate: form.expectedCloseDate || todayLocalISO(),
@@ -500,25 +526,48 @@ function ResellerForm({ onSaved }) {
           {/* Country / Location / Currency */}
           <div className="grid md:grid-cols-3 gap-4">
             <div className="grid gap-2">
-              <Label htmlFor="resellerCountry" required>{t("Reseller Country", "Negara Reseller")}</Label>
-              <Select id="resellerCountry" name="resellerCountry" value={form.resellerCountry} onChange={handleChange}>
+              <Label htmlFor="resellerCountry" required>
+                {t("Reseller Country", "Negara Reseller")}
+              </Label>
+              <Select
+                id="resellerCountry"
+                name="resellerCountry"
+                value={form.resellerCountry}
+                onChange={handleChange}
+              >
                 <option value="">{t("Select country", "Pilih negara")}</option>
                 <option>Singapore</option>
                 <option>Malaysia</option>
                 <option>Indonesia</option>
                 <option>Philippines</option>
               </Select>
-              {errors.resellerCountry && <p className="text-xs text-red-600">{errors.resellerCountry}</p>}
+              {errors.resellerCountry && (
+                <p className="text-xs text-red-600">{errors.resellerCountry}</p>
+              )}
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="resellerLocation" required>{t("Reseller Location", "Lokasi Reseller")}</Label>
-              <Input id="resellerLocation" name="resellerLocation" value={form.resellerLocation} onChange={handleChange} placeholder={t("e.g., Jakarta", "mis., Jakarta")} />
-              {errors.resellerLocation && <p className="text-xs text-red-600">{errors.resellerLocation}</p>}
+              <Label htmlFor="resellerLocation" required>
+                {t("Reseller Location", "Lokasi Reseller")}
+              </Label>
+              <Input
+                id="resellerLocation"
+                name="resellerLocation"
+                value={form.resellerLocation}
+                onChange={handleChange}
+                placeholder={t("e.g., Jakarta", "mis., Jakarta")}
+              />
+              {errors.resellerLocation && (
+                <p className="text-xs text-red-600">{errors.resellerLocation}</p>
+              )}
             </div>
             <div className="grid gap-2">
               <Label htmlFor="currency">{t("Currency", "Mata Uang")}</Label>
               <Select id="currency" name="currency" value={form.currency} onChange={handleChange}>
-                {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                {CURRENCIES.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
               </Select>
             </div>
           </div>
@@ -526,47 +575,109 @@ function ResellerForm({ onSaved }) {
           {/* Identity */}
           <div className="grid md:grid-cols-2 gap-4">
             <div className="grid gap-2">
-              <Label htmlFor="resellerName" required>{t("Reseller Company", "Perusahaan Reseller")}</Label>
-              <Input id="resellerName" name="resellerName" value={form.resellerName} onChange={handleChange} />
+              <Label htmlFor="resellerName" required>
+                {t("Reseller Company", "Perusahaan Reseller")}
+              </Label>
+              <Input
+                id="resellerName"
+                name="resellerName"
+                value={form.resellerName}
+                onChange={handleChange}
+              />
               {errors.resellerName && <p className="text-xs text-red-600">{errors.resellerName}</p>}
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="resellerContact" required>{t("Primary Contact", "Kontak Utama")}</Label>
-              <Input id="resellerContact" name="resellerContact" value={form.resellerContact} onChange={handleChange} />
-              {errors.resellerContact && <p className="text-xs text-red-600">{errors.resellerContact}</p>}
+              <Label htmlFor="resellerContact" required>
+                {t("Primary Contact", "Kontak Utama")}
+              </Label>
+              <Input
+                id="resellerContact"
+                name="resellerContact"
+                value={form.resellerContact}
+                onChange={handleChange}
+              />
+              {errors.resellerContact && (
+                <p className="text-xs text-red-600">{errors.resellerContact}</p>
+              )}
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="resellerEmail" required>{t("Contact Email", "Email Kontak")}</Label>
-              <Input id="resellerEmail" name="resellerEmail" type="email" value={form.resellerEmail} onChange={handleChange} />
-              {errors.resellerEmail && <p className="text-xs text-red-600">{errors.resellerEmail}</p>}
+              <Label htmlFor="resellerEmail" required>
+                {t("Contact Email", "Email Kontak")}
+              </Label>
+              <Input
+                id="resellerEmail"
+                name="resellerEmail"
+                type="email"
+                value={form.resellerEmail}
+                onChange={handleChange}
+              />
+              {errors.resellerEmail && (
+                <p className="text-xs text-red-600">{errors.resellerEmail}</p>
+              )}
             </div>
             <div className="grid gap-2">
               <Label htmlFor="resellerPhone">{t("Contact Phone", "Telepon Kontak")}</Label>
-              <Input id="resellerPhone" name="resellerPhone" value={form.resellerPhone} onChange={handleChange} />
+              <Input
+                id="resellerPhone"
+                name="resellerPhone"
+                value={form.resellerPhone}
+                onChange={handleChange}
+              />
             </div>
           </div>
 
           {/* Customer location */}
           <div className="grid md:grid-cols-3 gap-4">
             <div className="grid gap-2">
-              <Label htmlFor="customerName" required>{t("Customer Name", "Nama Pelanggan")}</Label>
-              <Input id="customerName" name="customerName" value={form.customerName} onChange={handleChange} />
-              {errors.customerName && <p className="text-xs text-red-600">{errors.customerName}</p>}
+              <Label htmlFor="customerName" required>
+                {t("Customer Name", "Nama Pelanggan")}
+              </Label>
+              <Input
+                id="customerName"
+                name="customerName"
+                value={form.customerName}
+                onChange={handleChange}
+              />
+              {errors.customerName && (
+                <p className="text-xs text-red-600">{errors.customerName}</p>
+              )}
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="city" required>{t("Customer City", "Kota Pelanggan")}</Label>
-              <Input id="city" name="city" value={form.city} onChange={(e) => {
-                const v = e.target.value;
-                setForm((f) => ({ ...f, city: v, customerLocation: `${v || ""}${f.country ? `, ${f.country}` : ""}` }));
-              }} />
+              <Label htmlFor="city" required>
+                {t("Customer City", "Kota Pelanggan")}
+              </Label>
+              <Input
+                id="city"
+                name="city"
+                value={form.city}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setForm((f) => ({
+                    ...f,
+                    city: v,
+                    customerLocation: `${v || ""}${f.country ? `, ${f.country}` : ""}`,
+                  }));
+                }}
+              />
               {errors.city && <p className="text-xs text-red-600">{errors.city}</p>}
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="country" required>{t("Customer Country", "Negara Pelanggan")}</Label>
-              <Select id="country" name="country" value={form.country} onChange={(e) => {
-                const v = e.target.value;
-                setForm((f) => ({ ...f, country: v, customerLocation: `${f.city ? f.city : ""}${v ? `, ${v}` : ""}` }));
-              }}>
+              <Label htmlFor="country" required>
+                {t("Customer Country", "Negara Pelanggan")}
+              </Label>
+              <Select
+                id="country"
+                name="country"
+                value={form.country}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setForm((f) => ({
+                    ...f,
+                    country: v,
+                    customerLocation: `${f.city ? f.city : ""}${v ? `, ${v}` : ""}`,
+                  }));
+                }}
+              >
                 <option value="">{t("Select country", "Pilih negara")}</option>
                 <option>Singapore</option>
                 <option>Malaysia</option>
@@ -582,24 +693,62 @@ function ResellerForm({ onSaved }) {
             <div className="grid gap-2">
               <Label>{t("Map option (paste lat, lng)", "Opsi peta (tempel lat, lng)")}</Label>
               <div className="flex gap-2">
-                <Input placeholder="lat" value={form.lat} onChange={(e) => setForm((f) => ({ ...f, lat: e.target.value }))} />
-                <Input placeholder="lng" value={form.lng} onChange={(e) => setForm((f) => ({ ...f, lng: e.target.value }))} />
+                <Input
+                  placeholder="lat"
+                  value={form.lat}
+                  onChange={(e) => setForm((f) => ({ ...f, lat: e.target.value }))}
+                />
+                <Input
+                  placeholder="lng"
+                  value={form.lng}
+                  onChange={(e) => setForm((f) => ({ ...f, lng: e.target.value }))}
+                />
               </div>
-              <a className="inline-block mt-1 text-xs underline text-[#0e3446]" href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((form.city || "") + "," + (form.country || ""))}`} target="_blank" rel="noreferrer">Open Map</a>
+              <a
+                className="inline-block mt-1 text-xs underline text-[#0e3446]"
+                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                  (form.city || "") + "," + (form.country || "")
+                )}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Open Map
+              </a>
             </div>
 
             {/* Solution & expected */}
             <div className="grid gap-2 md:col-span-2">
-              <Label htmlFor="solutionSelect" required>{t("Solution Offered (Xgrids)", "Solusi Xgrids")}</Label>
-              <Select id="solutionSelect" value={form.solution || ""} onChange={(e) => setForm((f) => ({ ...f, solution: e.target.value }))}>
+              <Label htmlFor="solutionSelect" required>
+                {t("Solution Offered (Xgrids)", "Solusi Xgrids")}
+              </Label>
+              <Select
+                id="solutionSelect"
+                value={form.solution || ""}
+                onChange={(e) => setForm((f) => ({ ...f, solution: e.target.value }))}
+              >
                 <option value="">{t("Select an Xgrids solution", "Pilih solusi Xgrids")}</option>
-                {XGRIDS_SOLUTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
+                {XGRIDS_SOLUTIONS.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
                 <option value="OTHER">+ Other…</option>
               </Select>
               {form.solution === "OTHER" && (
-                <Input placeholder={t("Describe the solution", "Jelaskan solusi")} value={form.otherSolution} onChange={(e) => setForm((f) => ({ ...f, otherSolution: e.target.value }))} />
+                <Input
+                  placeholder={t("Describe the solution", "Jelaskan solusi")}
+                  value={form.otherSolution}
+                  onChange={(e) => setForm((f) => ({ ...f, otherSolution: e.target.value }))}
+                />
               )}
-              <a className="text-sky-700 underline text-xs mt-1" href="https://www.aptella.com/asia/product-brands/xgrids-asia/" target="_blank" rel="noreferrer">Learn about Xgrids solutions</a>
+              <a
+                className="text-sky-700 underline text-xs mt-1"
+                href="https://www.aptella.com/asia/product-brands/xgrids-asia/"
+                target="_blank"
+                rel="noreferrer"
+              >
+                Learn about Xgrids solutions
+              </a>
               {errors.solution && <p className="text-xs text-red-600">{errors.solution}</p>}
             </div>
           </div>
@@ -610,17 +759,42 @@ function ResellerForm({ onSaved }) {
               <Label htmlFor="industry">{t("Industry", "Industri")}</Label>
               <Select id="industry" name="industry" value={form.industry} onChange={handleChange}>
                 <option value="">{t("Select industry", "Pilih industri")}</option>
-                {INDUSTRIES.map((i) => <option key={i} value={i}>{i}</option>)}
+                {INDUSTRIES.map((i) => (
+                  <option key={i} value={i}>
+                    {i}
+                  </option>
+                ))}
               </Select>
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="expectedCloseDate" required>{t("Expected Close Date", "Perkiraan Tanggal Tutup")}</Label>
-              <Input id="expectedCloseDate" name="expectedCloseDate" type="date" value={form.expectedCloseDate} onChange={handleChange} />
-              {errors.expectedCloseDate && <p className="text-xs text-red-600">{errors.expectedCloseDate}</p>}
+              <Label htmlFor="expectedCloseDate" required>
+                {t("Expected Close Date", "Perkiraan Tanggal Tutup")}
+              </Label>
+              <Input
+                id="expectedCloseDate"
+                name="expectedCloseDate"
+                type="date"
+                value={form.expectedCloseDate}
+                onChange={handleChange}
+              />
+              {errors.expectedCloseDate && (
+                <p className="text-xs text-red-600">{errors.expectedCloseDate}</p>
+              )}
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="value" required>{t("Deal Value", "Nilai Transaksi")}</Label>
-              <Input id="value" name="value" type="number" step="0.01" min="0" value={form.value} onChange={handleChange} placeholder="e.g., 25000" />
+              <Label htmlFor="value" required>
+                {t("Deal Value", "Nilai Transaksi")}
+              </Label>
+              <Input
+                id="value"
+                name="value"
+                type="number"
+                step="0.01"
+                min="0"
+                value={form.value}
+                onChange={handleChange}
+                placeholder="e.g., 25000"
+              />
               {errors.value && <p className="text-xs text-red-600">{errors.value}</p>}
             </div>
           </div>
@@ -630,19 +804,35 @@ function ResellerForm({ onSaved }) {
             <div className="grid gap-2">
               <Label htmlFor="stage">{t("Sales Stage", "Tahap Penjualan")}</Label>
               <Select id="stage" name="stage" value={form.stage} onChange={handleChange}>
-                {STAGES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+                {STAGES.map((s) => (
+                  <option key={s.key} value={s.key}>
+                    {s.label}
+                  </option>
+                ))}
               </Select>
             </div>
             <div className="grid gap-2">
               <Label>{t("Probability (%)", "Probabilitas (%)")}</Label>
-              <Input type="number" min="0" max="100" value={form.probability} onChange={(e) => setForm((f) => ({ ...f, probability: Number(e.target.value) }))} />
+              <Input
+                type="number"
+                min="0"
+                max="100"
+                value={form.probability}
+                onChange={(e) => setForm((f) => ({ ...f, probability: Number(e.target.value) }))}
+              />
             </div>
             <div className="grid gap-2">
               <Label>{t("Competitors", "Pesaing")}</Label>
-              <Input placeholder={t("Comma-separated (optional)", "Pisahkan dengan koma (opsional)")} value={(form.competitors || []).join(", ")} onChange={(e) => setForm((f) => ({
-                ...f,
-                competitors: e.target.value.split(",").map((s) => s.trim()).filter(Boolean),
-              }))} />
+              <Input
+                placeholder={t("Comma-separated (optional)", "Pisahkan dengan koma (opsional)")}
+                value={(form.competitors || []).join(", ")}
+                onChange={(e) =>
+                  setForm((f) => ({
+                    ...f,
+                    competitors: e.target.value.split(",").map((s) => s.trim()).filter(Boolean),
+                  }))
+                }
+              />
             </div>
           </div>
 
@@ -652,7 +842,11 @@ function ResellerForm({ onSaved }) {
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
               {SUPPORT_OPTIONS.map((opt) => (
                 <label key={opt} className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={(form.supports || []).includes(opt)} onChange={() => toggleMulti("supports", opt)} />
+                  <input
+                    type="checkbox"
+                    checked={(form.supports || []).includes(opt)}
+                    onChange={() => toggleMulti("supports", opt)}
+                  />
                   {opt}
                 </label>
               ))}
@@ -664,22 +858,44 @@ function ResellerForm({ onSaved }) {
             <Label>{t("Evidence (required)", "Bukti (wajib)")}</Label>
             <div className="grid md:grid-cols-3 gap-3">
               <div className="md:col-span-2">
-                <input id="evidenceFiles" type="file" multiple onChange={handleFiles} className="block w-full text-sm file:mr-4 file:rounded-lg file:border-0 file:bg-sky-50 file:px-3 file:py-2 file:text-sky-700" />
+                <input
+                  id="evidenceFiles"
+                  type="file"
+                  multiple
+                  onChange={handleFiles}
+                  className="block w-full text-sm file:mr-4 file:rounded-lg file:border-0 file:bg-sky-50 file:px-3 file:py-2 file:text-sky-700"
+                />
                 {form.evidenceFiles?.length > 0 && (
                   <div className="mt-2 text-xs text-gray-600">
-                    {form.evidenceFiles.length} file(s) chosen — emailed to <span className="font-medium">admin.asia@aptella.com</span> by your team.
+                    {form.evidenceFiles.length} file(s) chosen — emailed to{" "}
+                    <span className="font-medium">admin.asia@aptella.com</span> by your team.
                   </div>
                 )}
               </div>
               <div className="flex gap-2">
-                <Input placeholder={t("Paste evidence link", "Tempel tautan bukti")} value={linkInput} onChange={(e) => setLinkInput(e.target.value)} />
-                <button type="button" onClick={() => {
-                  const v = (linkInput || "").trim();
-                  if (!v) return;
-                  try { new URL(v); } catch { alert(t("Enter a valid URL", "Masukkan URL valid")); return; }
-                  setForm((f) => ({ ...f, evidenceLinks: [...(f.evidenceLinks || []), v] }));
-                  setLinkInput("");
-                }} className="px-3 py-2 rounded-lg bg-gray-100 text-sm">{t("Add", "Tambah")}</button>
+                <Input
+                  placeholder={t("Paste evidence link", "Tempel tautan bukti")}
+                  value={linkInput}
+                  onChange={(e) => setLinkInput(e.target.value)}
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const v = (linkInput || "").trim();
+                    if (!v) return;
+                    try {
+                      new URL(v);
+                    } catch {
+                      alert(t("Enter a valid URL", "Masukkan URL valid"));
+                      return;
+                    }
+                    setForm((f) => ({ ...f, evidenceLinks: [...(f.evidenceLinks || []), v] }));
+                    setLinkInput("");
+                  }}
+                  className="px-3 py-2 rounded-lg bg-gray-100 text-sm"
+                >
+                  {t("Add", "Tambah")}
+                </button>
               </div>
             </div>
             {errors.evidence && <p className="text-xs text-red-600">{errors.evidence}</p>}
@@ -688,27 +904,99 @@ function ResellerForm({ onSaved }) {
           {/* Notes & consent */}
           <div className="grid gap-2">
             <Label htmlFor="notes">{t("Notes", "Catatan")}</Label>
-            <Textarea id="notes" name="notes" rows={4} value={form.notes} onChange={handleChange} placeholder={t("Key requirements, technical scope, delivery constraints, decision process, etc.", "Kebutuhan, ruang lingkup teknis, kendala pengiriman, proses keputusan, dll.")} />
+            <Textarea
+              id="notes"
+              name="notes"
+              rows={4}
+              value={form.notes}
+              onChange={handleChange}
+              placeholder={t(
+                "Key requirements, technical scope, delivery constraints, decision process, etc.",
+                "Kebutuhan, ruang lingkup teknis, kendala pengiriman, proses keputusan, dll."
+              )}
+            />
           </div>
 
           <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" name="remindersOptIn" checked={!!form.remindersOptIn} onChange={handleChange} />
+            <input
+              type="checkbox"
+              name="remindersOptIn"
+              checked={!!form.remindersOptIn}
+              onChange={handleChange}
+            />
             {t("Send me reminders for updates", "Kirim pengingat pembaruan")}
           </label>
 
           <div className="flex items-center gap-3">
             <button
               type="submit"
-              onClick={(e) => { e.preventDefault(); submit(e); }}  // explicit trigger + prevents default nav
+              onClick={(e) => {
+                e.preventDefault();
+                submit(e);
+              }} // explicit trigger + prevents default nav
               disabled={submitting}
               className={`px-4 py-2 rounded-xl text-white ${BRAND.primaryBtn}`}
             >
               {submitting ? t("Submitting…", "Mengirim…") : t("Submit Registration", "Kirim Pendaftaran")}
             </button>
-            <a className="px-4 py-2 rounded-xl bg-[#f0a03a]/15 text-[#9a5b12] border border-[#f0a03a]/30 text-sm" href="https://www.aptella.com/asia/product-brands/xgrids-asia/" target="_blank" rel="noreferrer">
+            <a
+              className="px-4 py-2 rounded-xl bg-[#f0a03a]/15 text-[#9a5b12] border border-[#f0a03a]/30 text-sm"
+              href="https://www.aptella.com/asia/product-brands/xgrids-asia/"
+              target="_blank"
+              rel="noreferrer"
+            >
               Xgrids Info →
             </a>
           </div>
+
+          {/* === Consent clause (EN/ID) just under the buttons === */}
+          <p className="text-xs text-slate-600 mt-2 leading-snug">
+            {isID ? (
+              <>
+                Dengan mengeklik <span className="font-semibold">Daftar</span>, Anda menyetujui{" "}
+                <a
+                  href={APTELLA_TERMS_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ textDecoration: "underline", textDecorationColor: BRAND.orange }}
+                >
+                  Syarat & Ketentuan Aptella
+                </a>{" "}
+                dan{" "}
+                <a
+                  href={APTELLA_PRIVACY_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ textDecoration: "underline", textDecorationColor: BRAND.orange }}
+                >
+                  Kebijakan Privasi
+                </a>
+                .
+              </>
+            ) : (
+              <>
+                By clicking <span className="font-semibold">Register</span>, you agree to Aptella’s{" "}
+                <a
+                  href={APTELLA_TERMS_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ textDecoration: "underline", textDecorationColor: BRAND.orange }}
+                >
+                  Terms & Conditions
+                </a>{" "}
+                and{" "}
+                <a
+                  href={APTELLA_PRIVACY_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ textDecoration: "underline", textDecorationColor: BRAND.orange }}
+                >
+                  Privacy Policy
+                </a>
+                .
+              </>
+            )}
+          </p>
         </form>
       </CardBody>
     </Card>
@@ -752,7 +1040,10 @@ function AdminPanel({ items, setItems, ratesAUD, setRatesAUD }) {
   async function fxSave(map) {
     setFxSaving(true);
     try {
-      const rows = Object.entries(map || {}).map(([ccy, rate]) => ({ ccy, rate: Number(rate || 0) }));
+      const rows = Object.entries(map || {}).map(([ccy, rate]) => ({
+        ccy,
+        rate: Number(rate || 0),
+      }));
       await gasPost("fx", { rows });
       await fxLoad();
       setFxOpen(false);
@@ -833,7 +1124,7 @@ function AdminPanel({ items, setItems, ratesAUD, setRatesAUD }) {
 
     // Init map once
     if (!mapObj.current) {
-      mapObj.current = L.map(mapRef.current).setView([ -2.5, 114.0 ], 4);
+      mapObj.current = L.map(mapRef.current).setView([-2.5, 114.0], 4);
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         attribution:
           '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>',
@@ -887,8 +1178,7 @@ function AdminPanel({ items, setItems, ratesAUD, setRatesAUD }) {
   }, [filtered, ratesAUD]);
 
   const totalAUD = useMemo(
-    () =>
-      (filtered || []).reduce((sum, r) => sum + valueAUD(r, ratesAUD), 0),
+    () => (filtered || []).reduce((sum, r) => sum + valueAUD(r, ratesAUD), 0),
     [filtered, ratesAUD]
   );
 
@@ -912,10 +1202,7 @@ function AdminPanel({ items, setItems, ratesAUD, setRatesAUD }) {
             >
               Refresh
             </button>
-            <button
-              onClick={() => setFxOpen(true)}
-              className="px-3 py-2 rounded-lg bg-gray-100"
-            >
+            <button onClick={() => setFxOpen(true)} className="px-3 py-2 rounded-lg bg-gray-100">
               FX Settings
             </button>
             <div className="ml-2 text-sm">
@@ -961,19 +1248,15 @@ function AdminPanel({ items, setItems, ratesAUD, setRatesAUD }) {
       <Card className="mb-4">
         <CardHeader title="Deal Map" />
         <CardBody>
-         {/* NEW: Use AdminMap instead of custom div */}
-    <AdminMap rows={filtered || items || []} ratesAUD={ratesAUD} height={460} /> 
+          {/* NEW: Use AdminMap instead of custom div */}
+          <AdminMap rows={filtered || items || []} ratesAUD={ratesAUD} height={460} />
         </CardBody>
       </Card>
 
       {/* Table */}
       <Card>
         <CardHeader
-          title={
-            <div className="text-[#f0a03a] font-semibold">
-              Registrations ({filtered.length})
-            </div>
-          }
+          title={<div className="text-[#f0a03a] font-semibold">Registrations ({filtered.length})</div>}
         />
         <CardBody>
           <div className="overflow-x-auto">
@@ -1011,8 +1294,7 @@ function AdminPanel({ items, setItems, ratesAUD, setRatesAUD }) {
                         {Math.round(aud).toLocaleString("en-AU")}
                       </td>
                       <td className="p-3">
-                        {r.stage}{" "}
-                        <span className="text-xs text-gray-500">({r.probability}%)</span>
+                        {r.stage} <span className="text-xs text-gray-500">({r.probability}%)</span>
                       </td>
                       <td className={`p-3 ${statusColor}`}>{r.status || "pending"}</td>
                       <td className="p-3">
@@ -1020,9 +1302,7 @@ function AdminPanel({ items, setItems, ratesAUD, setRatesAUD }) {
                           {r.status !== "approved" && r.status !== "closed" && (
                             <button
                               onClick={() =>
-                                doApprove(r).catch((e) =>
-                                  alert("Update failed: " + e.message)
-                                )
+                                doApprove(r).catch((e) => alert("Update failed: " + e.message))
                               }
                               className={`px-3 py-1.5 rounded-lg text-white ${BRAND.primaryBtn}`}
                             >
@@ -1032,9 +1312,7 @@ function AdminPanel({ items, setItems, ratesAUD, setRatesAUD }) {
                           {r.status !== "closed" && (
                             <button
                               onClick={() =>
-                                doClose(r).catch((e) =>
-                                  alert("Update failed: " + e.message)
-                                )
+                                doClose(r).catch((e) => alert("Update failed: " + e.message))
                               }
                               className="px-3 py-1.5 rounded-lg bg-gray-100"
                             >
@@ -1070,10 +1348,10 @@ function AdminMap({ rows = [], ratesAUD = {}, height = 460 }) {
   const containerId = "leaflet-map";
 
   const STATUS_META = {
-    approved: { label: "Approved", color: "#16a34a" },   // green
-    pending:  { label: "Pending",  color: "#2563eb" },   // blue
-    expiring: { label: "Expiring", color: "#f59e0b" },   // orange
-    lost:     { label: "Closed/Lost", color: "#dc2626" } // red
+    approved: { label: "Approved", color: "#16a34a" }, // green
+    pending: { label: "Pending", color: "#2563eb" }, // blue
+    expiring: { label: "Expiring", color: "#f59e0b" }, // orange
+    lost: { label: "Closed/Lost", color: "#dc2626" }, // red
   };
 
   function statusOf(r) {
@@ -1121,8 +1399,10 @@ function AdminMap({ rows = [], ratesAUD = {}, height = 460 }) {
     if (!window.L) return; // Leaflet not ready (CDN not loaded)
     let map = mapRef.current;
     if (!map) {
-      map = L.map(containerId, { zoomControl: true, attributionControl: true })
-        .setView([1.3521, 103.8198], 5); // SG default view
+      map = L.map(containerId, { zoomControl: true, attributionControl: true }).setView(
+        [1.3521, 103.8198],
+        5
+      ); // SG default view
       mapRef.current = map;
 
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -1149,7 +1429,8 @@ function AdminMap({ rows = [], ratesAUD = {}, height = 460 }) {
 
     const bounds = L.latLngBounds([]);
     (rows || []).forEach((r) => {
-      const lat = Number(r.lat), lng = Number(r.lng);
+      const lat = Number(r.lat),
+        lng = Number(r.lng);
       if (isNaN(lat) || isNaN(lng)) return;
       const bucket = statusOf(r);
       const color = STATUS_META[bucket]?.color || "#2563eb";
@@ -1161,13 +1442,19 @@ function AdminMap({ rows = [], ratesAUD = {}, height = 460 }) {
         <div style="min-width:240px">
           <div style="font-weight:700;margin-bottom:4px">${r.customerName || "(Customer)"}</div>
           <div style="font-size:12px;color:#374151;margin-bottom:8px">${r.solution || ""}</div>
-          <div style="font-size:12px;margin-bottom:4px"><b>Location:</b> ${r.city || ""}${r.country ? ", " + r.country : ""}</div>
-          <div style="font-size:12px;margin-bottom:4px"><b>Value:</b> ${currency} ${Number(r.value || 0).toLocaleString()} <span style="color:#64748b">${aud ? "(≈ AUD " + aud.toLocaleString() + ")" : ""}</span></div>
-          <div style="font-size:12px;margin-bottom:4px"><b>Stage:</b> ${r.stage || ""} &nbsp; <b>Status:</b> ${r.status || ""}</div>
+          <div style="font-size:12px;margin-bottom:4px"><b>Location:</b> ${r.city || ""}${
+        r.country ? ", " + r.country : ""
+      }</div>
+          <div style="font-size:12px;margin-bottom:4px"><b>Value:</b> ${currency} ${Number(
+        r.value || 0
+      ).toLocaleString()} <span style="color:#64748b">${
+        aud ? "(≈ AUD " + aud.toLocaleString() + ")" : ""
+      }</span></div>
+          <div style="font-size:12px;margin-bottom:4px"><b>Stage:</b> ${r.stage || ""} &nbsp; <b>Status:</b> ${
+        r.status || ""
+      }</div>
           <div style="font-size:12px;"><b>Expected:</b> ${
-            r.expectedCloseDate
-              ? new Date(r.expectedCloseDate).toISOString().slice(0, 10)
-              : "-"
+            r.expectedCloseDate ? new Date(r.expectedCloseDate).toISOString().slice(0, 10) : "-"
           }</div>
         </div>`;
       marker.bindPopup(html, { closeButton: true });
@@ -1231,10 +1518,7 @@ function AdminMap({ rows = [], ratesAUD = {}, height = 460 }) {
         </div>
       `;
 
-      const p = L.popup()
-        .setLatLng(e.layer.getLatLng())
-        .setContent(content)
-        .openOn(map);
+      const p = L.popup().setLatLng(e.layer.getLatLng()).setContent(content).openOn(map);
 
       map.once("popupopen", (evt) => {
         const root = evt?.popup?.getElement();
@@ -1261,7 +1545,9 @@ function AdminMap({ rows = [], ratesAUD = {}, height = 460 }) {
               .join("");
             const drill = root.querySelector("#cluster-drill");
             if (drill) {
-              drill.innerHTML = `<div style="font-weight:700;margin:8px 0">Deals (${STATUS_META[key].label})</div>${listHtml}`;
+              drill.innerHTML = `<div style="font-weight:700;margin:8px 0">Deals (${
+                STATUS_META[key].label
+              })</div>${listHtml}`;
               drill.querySelectorAll(".deal-link").forEach((d) => {
                 d.addEventListener("click", () => {
                   const id = d.getAttribute("data-id");
@@ -1364,7 +1650,7 @@ function AptellaRoot() {
 
         {/* Tabs */}
         {tab === "reseller" ? (
-          <ResellerForm onSaved={() => { /* no-op */ }} />
+          <ResellerForm onSaved={() => {}} />
         ) : adminAuthed ? (
           <AdminPanel
             items={items}
