@@ -1341,21 +1341,6 @@ function AdminPanel({ items, setItems, ratesAUD, setRatesAUD }) {
 }
 
 /* ---------- AdminMap: clusters with status counts + AUD totals ---------- */
-function waitForLeafletCluster(maxMs = 6000) {
-  return new Promise((resolve) => {
-    const start = Date.now();
-    const timer = setInterval(() => {
-      if (window.L && typeof window.L.markerClusterGroup === "function") {
-        clearInterval(timer);
-        resolve(true);
-      } else if (Date.now() - start > maxMs) {
-        clearInterval(timer);
-        resolve(false);
-      }
-    }, 100);
-  });
-}
-
 function AdminMap({ rows = [], ratesAUD = {}, height = 460 }) {
   const mapRef = React.useRef(null);
   const clusterRef = React.useRef(null);
@@ -1411,19 +1396,13 @@ function AdminMap({ rows = [], ratesAUD = {}, height = 460 }) {
   }
 
   React.useEffect(() => {
-  let cancelled = false;
-
-  (async () => {
-    const ok = await waitForLeafletCluster();
-    if (!ok || cancelled) return;
-    const L = window.L;
-    if (!L) return;
-
-    // Init map once
+    if (!window.L) return; // Leaflet not ready (CDN not loaded)
     let map = mapRef.current;
     if (!map) {
-      map = L.map(containerId, { zoomControl: true, attributionControl: true })
-        .setView([1.3521, 103.8198], 5);
+      map = L.map(containerId, { zoomControl: true, attributionControl: true }).setView(
+        [1.3521, 103.8198],
+        5
+      ); // SG default view
       mapRef.current = map;
 
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -1431,42 +1410,22 @@ function AdminMap({ rows = [], ratesAUD = {}, height = 460 }) {
         attribution:
           '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>',
       }).addTo(map);
-
-      // small delay to ensure proper sizing when shown in a tab
-      setTimeout(() => map.invalidateSize(), 150);
     }
 
-    // Clear previous cluster layer if any
     if (clusterRef.current) {
       clusterRef.current.remove();
       clusterRef.current = null;
     }
     markerByIdRef.current.clear();
 
-    // Build cluster group (now guaranteed to exist)
     const cluster = L.markerClusterGroup({
       chunkedLoading: true,
       spiderfyOnEveryZoom: true,
       showCoverageOnHover: false,
-      zoomToBoundsOnClick: false,
+      zoomToBoundsOnClick: false, // we show a popup instead
     });
     clusterRef.current = cluster;
     map.addLayer(cluster);
-
-    // … your existing code that creates markers, binds popups, and handles
-    // clusterclick goes here unchanged …
-    // (no need to paste again; keep what you had that computed statuses & totals)
-
-  })();
-
-  return () => {
-    cancelled = true;
-    if (clusterRef.current) {
-      clusterRef.current.remove();
-      clusterRef.current = null;
-    }
-  };
-}, [rows, ratesAUD]);
 
     const bounds = L.latLngBounds([]);
     (rows || []).forEach((r) => {
