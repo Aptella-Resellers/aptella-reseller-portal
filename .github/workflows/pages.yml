@@ -1,9 +1,9 @@
-name: Deploy to GitHub Pages
+name: Deploy static content to Pages
 
 on:
   push:
-    branches: [ main ]
-  workflow_dispatch: {}
+    branches: ["main"]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -21,16 +21,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Use Node.js
+      - name: Use Node.js 20
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: 'npm'
 
+      # IMPORTANT: use npm install, not npm ci
       - name: Install deps
-        run: npm ci
+        run: npm install --no-audit --no-fund
 
       - name: Build
+        env:
+          GITHUB_PAGES: true
         run: npm run build
 
       - name: Upload artifact
