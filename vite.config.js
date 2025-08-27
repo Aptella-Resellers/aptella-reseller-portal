@@ -1,11 +1,7 @@
-import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
 
-// IMPORTANT for GitHub Pages under a subpath:
 export default defineConfig({
-  base: '/aptella-reseller-portal/',
+  base: '/aptella-reseller-portal/',   // <-- important for GitHub Pages
   plugins: [react()],
-  build: {
-    target: 'es2019'
-  }
-});
+})
