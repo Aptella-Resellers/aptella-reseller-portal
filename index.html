@@ -9,8 +9,8 @@
     <title>Aptella Reseller Portal</title>
     <meta name="theme-color" content="#0e3446" />
 
-    <!-- Tailwind output (Vite will inject the right hashed name) -->
-    <link rel="stylesheet" href="/aptella-reseller-portal/src/index.css" />
+    <!-- Your app CSS (Tailwind compiled by Vite) -->
+    <link rel="stylesheet" href="/src/index.css" />
 
     <!-- Leaflet CSS -->
     <link
@@ -28,24 +28,17 @@
       href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"
     />
 
-    <!-- Favicons are optional -->
-    <link rel="icon" href="/aptella-reseller-portal/favicon.ico" />
+    <link rel="icon" href="/favicon.ico" />
   </head>
   <body>
     <div id="root"></div>
 
     <!-- Load Leaflet first -->
-    <script
-      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-      defer
-    ></script>
-    <!-- Then load the cluster plugin (depends on Leaflet) -->
-    <script
-      src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"
-      defer
-    ></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" defer></script>
+    <!-- Then the cluster plugin (depends on Leaflet) -->
+    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js" defer></script>
 
-    <!-- Your Vite bundle -->
-    <script type="module" src="/aptella-reseller-portal/src/main.jsx"></script>
+    <!-- Vite entry (NOTE: no /aptella-reseller-portal prefix) -->
+    <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
