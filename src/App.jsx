@@ -1071,6 +1071,250 @@ function AdminPanel({ items, setItems, ratesAUD, setRatesAUD }) {
   );
 }
 
+/* ---------- AdminMap: clustered markers with status breakdown ---------- */
+function AdminMap({ rows = [], ratesAUD = {}, height = 420 }) {
+  const mapRef = React.useRef(null);
+  const clusterRef = React.useRef(null);
+  const markerByIdRef = React.useRef(new Map());
+  const containerId = "leaflet-map";
+
+  // Status -> color + label
+  const STATUS_META = {
+    approved: { label: "Approved", color: "#16a34a" },   // green
+    pending:  { label: "Pending",  color: "#2563eb" },   // blue
+    lost:     { label: "Closed/Lost", color: "#dc2626" },// red
+    expiring: { label: "Expiring", color: "#f59e0b" },   // orange
+  };
+
+  // Decide status bucket for a row
+  function statusOf(r) {
+    const s = (r.status || "").toLowerCase().trim();
+    if (s === "approved") return "approved";
+    if (s === "lost" || s === "closed" || s === "rejected") return "lost";
+    // expiring = pending and within 7 days
+    if (s === "pending") {
+      const d = new Date(r.expectedCloseDate || r.expected || "");
+      const days = Math.round((d - new Date()) / 86400000);
+      if (!isNaN(days) && days <= 7 && days >= 0) return "expiring";
+      return "pending";
+    }
+    return "pending";
+  }
+
+  function toAUD(r) {
+    const v = Number(r.value || 0);
+    if (!v) return 0;
+    const cur = (r.currency || "AUD").toUpperCase();
+    if (cur === "AUD") return v;
+    const fx = Number(ratesAUD[cur] || 0);
+    return fx ? v * fx : v; // if fx missing, fall back to raw
+  }
+
+  // Build a small colored dot icon with optional number
+  function iconFor(rowOrCount, color, count) {
+    const n = typeof rowOrCount === "number" ? rowOrCount : (count || "");
+    const c = color || "#2563eb";
+    return L.divIcon({
+      className: "deal-pin",
+      html: `
+        <div style="
+          display:inline-flex;align-items:center;justify-content:center;
+          width:28px;height:28px;border-radius:9999px;
+          background:${c};color:#fff;font-size:12px;font-weight:600;
+          box-shadow:0 2px 8px rgba(0,0,0,.2)
+        ">${n || ""}</div>
+      `,
+      iconSize: [28, 28],
+      iconAnchor: [14, 14],
+      popupAnchor: [0, -14],
+    });
+  }
+
+  // Create / refresh map + clusters when rows change
+  React.useEffect(() => {
+    if (!window.L) return; // Leaflet not ready
+    let map = mapRef.current;
+    if (!map) {
+      map = L.map(containerId, { zoomControl: true, attributionControl: true })
+        .setView([1.3521, 103.8198], 5); // SG-ish default
+      mapRef.current = map;
+
+      // OSM tiles
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19,
+        attribution:
+          '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>',
+      }).addTo(map);
+    }
+
+    // (Re)build cluster
+    if (clusterRef.current) {
+      clusterRef.current.remove();
+      clusterRef.current = null;
+    }
+    markerByIdRef.current.clear();
+
+    const cluster = L.markerClusterGroup({
+      chunkedLoading: true,
+      spiderfyOnEveryZoom: true,
+      showCoverageOnHover: false,
+      zoomToBoundsOnClick: false, // we’ll show a popup instead
+    });
+    clusterRef.current = cluster;
+    map.addLayer(cluster);
+
+    // Add markers
+    const bounds = L.latLngBounds([]);
+    (rows || []).forEach((r) => {
+      const lat = Number(r.lat), lng = Number(r.lng);
+      if (isNaN(lat) || isNaN(lng)) return;
+      const bucket = statusOf(r);
+      const color = STATUS_META[bucket]?.color || "#2563eb";
+      const marker = L.marker([lat, lng], { icon: iconFor(null, color) });
+
+      const aud = toAUD(r);
+      const currency = (r.currency || "").toUpperCase();
+      const html = `
+        <div style="min-width:240px">
+          <div style="font-weight:700;margin-bottom:4px">${r.customerName || "(Customer)"}</div>
+          <div style="font-size:12px;color:#374151;margin-bottom:8px">${r.solution || ""}</div>
+          <div style="font-size:12px;margin-bottom:4px"><b>Location:</b> ${r.city || ""}${r.country ? ", " + r.country : ""}</div>
+          <div style="font-size:12px;margin-bottom:4px"><b>Value:</b> ${currency} ${Number(r.value || 0).toLocaleString()} <span style="color:#64748b">(${aud ? "≈ AUD " + aud.toLocaleString() : ""})</span></div>
+          <div style="font-size:12px;margin-bottom:4px"><b>Stage:</b> ${r.stage || ""} &nbsp; <b>Status:</b> ${r.status || ""}</div>
+          <div style="font-size:12px;"><b>Expected:</b> ${
+            r.expectedCloseDate
+              ? new Date(r.expectedCloseDate).toISOString().slice(0, 10)
+              : "-"
+          }</div>
+        </div>`;
+      marker.bindPopup(html, { closeButton: true });
+      marker.options.dealId = r.id; // keep id
+      markerByIdRef.current.set(r.id, marker);
+      cluster.addLayer(marker);
+      bounds.extend([lat, lng]);
+    });
+
+    if (rows && rows.length && bounds.isValid()) {
+      map.fitBounds(bounds.pad(0.15));
+    }
+
+    // Custom cluster click: show status breakdown + drilldown
+    cluster.on("clusterclick", (e) => {
+      e.originalEvent?.preventDefault?.();
+
+      const children = e.layer.getAllChildMarkers();
+      const tally = { approved: 0, lost: 0, expiring: 0, pending: 0 };
+      const byStatus = { approved: [], lost: [], expiring: [], pending: [] };
+
+      children.forEach((m) => {
+        const id = m.options.dealId;
+        const row = (rows || []).find((r) => r.id === id);
+        if (!row) return;
+        const b = statusOf(row);
+        tally[b]++; 
+        byStatus[b].push(row);
+      });
+
+      // Build popup with summary lines — click a line to show the deals list
+      const summaryLine = (key) => {
+        const meta = STATUS_META[key];
+        const count = tally[key] || 0;
+        if (!count) return "";
+        return `
+          <div class="cluster-line" data-status="${key}" style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:10px;margin-bottom:6px;background:#f8fafc;cursor:pointer">
+            <span style="display:inline-block;width:10px;height:10px;border-radius:9999px;background:${meta.color}"></span>
+            <span style="font-weight:600">${meta.label}</span>
+            <span style="margin-left:auto;font-weight:700">${count}</span>
+          </div>
+        `;
+      };
+
+      const content = `
+        <div style="min-width:260px">
+          <div style="font-weight:700;margin-bottom:8px">Cluster Summary</div>
+          ${summaryLine("approved")}
+          ${summaryLine("expiring")}
+          ${summaryLine("pending")}
+          ${summaryLine("lost")}
+          <div id="cluster-drill" style="margin-top:8px"></div>
+        </div>
+      `;
+
+      const p = L.popup()
+        .setLatLng(e.layer.getLatLng())
+        .setContent(content)
+        .openOn(map);
+
+      // After popup opens, wire click handlers for status lines
+      map.once("popupopen", (evt) => {
+        const root = evt?.popup?.getElement();
+        if (!root) return;
+
+        root.querySelectorAll(".cluster-line").forEach((el) => {
+          el.addEventListener("click", () => {
+            const key = el.getAttribute("data-status");
+            const items = (byStatus[key] || []).slice(0, 12); // show up to 12
+            const listHtml = items
+              .map((r) => {
+                const aud = toAUD(r);
+                return `
+                <div class="deal-link" data-id="${r.id}"
+                  style="padding:6px 8px;border-radius:8px;margin:4px 0;background:#fff;border:1px solid #e5e7eb;cursor:pointer">
+                  <div style="font-weight:600">${r.customerName || "(Customer)"} — ${r.solution || ""}</div>
+                  <div style="font-size:12px;color:#374151">
+                    ${r.city || ""}${r.country ? ", " + r.country : ""} &nbsp;•&nbsp; 
+                    ${r.currency || ""} ${Number(r.value || 0).toLocaleString()} 
+                    <span style="color:#64748b">${aud ? "(≈ AUD " + aud.toLocaleString() + ")" : ""}</span>
+                  </div>
+                </div>`;
+              })
+              .join("");
+            const drill = root.querySelector("#cluster-drill");
+            if (drill) {
+              drill.innerHTML = `<div style="font-weight:700;margin:8px 0">Deals (${STATUS_META[key].label})</div>${listHtml}`;
+              drill.querySelectorAll(".deal-link").forEach((d) => {
+                d.addEventListener("click", () => {
+                  const id = d.getAttribute("data-id");
+                  const m = markerByIdRef.current.get(id);
+                  if (m) {
+                    map.setView(m.getLatLng(), Math.max(map.getZoom(), 13), {
+                      animate: true,
+                    });
+                    m.openPopup();
+                  }
+                });
+              });
+            }
+          });
+        });
+      });
+    });
+
+    return () => {
+      // clean up when component unmounts or rows change
+      if (clusterRef.current) {
+        clusterRef.current.remove();
+        clusterRef.current = null;
+      }
+    };
+  }, [rows, ratesAUD]);
+
+  return (
+    <div
+      id={containerId}
+      style={{
+        height: typeof height === "number" ? `${height}px` : height,
+        borderRadius: "16px",
+        overflow: "hidden",
+        border: "1px solid #e5e7eb",
+      }}
+    >
+      {/* Map placeholder for SSR/first paint */}
+      Map placeholder — your Leaflet init can target this container later.
+    </div>
+  );
+}
+
 /* ======================== ROOT APP ======================== */
 
 function AptellaRoot() {
