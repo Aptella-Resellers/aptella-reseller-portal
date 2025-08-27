@@ -29,7 +29,7 @@ jobs:
 
       # IMPORTANT: use npm install, not npm ci
       - name: Install deps
-        run: npm ci --no-audit --no-fund
+        run: npm install --no-audit --no-fund
 
       - name: Build
         env:
