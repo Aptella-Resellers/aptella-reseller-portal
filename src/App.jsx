@@ -1,958 +1,1247 @@
-// src/App.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import L from "leaflet";
-import "leaflet/dist/leaflet.css";
-import logoUrl from "./assets/aptella-logo.svg";
+import "./index.css";
+import logoUrl from "./assets/aptella-logo.svg"; // ensure this file exists (SVG or PNG is fine)
 
 // ====== CONFIG ======
 const GAS_URL =
   "https://script.google.com/macros/s/AKfycbw3O_GnYcTx4bRYdFD2vCSs26L_Gzl2ZIZd18dyJmZAEE442hvhqp7j1C4W6cFX_DWM/exec";
-const ADMIN_PASSWORD = "Aptella2025!";
 
-// capitals + currency (used by Reseller form)
-const COUNTRY_META = {
-  Singapore: { lat: 1.3521, lng: 103.8198, currency: "SGD" },
-  Malaysia: { lat: 3.139, lng: 101.6869, currency: "MYR" },
-  Indonesia: { lat: -6.2088, lng: 106.8456, currency: "IDR" },
-  Philippines: { lat: 14.5995, lng: 120.9842, currency: "PHP" },
+const ADMIN_PASS = "Aptella2025!"; // as requested
+
+// Countries → default capital coords + currency + locale
+const COUNTRY_CONFIG = {
+  "": { currency: "", capital: "", lat: null, lng: null, locale: "en" },
+  Singapore: { currency: "SGD", capital: "Singapore", lat: 1.3521, lng: 103.8198, locale: "en" },
+  Malaysia: { currency: "MYR", capital: "Kuala Lumpur", lat: 3.139, lng: 101.6869, locale: "en" },
+  Indonesia: { currency: "IDR", capital: "Jakarta", lat: -6.2088, lng: 106.8456, locale: "id" },
+  Philippines: { currency: "PHP", capital: "Manila", lat: 14.5995, lng: 120.9842, locale: "en" },
 };
 
+// PROB by stage
 const STAGES = [
-  { key: "qualified", label: "Qualified", probability: 35 },
-  { key: "negotiation", label: "Negotiation", probability: 70 },
-  { key: "committed", label: "Committed", probability: 90 },
+  { key: "qualified", label: "Qualified", prob: 35 },
+  { key: "proposal", label: "Proposal", prob: 55 },
+  { key: "negotiation", label: "Negotiation", prob: 70 },
+  { key: "won", label: "Won", prob: 100 },
+  { key: "lost", label: "Lost", prob: 0 },
 ];
 
-const SOLUTIONS = [
+const XGRIDS_SOLUTIONS = [
   "Xgrids L2 PRO",
   "Xgrids K1",
-  "Xgrids K3",
-  "Xgrids L1",
+  "Xgrids PortalCam",
+  "Xgrids Drone Kit",
+  "+ Other",
+];
+
+// Support tick-boxes
+const SUPPORT_OPTIONS = [
+  "Pre-sales engineer",
+  "Demo / loan unit",
+  "Pricing exception",
+  "Marketing materials",
+  "Partner training",
+  "On-site customer visit",
+  "Extended lock request",
+];
+
+// Industry options (restored)
+const INDUSTRIES = [
+  "Architecture / Engineering",
+  "Construction",
+  "Facilities / FM",
+  "Oil & Gas / Energy",
+  "Manufacturing",
+  "Government",
+  "Education",
   "Other",
 ];
 
-function classNames(...xs) {
-  return xs.filter(Boolean).join(" ");
-}
+// Evidence email (updated)
+const APTELLA_EVIDENCE_EMAIL = "admin.asia@aptella.com";
 
-async function apiGET(params) {
-  const url = `${GAS_URL}?${new URLSearchParams(params).toString()}`;
+// ====== HELPERS ======
+const todayYMD = () => {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${dd}`;
+};
+const addDays = (dateISO, days) => {
+  const d = new Date(dateISO);
+  d.setDate(d.getDate() + Number(days || 0));
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${dd}`;
+};
+const withinNext60Days = (dateISO) => {
+  if (!dateISO) return false;
+  const t0 = new Date(todayYMD());
+  const t1 = new Date(dateISO);
+  const d = (t1 - t0) / (1000 * 60 * 60 * 24);
+  return d >= 0 && d <= 60;
+};
+const stageToProb = (stage) => STAGES.find((s) => s.key === stage)?.prob ?? 0;
+
+const statusColor = (row) => {
+  if (row.status === "approved") return "text-green-700";
+  if (row.status === "closed" || row.stage === "lost") return "text-red-700";
+  // near expiry (expected close within 7 days)
+  try {
+    const diff = Math.round((new Date(row.expectedCloseDate) - new Date(todayYMD())) / 86400000);
+    if (diff <= 7 && diff >= 0) return "text-orange-600";
+  } catch {}
+  return "text-sky-700";
+};
+
+// Make a small badge class
+const badge = (row) =>
+  `inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${row.status === "approved"
+    ? "bg-green-50 text-green-700 ring-1 ring-green-200"
+    : row.status === "closed" || row.stage === "lost"
+    ? "bg-red-50 text-red-700 ring-1 ring-red-200"
+    : "bg-sky-50 text-sky-700 ring-1 ring-sky-200"
+  }`;
+
+// ====== CORS-FRIENDLY GAS FETCH (text/plain – no preflight) ======
+async function gasGet(params = {}) {
+  const url = GAS_URL + "?" + new URLSearchParams(params).toString();
   const res = await fetch(url, { method: "GET" });
-  if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
-  const json = await res.json();
-  if (!json || json.ok === false) {
-    throw new Error(json && json.error ? json.error : "Unknown error");
+  const text = await res.text();
+  let json;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    throw new Error("Bad JSON from GAS: " + text.slice(0, 120));
   }
+  if (!json.ok) throw new Error(json.error || "Load failed");
   return json;
 }
-
-async function apiPOST(body) {
+async function gasPost(action, payload) {
   const res = await fetch(GAS_URL, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    headers: { "Content-Type": "text/plain;charset=utf-8" },
+    body: JSON.stringify({ action, ...payload }),
   });
-  if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
-  const json = await res.json();
-  if (!json || json.ok === false) {
-    throw new Error(json && json.error ? json.error : "Unknown error");
+  const text = await res.text();
+  let json;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    throw new Error("Bad JSON from GAS: " + text.slice(0, 120));
   }
+  if (!json.ok) throw new Error(json.error || "Failed");
   return json;
 }
 
-function niceDate(d) {
-  if (!d) return "";
-  // accept "yyyy-mm-dd" or ISO
-  const dt = typeof d === "string" && d.length <= 10 ? new Date(`${d}T00:00:00`) : new Date(d);
-  if (isNaN(dt)) return "";
-  const y = dt.getFullYear();
-  const m = String(dt.getMonth() + 1).padStart(2, "0");
-  const day = String(dt.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+// ====== BRAND HEAD ======
+function BrandHeader() {
+  return (
+    <div className="brand-nav px-4 sm:px-6 py-4 border-b bg-white">
+      <div className="max-w-7xl mx-auto flex items-center gap-4 sm:gap-6">
+        <img
+          src={logoUrl}
+          alt="Aptella"
+          className="h-12 sm:h-16 md:h-20 w-auto object-contain select-none"
+          draggable={false}
+        />
+        <div className="flex flex-col">
+          <div className="text-aptella-navy text-lg sm:text-xl font-semibold tracking-wide">
+            Master Distributor • <span className="text-aptella-orange">Xgrids</span>
+          </div>
+          <div className="text-xs sm:text-sm text-slate-500">
+            ASEAN Partner Deal Registration Portal
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
-// ===================== Reseller Form ======================
-function ResellerForm({ onSubmitted }) {
+// ====== TRANSLATIONS (labels switch when Indonesia selected) ======
+const T = {
+  en: {
+    resellerCountry: "Reseller Country",
+    selectCountry: "Select country",
+    resellerLocation: "Reseller Location",
+    currency: "Currency",
+    resellerCompany: "Reseller company",
+    primaryContact: "Primary contact",
+    contactEmail: "Contact email",
+    contactPhone: "Contact phone",
+    customerName: "Customer name",
+    customerCity: "Customer City",
+    customerCountry: "Customer Country",
+    mapOption: "Map option (paste lat, lng or click helper)",
+    mapTip: "Tip: use the link to pick a point, copy coordinates back here.",
+    solutionOffered: "Solution offered (Xgrids)",
+    expectedClose: "Expected close date",
+    industry: "Industry",
+    dealValue: "Deal value",
+    salesStage: "Sales stage",
+    probability: "Probability (%)",
+    competitors: "Competitors",
+    supportRequested: "Support requested",
+    evidenceRequired: "Evidence (required)",
+    attachFiles: "Attach files",
+    emailFiles: `Email attached files to Aptella (${APTELLA_EVIDENCE_EMAIL})`,
+    notes: "Notes",
+    submit: "Submit Registration",
+    reset: "Reset",
+    learnXgrids: "Learn about Xgrids solutions",
+    search: "Search…",
+    sortBy: "Sort by",
+    submitted: "Submitted",
+    expected: "Expected",
+    customer: "Customer",
+    location: "Location",
+    solution: "Solution",
+    value: "Value",
+    stage: "Stage",
+    status: "Status",
+    actions: "Actions",
+    approve: "Approve",
+    close: "Close",
+    approved: "Approved",
+    closed: "Closed",
+    pending: "Pending",
+  },
+  id: {
+    resellerCountry: "Negara Anda",
+    selectCountry: "Pilih negara",
+    resellerLocation: "Lokasi Reseller",
+    currency: "Mata Uang",
+    resellerCompany: "Perusahaan Reseller",
+    primaryContact: "Kontak Utama",
+    contactEmail: "Email Kontak",
+    contactPhone: "Telepon Kontak",
+    customerName: "Nama Pelanggan",
+    customerCity: "Kota Pelanggan",
+    customerCountry: "Negara Pelanggan",
+    mapOption: "Opsi peta (tempel lat, lng atau klik pembantu)",
+    mapTip:
+      "Tip: gunakan tautan untuk memilih titik, salin koordinat kembali ke sini.",
+    solutionOffered: "Solusi yang ditawarkan (Xgrids)",
+    expectedClose: "Perkiraan tanggal penutupan",
+    industry: "Industri",
+    dealValue: "Nilai transaksi",
+    salesStage: "Tahap penjualan",
+    probability: "Probabilitas (%)",
+    competitors: "Pesaing",
+    supportRequested: "Dukungan yang diminta",
+    evidenceRequired: "Bukti (wajib)",
+    attachFiles: "Lampirkan file",
+    emailFiles: `Email file terlampir ke Aptella (${APTELLA_EVIDENCE_EMAIL})`,
+    notes: "Catatan",
+    submit: "Kirim Pendaftaran",
+    reset: "Reset",
+    learnXgrids: "Pelajari solusi Xgrids",
+    search: "Cari…",
+    sortBy: "Urutkan",
+    submitted: "Dikirim",
+    expected: "Perkiraan",
+    customer: "Pelanggan",
+    location: "Lokasi",
+    solution: "Solusi",
+    value: "Nilai",
+    stage: "Tahap",
+    status: "Status",
+    actions: "Aksi",
+    approve: "Setujui",
+    close: "Tutup",
+    approved: "Disetujui",
+    closed: "Ditutup",
+    pending: "Tertunda",
+  },
+};
+
+// ====== BASIC UI PRIMS ======
+const Label = ({ children, required, htmlFor }) => (
+  <label htmlFor={htmlFor} className="text-sm font-medium text-slate-700 flex items-center gap-1">
+    {children} {required && <span className="text-aptella-orange">*</span>}
+  </label>
+);
+
+const Input = (props) => (
+  <input
+    {...props}
+    className={
+      "w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring " +
+      (props.className || "")
+    }
+  />
+);
+const Select = (props) => (
+  <select
+    {...props}
+    className={
+      "w-full rounded-lg border px-3 py-2 text-sm bg-white focus:outline-none focus:ring " +
+      (props.className || "")
+    }
+  />
+);
+const Textarea = (props) => (
+  <textarea
+    {...props}
+    className={
+      "w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring " +
+      (props.className || "")
+    }
+  />
+);
+
+const Card = ({ children, className }) => (
+  <div className={"bg-white rounded-2xl shadow-sm ring-1 ring-slate-200 " + (className || "")}>
+    {children}
+  </div>
+);
+const CardHeader = ({ title, subtitle }) => (
+  <div className="p-5 border-b">
+    <h3 className="text-xl font-semibold text-aptella-orange text-center">{title}</h3>
+    {subtitle && <p className="text-slate-500 text-sm mt-1 text-center">{subtitle}</p>}
+  </div>
+);
+const CardBody = ({ children }) => <div className="p-5">{children}</div>;
+
+// ====== FILE → BASE64 ======
+async function filesToBase64(files) {
+  const arr = [];
+  for (const f of files) {
+    const data = await new Promise((resolve, reject) => {
+      const fr = new FileReader();
+      fr.onload = () => {
+        const s = String(fr.result || "");
+        resolve(s.split(",")[1] || "");
+      };
+      fr.onerror = reject;
+      fr.readAsDataURL(f);
+    });
+    arr.push({ name: f.name, type: f.type || "application/octet-stream", data });
+  }
+  return arr;
+}
+
+// ====== SUBMISSION FORM ======
+function SubmissionForm({ onSaved }) {
+  const [locale, setLocale] = useState("en");
+  const t = (k) => T[locale][k];
+
   const [form, setForm] = useState({
     resellerCountry: "",
     resellerLocation: "",
-    currency: "SGD",
+    currency: "",
+    city: "",
+    country: "",
+    lat: "",
+    lng: "",
     resellerName: "",
     resellerContact: "",
     resellerEmail: "",
     resellerPhone: "",
     customerName: "",
-    customerCity: "",
-    customerCountry: "",
-    lat: "",
-    lng: "",
-    expectedCloseDate: "",
+    customerLocation: "",
     industry: "",
-    stage: "qualified",
-    probability: 35,
     value: "",
     solution: "",
-    solutionOther: "",
-    competitors: "",
+    stage: "qualified",
+    probability: stageToProb("qualified"),
+    expectedCloseDate: addDays(todayYMD(), 14),
+    competitors: [],
+    supports: [],
     notes: "",
-    supports: [], // array
+    evidenceFiles: [],
     emailEvidence: true,
   });
-  const [saving, setSaving] = useState(false);
 
+  // auto-locale + currency + default coords + default customer country = reseller country
   useEffect(() => {
-    // default capitals + currency
-    if (form.resellerCountry && COUNTRY_META[form.resellerCountry]) {
-      const m = COUNTRY_META[form.resellerCountry];
-      setForm((f) => ({
-        ...f,
-        lat: m.lat,
-        lng: m.lng,
-        currency: m.currency,
-      }));
-    }
-  }, [form.resellerCountry]);
+    const cfg = COUNTRY_CONFIG[form.resellerCountry || ""];
+    const loc = cfg?.locale || "en";
+    setLocale(loc);
+    setForm((f) => ({
+      ...f,
+      currency: cfg?.currency || "",
+      resellerLocation: cfg?.capital || "",
+      lat: cfg?.lat ?? "",
+      lng: cfg?.lng ?? "",
+      country: f.country || (form.resellerCountry || ""),
+      customerLocation:
+        (f.city ? f.city : cfg?.capital || "") +
+        (f.country || form.resellerCountry ? `, ${f.country || form.resellerCountry}` : ""),
+    }));
+  }, [form.resellerCountry]); // eslint-disable-line
 
+  // adjust probability when stage changes
   useEffect(() => {
-    const st = STAGES.find((s) => s.key === form.stage);
-    if (st) setForm((f) => ({ ...f, probability: st.probability }));
+    setForm((f) => ({ ...f, probability: stageToProb(f.stage) }));
   }, [form.stage]);
 
-  function toggleSupport(v) {
-    setForm((f) =>
-      f.supports.includes(v)
-        ? { ...f, supports: f.supports.filter((x) => x !== v) }
-        : { ...f, supports: [...f.supports, v] }
-    );
-  }
+  const onChange = (e) => {
+    const { name, value, type, checked } = e.target;
+    setForm((f) => ({ ...f, [name]: type === "checkbox" ? checked : value }));
+  };
 
-  async function submit() {
-    if (!form.resellerCountry || !form.resellerLocation || !form.customerName || !form.expectedCloseDate || !form.solution) {
-      alert("Please complete all required fields.");
-      return;
+  const toggleArray = (key, value) =>
+    setForm((f) => {
+      const set = new Set(f[key] || []);
+      set.has(value) ? set.delete(value) : set.add(value);
+      return { ...f, [key]: Array.from(set) };
+    });
+
+  const addSolutionIfOther = (val) => {
+    if (val === "+ Other") {
+      const v = prompt("Type the solution name (Xgrids):");
+      if (v) setForm((f) => ({ ...f, solution: v }));
+    } else {
+      setForm((f) => ({ ...f, solution: val }));
     }
-    if (form.solution === "Other" && !form.solutionOther.trim()) {
-      alert("Please specify the Other solution.");
-      return;
+  };
+
+  const onFiles = (e) => {
+    const files = Array.from(e.target.files || []);
+    setForm((f) => ({ ...f, evidenceFiles: files }));
+  };
+
+  const validate = () => {
+    const errs = [];
+    if (!form.resellerCountry) errs.push("Select a country.");
+    if (!form.resellerLocation) errs.push("Reseller location is required.");
+    if (!form.currency) errs.push("Currency is required.");
+    if (!form.resellerName) errs.push("Reseller company is required.");
+    if (!form.resellerContact) errs.push("Primary contact is required.");
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.resellerEmail || "")) errs.push("Valid email required.");
+    if (!form.customerName) errs.push("Customer name is required.");
+    if (!form.city) errs.push("Customer city is required.");
+    if (!form.country) errs.push("Customer country is required.");
+    if (!form.solution) errs.push("Solution is required.");
+    if (!form.value || Number(form.value) <= 0) errs.push("Deal value must be positive.");
+    if (!withinNext60Days(form.expectedCloseDate)) errs.push("Expected close must be within 60 days.");
+    if (!form.evidenceFiles?.length) errs.push("Evidence is required (attach at least one file).");
+    if (errs.length) {
+      alert(errs.join("\n"));
+      return false;
     }
-    setSaving(true);
+    return true;
+  };
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!validate()) return;
+
+    const id = Math.random().toString(36).slice(2) + Date.now().toString(36);
+    const base = {
+      id,
+      submittedAt: todayYMD(),
+      resellerCountry: form.resellerCountry,
+      resellerLocation: form.resellerLocation,
+      resellerName: form.resellerName,
+      resellerContact: form.resellerContact,
+      resellerEmail: form.resellerEmail,
+      resellerPhone: form.resellerPhone,
+      customerName: form.customerName,
+      customerLocation: form.customerLocation,
+      city: form.city,
+      country: form.country,
+      lat: Number(form.lat || 0),
+      lng: Number(form.lng || 0),
+      industry: form.industry,
+      currency: form.currency,
+      value: Number(form.value),
+      solution: form.solution,
+      stage: form.stage,
+      probability: Number(form.probability),
+      expectedCloseDate: form.expectedCloseDate,
+      status: "pending",
+      lockExpiry: "",
+      syncedAt: "",
+      remindersOptIn: false, // confidential removed per your instruction
+      supports: (form.supports || []).join("; "),
+      competitors: (form.competitors || []).join("; "),
+      notes: form.notes || "",
+      evidenceLinks: "", // not used now; files only
+      updates: "",
+    };
+
+    // local optimistic add
+    onSaved?.(base);
+
+    // prepare attachments
+    let attachments = [];
     try {
-      const payload = {
-        action: "submit",
-        row: {
-          resellerCountry: form.resellerCountry,
-          resellerLocation: form.resellerLocation,
-          currency: form.currency,
-          resellerName: form.resellerName,
-          resellerContact: form.resellerContact,
-          resellerEmail: form.resellerEmail,
-          resellerPhone: form.resellerPhone,
-          customerName: form.customerName,
-          customerLocation:
-            (form.customerCity || "") +
-            (form.customerCountry ? `, ${form.customerCountry}` : ""),
-          city: form.customerCity || "",
-          country: form.customerCountry || "",
-          lat: Number(form.lat) || "",
-          lng: Number(form.lng) || "",
-          industry: form.industry || "",
-          value: Number(String(form.value).replace(/[^\d.]/g, "")) || 0,
-          solution: form.solution,
-          solutionOther: form.solution === "Other" ? form.solutionOther : "",
-          stage: form.stage,
-          probability: Number(form.probability) || 0,
-          expectedCloseDate: niceDate(form.expectedCloseDate),
-          status: "pending",
-          confidential: false,
-          remindersOptIn: false,
-          supports: form.supports, // array; GAS will join with "; "
-          competitors: form.competitors || "",
-          notes: form.notes || "",
-          evidenceLinks: [],
-          emailEvidence: !!form.emailEvidence,
-        },
-      };
-      const j = await apiPOST(payload);
-      alert("Submitted! ID: " + j.id);
-      onSubmitted && onSubmitted();
-    } catch (e) {
-      alert("Submitted locally. Google Sheets sync failed: " + e.message);
-    } finally {
-      setSaving(false);
+      attachments = await filesToBase64(form.evidenceFiles || []);
+    } catch (err) {
+      alert("File read error: " + (err?.message || err));
+      return;
     }
-  }
+
+    try {
+      await gasPost("submit", { row: base, attachments, evidenceEmail: APTELLA_EVIDENCE_EMAIL });
+      alert("Submitted and synced.");
+      // reset
+      setForm((f) => ({
+        ...f,
+        resellerName: "",
+        resellerContact: "",
+        resellerEmail: "",
+        resellerPhone: "",
+        customerName: "",
+        industry: "",
+        value: "",
+        solution: "",
+        stage: "qualified",
+        probability: stageToProb("qualified"),
+        competitors: [],
+        supports: [],
+        notes: "",
+        evidenceFiles: [],
+      }));
+      const el = document.getElementById("evidenceFiles");
+      if (el) el.value = "";
+    } catch (err) {
+      alert("Submitted locally. Google Sheets sync failed: " + (err?.message || err));
+    }
+  };
 
   return (
-    <div className="mx-auto max-w-6xl p-4">
-      <header className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-3">
-          <img src={logoUrl} alt="Aptella" className="h-7" />
-          <div className="text-sm text-slate-500">Master Distributor • Xgrids</div>
-        </div>
-        <div className="rounded-full border px-3 py-1 text-xs bg-white text-slate-700">
-          Reseller
-        </div>
-      </header>
-
-      <h2 className="text-xl font-semibold mb-3">
-        Register Upcoming Deal <span className="text-aptella-orange">(within 60 days)</span>
-      </h2>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-white p-4 rounded-xl shadow">
-        {/* Country & Location */}
-        <div>
-          <label className="text-sm font-medium">Reseller Country *</label>
-          <select
-            className="mt-1 w-full rounded-lg border bg-white p-2 focus:outline-none"
-            value={form.resellerCountry}
-            onChange={(e) =>
-              setForm((f) => ({ ...f, resellerCountry: e.target.value }))
-            }
-          >
-            <option value="">Select country</option>
-            {Object.keys(COUNTRY_META).map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="text-sm font-medium">Reseller Location *</label>
-          <input
-            className="mt-1 w-full rounded-lg border bg-white p-2"
-            placeholder="e.g., Singapore"
-            value={form.resellerLocation}
-            onChange={(e) =>
-              setForm((f) => ({ ...f, resellerLocation: e.target.value }))
-            }
-          />
-        </div>
-
-        {/* Currency */}
-        <div>
-          <label className="text-sm font-medium">Currency *</label>
-          <select
-            className="mt-1 w-full rounded-lg border bg-white p-2"
-            value={form.currency}
-            onChange={(e) => setForm((f) => ({ ...f, currency: e.target.value }))}
-          >
-            {["AUD", "SGD", "MYR", "IDR", "PHP", "USD"].map((x) => (
-              <option key={x} value={x}>
-                {x}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Contacts */}
-        <div>
-          <label className="text-sm font-medium">Reseller company *</label>
-          <input
-            className="mt-1 w-full rounded-lg border bg-white p-2"
-            value={form.resellerName}
-            onChange={(e) => setForm((f) => ({ ...f, resellerName: e.target.value }))}
-          />
-        </div>
-        <div>
-          <label className="text-sm font-medium">Primary contact *</label>
-          <input
-            className="mt-1 w-full rounded-lg border bg-white p-2"
-            value={form.resellerContact}
-            onChange={(e) =>
-              setForm((f) => ({ ...f, resellerContact: e.target.value }))
-            }
-          />
-        </div>
-        <div>
-          <label className="text-sm font-medium">Contact email *</label>
-          <input
-            className="mt-1 w-full rounded-lg border bg-white p-2"
-            value={form.resellerEmail}
-            onChange={(e) =>
-              setForm((f) => ({ ...f, resellerEmail: e.target.value }))
-            }
-          />
-        </div>
-        <div>
-          <label className="text-sm font-medium">Contact phone</label>
-          <input
-            className="mt-1 w-full rounded-lg border bg-white p-2"
-            value={form.resellerPhone}
-            onChange={(e) =>
-              setForm((f) => ({ ...f, resellerPhone: e.target.value }))
-            }
-          />
-        </div>
-
-        {/* Customer */}
-        <div>
-          <label className="text-sm font-medium">Customer name *</label>
-          <input
-            className="mt-1 w-full rounded-lg border bg-white p-2"
-            value={form.customerName}
-            onChange={(e) =>
-              setForm((f) => ({ ...f, customerName: e.target.value }))
-            }
-          />
-        </div>
-        <div>
-          <label className="text-sm font-medium">Customer Country *</label>
-          <input
-            className="mt-1 w-full rounded-lg border bg-white p-2"
-            placeholder="Select country"
-            value={form.customerCountry}
-            onChange={(e) =>
-              setForm((f) => ({ ...f, customerCountry: e.target.value }))
-            }
-          />
-        </div>
-        <div>
-          <label className="text-sm font-medium">Customer City</label>
-          <input
-            className="mt-1 w-full rounded-lg border bg-white p-2"
-            value={form.customerCity}
-            onChange={(e) =>
-              setForm((f) => ({ ...f, customerCity: e.target.value }))
-            }
-          />
-        </div>
-
-        {/* Map helper */}
-        <div>
-          <label className="text-sm font-medium">
-            Map option (paste lat,lng or use link)
-          </label>
-          <div className="mt-1 flex gap-2">
-            <input
-              className="w-full rounded-lg border bg-white p-2"
-              placeholder="lat"
-              value={form.lat}
-              onChange={(e) => setForm((f) => ({ ...f, lat: e.target.value }))}
-            />
-            <input
-              className="w-full rounded-lg border bg-white p-2"
-              placeholder="lng"
-              value={form.lng}
-              onChange={(e) => setForm((f) => ({ ...f, lng: e.target.value }))}
-            />
-            <a
-              className="rounded-lg bg-aptella-navy px-3 py-2 text-white"
-              href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-                `${form.customerCity || ""}, ${form.customerCountry || ""}`
-              )}`}
-              target="_blank"
-              rel="noreferrer"
-            >
-              Open Map
-            </a>
+    <Card className="mt-6">
+      <CardHeader
+        title="Reseller Deal Registration"
+        subtitle="Please register deals expected within 60 days. Evidence is required."
+      />
+      <CardBody>
+        <form className="grid gap-6" onSubmit={submit}>
+          {/* Top row: Country, Location, Currency */}
+          <div className="grid sm:grid-cols-3 gap-4">
+            <div>
+              <Label htmlFor="resellerCountry" required>{T[locale].resellerCountry}</Label>
+              <Select
+                id="resellerCountry"
+                name="resellerCountry"
+                value={form.resellerCountry}
+                onChange={(e) => setForm((f) => ({ ...f, resellerCountry: e.target.value }))}
+                className="bg-aptella-orange/5 border-aptella-orange/40"
+              >
+                <option value="">{T[locale].selectCountry}</option>
+                {Object.keys(COUNTRY_CONFIG)
+                  .filter((k) => k)
+                  .map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="resellerLocation" required>{T[locale].resellerLocation}</Label>
+              <Input
+                id="resellerLocation"
+                name="resellerLocation"
+                value={form.resellerLocation}
+                onChange={onChange}
+                placeholder="e.g., Jakarta"
+                className="bg-aptella-orange/5 border-aptella-orange/40"
+              />
+            </div>
+            <div>
+              <Label htmlFor="currency">{T[locale].currency}</Label>
+              <Select
+                id="currency"
+                name="currency"
+                value={form.currency}
+                onChange={onChange}
+                className="bg-aptella-orange/5 border-aptella-orange/40"
+              >
+                <option value="">{T[locale].selectCountry}</option>
+                <option>SGD</option>
+                <option>MYR</option>
+                <option>IDR</option>
+                <option>PHP</option>
+                <option>AUD</option>
+                <option>USD</option>
+              </Select>
+            </div>
           </div>
-        </div>
 
-        {/* Dates / solution */}
-        <div>
-          <label className="text-sm font-medium">Expected close date *</label>
-          <input
-            type="date"
-            className="mt-1 w-full rounded-lg border bg-white p-2"
-            value={form.expectedCloseDate}
-            onChange={(e) =>
-              setForm((f) => ({ ...f, expectedCloseDate: e.target.value }))
-            }
-          />
-        </div>
+          {/* Reseller contact */}
+          <div className="grid sm:grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="resellerName" required>{T[locale].resellerCompany}</Label>
+              <Input id="resellerName" name="resellerName" value={form.resellerName} onChange={onChange} />
+            </div>
+            <div>
+              <Label htmlFor="resellerContact" required>{T[locale].primaryContact}</Label>
+              <Input id="resellerContact" name="resellerContact" value={form.resellerContact} onChange={onChange} />
+            </div>
+            <div>
+              <Label htmlFor="resellerEmail" required>{T[locale].contactEmail}</Label>
+              <Input id="resellerEmail" name="resellerEmail" type="email" value={form.resellerEmail} onChange={onChange} />
+            </div>
+            <div>
+              <Label htmlFor="resellerPhone">{T[locale].contactPhone}</Label>
+              <Input id="resellerPhone" name="resellerPhone" value={form.resellerPhone} onChange={onChange} />
+            </div>
+          </div>
 
-        <div>
-          <label className="text-sm font-medium">Solution offered (Xgrids) *</label>
-          <select
-            className="mt-1 w-full rounded-lg border bg-white p-2"
-            value={form.solution}
-            onChange={(e) => setForm((f) => ({ ...f, solution: e.target.value }))}
-          >
-            <option value="">Select an Xgrids solution</option>
-            {SOLUTIONS.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
-          <a
-            href="https://www.aptella.com/brand/xgrids/"
-            target="_blank"
-            rel="noreferrer"
-            className="text-xs text-aptella-navy underline"
-          >
-            Learn about Xgrids
-          </a>
-          {form.solution === "Other" && (
-            <input
-              className="mt-2 w-full rounded-lg border bg-white p-2"
-              placeholder="Describe solution"
-              value={form.solutionOther}
+          {/* Customer & location */}
+          <div className="grid sm:grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="customerName" required>{T[locale].customerName}</Label>
+              <Input id="customerName" name="customerName" value={form.customerName} onChange={onChange} />
+            </div>
+            <div>
+              <Label htmlFor="city" required>{T[locale].customerCity}</Label>
+              <Input
+                id="city"
+                name="city"
+                value={form.city}
+                onChange={(e) =>
+                  setForm((f) => ({
+                    ...f,
+                    city: e.target.value,
+                    customerLocation:
+                      (e.target.value || "") + (f.country ? `, ${f.country}` : ""),
+                  }))
+                }
+              />
+            </div>
+            <div>
+              <Label htmlFor="country" required>{T[locale].customerCountry}</Label>
+              <Select
+                id="country"
+                name="country"
+                value={form.country}
+                onChange={(e) =>
+                  setForm((f) => ({
+                    ...f,
+                    country: e.target.value,
+                    customerLocation: (f.city || "") + (e.target.value ? `, ${e.target.value}` : ""),
+                  }))
+                }
+              >
+                <option value="">{T[locale].selectCountry}</option>
+                <option>Singapore</option>
+                <option>Malaysia</option>
+                <option>Indonesia</option>
+                <option>Philippines</option>
+              </Select>
+            </div>
+            <div>
+              <Label>{T[locale].mapOption}</Label>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="lat"
+                  value={form.lat}
+                  onChange={(e) => setForm((f) => ({ ...f, lat: e.target.value }))}
+                />
+                <Input
+                  placeholder="lng"
+                  value={form.lng}
+                  onChange={(e) => setForm((f) => ({ ...f, lng: e.target.value }))}
+                />
+                <a
+                  className="px-3 py-2 rounded-lg text-white bg-aptella-navy hover:bg-aptella-navy-dark text-xs"
+                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                    (form.city || "") + "," + (form.country || "")
+                  )}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Open Map
+                </a>
+              </div>
+              <p className="text-xs text-slate-500 mt-1">{T[locale].mapTip}</p>
+            </div>
+          </div>
+
+          {/* Solution & expected */}
+          <div className="grid sm:grid-cols-3 gap-4">
+            <div className="sm:col-span-2">
+              <Label required>{T[locale].solutionOffered}</Label>
+              <div className="grid gap-2">
+                <Select
+                  value={XGRIDS_SOLUTIONS.includes(form.solution) ? form.solution : ""}
+                  onChange={(e) => addSolutionIfOther(e.target.value)}
+                >
+                  <option value="">Select an Xgrids solution</option>
+                  {XGRIDS_SOLUTIONS.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </Select>
+                <Input
+                  placeholder="Or type Xgrids solution details"
+                  value={form.solution}
+                  onChange={(e) => setForm((f) => ({ ...f, solution: e.target.value }))}
+                />
+                <a
+                  className="text-sky-700 underline text-xs"
+                  href="https://www.aptella.com/asia/product-brands/xgrids-asia/"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {T[locale].learnXgrids}
+                </a>
+              </div>
+            </div>
+            <div>
+              <Label htmlFor="expectedCloseDate" required>{T[locale].expectedClose}</Label>
+              <Input
+                id="expectedCloseDate"
+                name="expectedCloseDate"
+                type="date"
+                value={form.expectedCloseDate}
+                onChange={onChange}
+              />
+            </div>
+          </div>
+
+          {/* Industry / currency / value */}
+          <div className="grid sm:grid-cols-3 gap-4">
+            <div>
+              <Label htmlFor="industry">{T[locale].industry}</Label>
+              <Select id="industry" name="industry" value={form.industry} onChange={onChange}>
+                <option value="">Select industry</option>
+                {INDUSTRIES.map((i) => (
+                  <option key={i} value={i}>
+                    {i}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="value" required>{T[locale].dealValue}</Label>
+              <Input
+                id="value"
+                name="value"
+                type="number"
+                step="0.01"
+                min="0"
+                value={form.value}
+                onChange={onChange}
+              />
+            </div>
+            <div>
+              <Label htmlFor="stage">{T[locale].salesStage}</Label>
+              <Select
+                id="stage"
+                name="stage"
+                value={form.stage}
+                onChange={onChange}
+              >
+                {STAGES.map((s) => (
+                  <option key={s.key} value={s.key}>
+                    {s.label}
+                  </option>
+                ))}
+              </Select>
+              <div className="mt-2">
+                <Label>{T[locale].probability}</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={form.probability}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, probability: Number(e.target.value) }))
+                  }
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Competitors & support */}
+          <div className="grid gap-2">
+            <Label>{T[locale].competitors}</Label>
+            <Input
+              placeholder="Comma-separated (optional)"
+              value={(form.competitors || []).join(", ")}
               onChange={(e) =>
-                setForm((f) => ({ ...f, solutionOther: e.target.value }))
+                setForm((f) => ({
+                  ...f,
+                  competitors: e.target.value
+                    .split(",")
+                    .map((s) => s.trim())
+                    .filter(Boolean),
+                }))
               }
             />
-          )}
-        </div>
+          </div>
 
-        {/* Industry / Deal value */}
-        <div>
-          <label className="text-sm font-medium">Industry</label>
-          <input
-            className="mt-1 w-full rounded-lg border bg-white p-2"
-            placeholder="Select industry"
-            value={form.industry}
-            onChange={(e) => setForm((f) => ({ ...f, industry: e.target.value }))}
-          />
-        </div>
+          <div className="grid gap-2">
+            <Label>{T[locale].supportRequested}</Label>
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
+              {SUPPORT_OPTIONS.map((opt) => (
+                <label key={opt} className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={form.supports.includes(opt)}
+                    onChange={() => toggleArray("supports", opt)}
+                  />
+                  {opt}
+                </label>
+              ))}
+            </div>
+          </div>
 
-        <div>
-          <label className="text-sm font-medium">Deal value *</label>
-          <input
-            className="mt-1 w-full rounded-lg border bg-white p-2"
-            placeholder="e.g., 25000"
-            value={form.value}
-            onChange={(e) => setForm((f) => ({ ...f, value: e.target.value }))}
-          />
-        </div>
-
-        {/* Stage / probability */}
-        <div>
-          <label className="text-sm font-medium">Sales stage</label>
-          <select
-            className="mt-1 w-full rounded-lg border bg-white p-2"
-            value={form.stage}
-            onChange={(e) => setForm((f) => ({ ...f, stage: e.target.value }))}
-          >
-            {STAGES.map((s) => (
-              <option key={s.key} value={s.key}>
-                {s.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label className="text-sm font-medium">Probability (%)</label>
-          <input
-            className="mt-1 w-full rounded-lg border bg-white p-2"
-            value={form.probability}
-            onChange={(e) =>
-              setForm((f) => ({ ...f, probability: e.target.value }))
-            }
-          />
-        </div>
-
-        {/* Competitors */}
-        <div className="md:col-span-2">
-          <label className="text-sm font-medium">Competitors</label>
-          <input
-            className="mt-1 w-full rounded-lg border bg-white p-2"
-            placeholder="Comma separated (optional)"
-            value={form.competitors}
-            onChange={(e) =>
-              setForm((f) => ({ ...f, competitors: e.target.value }))
-            }
-          />
-        </div>
-
-        {/* Support checkboxes */}
-        <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-3">
-          <fieldset className="rounded-lg border p-3">
-            <legend className="text-sm font-medium">Support requested</legend>
-            {[
-              "Pre-sales engineer",
-              "Partner training",
-              "Extended lock request",
-              "Demo / loan unit",
-              "Pricing exception",
-              "On-site customer visit",
-            ].map((label) => (
-              <label key={label} className="mr-4 inline-flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={form.supports.includes(label)}
-                  onChange={() => toggleSupport(label)}
-                />
-                <span>{label}</span>
-              </label>
-            ))}
-          </fieldset>
-          <div>
-            <label className="text-sm font-medium">Notes</label>
-            <textarea
-              className="mt-1 w-full rounded-lg border bg-white p-2"
-              rows={4}
-              value={form.notes}
-              onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
-              placeholder="Key requirements, scope, constraints, decision process, etc."
+          {/* Evidence (mandatory) */}
+          <div className="grid gap-2">
+            <Label required>{T[locale].evidenceRequired}</Label>
+            <input
+              id="evidenceFiles"
+              type="file"
+              multiple
+              onChange={onFiles}
+              className="block w-full text-sm file:mr-4 file:rounded-lg file:border-0 file:bg-aptella-orange/10 file:px-3 file:py-2 file:text-aptella-orange"
             />
-            <label className="mt-3 inline-flex items-center gap-2 text-sm">
+            <label className="text-sm text-slate-700 flex items-center gap-2 mt-1">
               <input
                 type="checkbox"
                 checked={!!form.emailEvidence}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, emailEvidence: e.target.checked }))
-                }
+                onChange={(e) => setForm((f) => ({ ...f, emailEvidence: e.target.checked }))}
               />
-              Email attached files to Aptella (admin.asia@aptella.com)
+              {T[locale].emailFiles}
             </label>
           </div>
-        </div>
 
-        <div className="md:col-span-2 flex justify-end gap-2">
-          <button
-            disabled={saving}
-            className="rounded-lg bg-slate-100 px-4 py-2"
-            onClick={() => window.location.reload()}
-          >
-            Reset
-          </button>
-          <button
-            disabled={saving}
-            className="rounded-lg bg-aptella-orange px-4 py-2 text-white"
-            onClick={submit}
-          >
-            {saving ? "Submitting…" : "Submit Registration"}
-          </button>
-        </div>
-      </div>
-    </div>
+          {/* Notes */}
+          <div>
+            <Label htmlFor="notes">{T[locale].notes}</Label>
+            <Textarea
+              id="notes"
+              name="notes"
+              rows={4}
+              value={form.notes}
+              onChange={onChange}
+              placeholder="Key requirements, technical scope, delivery constraints, decision process, etc."
+            />
+          </div>
+
+          {/* Actions */}
+          <div className="flex items-center gap-3">
+            <button
+              type="submit"
+              className="px-4 py-2 rounded-xl text-white bg-aptella-navy hover:bg-aptella-navy-dark"
+            >
+              {T[locale].submit}
+            </button>
+            <button
+              type="button"
+              className="px-4 py-2 rounded-xl bg-slate-200"
+              onClick={() => window.location.reload()}
+            >
+              {T[locale].reset}
+            </button>
+          </div>
+        </form>
+      </CardBody>
+    </Card>
   );
 }
 
-// ===================== FX Drawer ======================
-function FXDrawer({ open, onClose }) {
+// ====== ADMIN FX DRAWER ======
+function FxDrawer({ open, onClose }) {
   const [rows, setRows] = useState([]);
   const [saving, setSaving] = useState(false);
-
   useEffect(() => {
     if (!open) return;
     (async () => {
       try {
-        const j = await apiGET({ action: "fx" });
-        setRows(j.rows || []);
+        const res = await gasGet({ action: "fx" });
+        setRows(res.rows || []);
       } catch (e) {
-        alert("FX load failed: " + e.message);
+        alert("FX load failed: " + (e?.message || e));
       }
     })();
   }, [open]);
 
-  function addRow() {
-    setRows((r) => [...r, { currency: "", rateToAUD: "" }]);
-  }
-  function update(i, patch) {
-    setRows((r) => r.map((x, idx) => (idx === i ? { ...x, ...patch } : x)));
-  }
-  function remove(i) {
-    setRows((r) => r.filter((_, idx) => idx !== i));
-  }
+  const setCell = (i, k, v) =>
+    setRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, [k]: v } : r)));
 
-  async function save() {
+  const addRow = () => setRows((prev) => [...prev, { code: "USD", rateToAUD: 0.67 }]);
+  const removeRow = (i) => setRows((prev) => prev.filter((_, idx) => idx !== i));
+
+  const save = async () => {
     setSaving(true);
     try {
-      const cleaned = rows
-        .filter((r) => r.currency && r.rateToAUD)
-        .map((r) => ({
-          currency: r.currency.trim().toUpperCase(),
-          rateToAUD: Number(r.rateToAUD),
-        }));
-      await apiPOST({ action: "fxsave", rows: cleaned });
-      alert("FX saved");
-      onClose();
+      await gasPost("fx", { rows });
+      alert("FX saved.");
+      onClose?.();
     } catch (e) {
-      alert("FX save failed: " + e.message);
+      alert("FX save failed: " + (e?.message || e));
     } finally {
       setSaving(false);
     }
-  }
+  };
 
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40">
-      <div className="w-[min(680px,95vw)] rounded-xl bg-white p-4 shadow-xl">
-        <div className="mb-3 flex items-center justify-between">
+    <div className="fixed inset-0 z-[100] bg-black/40 flex items-center justify-center">
+      <div className="bg-white w-[min(680px,95vw)] rounded-2xl shadow-xl p-6">
+        <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold">FX Rates to AUD</h3>
-          <button className="rounded-lg bg-slate-100 px-3 py-1.5" onClick={onClose}>
-            Close
-          </button>
+          <button onClick={onClose} className="px-3 py-1.5 rounded-lg bg-slate-100">Close</button>
         </div>
-        <div className="grid gap-2">
+        <div className="grid grid-cols-3 gap-2 text-sm font-medium mb-2">
+          <div>Currency</div><div>Rate → AUD</div><div></div>
+        </div>
+        <div className="max-h-[50vh] overflow-auto space-y-2">
           {rows.map((r, i) => (
-            <div key={i} className="flex items-center gap-2">
-              <input
-                className="w-40 rounded-lg border p-2"
-                placeholder="Currency (e.g., SGD)"
-                value={r.currency}
-                onChange={(e) => update(i, { currency: e.target.value })}
-              />
-              <input
-                className="w-40 rounded-lg border p-2"
-                placeholder="Rate to AUD"
-                value={r.rateToAUD}
-                onChange={(e) => update(i, { rateToAUD: e.target.value })}
-              />
-              <button
-                className="rounded-lg bg-red-50 px-3 py-1.5 text-red-700"
-                onClick={() => remove(i)}
-              >
-                Remove
-              </button>
+            <div key={i} className="grid grid-cols-3 gap-2 items-center">
+              <Input value={r.code} onChange={(e) => setCell(i, "code", e.target.value.toUpperCase())} />
+              <Input type="number" step="0.000001" value={r.rateToAUD ?? ""} onChange={(e) => setCell(i, "rateToAUD", Number(e.target.value))} />
+              <button className="text-red-600 text-sm" onClick={() => removeRow(i)}>Remove</button>
             </div>
           ))}
-          <button className="rounded-lg bg-slate-100 px-3 py-1.5" onClick={addRow}>
-            + Add Row
-          </button>
+        </div>
+        <div className="mt-3">
+          <button onClick={addRow} className="px-3 py-1.5 rounded-lg bg-slate-100">Add</button>
         </div>
         <div className="mt-4 flex justify-end gap-2">
-          <button className="rounded-lg bg-slate-100 px-3 py-1.5" onClick={onClose}>
-            Cancel
-          </button>
-          <button
-            disabled={saving}
-            className="rounded-lg bg-aptella-navy px-4 py-1.5 text-white"
-            onClick={save}
-          >
-            {saving ? "Saving…" : "Save"}
-          </button>
+          <button onClick={onClose} className="px-3 py-1.5 rounded-lg bg-slate-100">Cancel</button>
+          <button disabled={saving} onClick={save} className="px-3 py-1.5 rounded-lg text-white bg-aptella-navy hover:bg-aptella-navy-dark">{saving ? "Saving…" : "Save"}</button>
         </div>
       </div>
     </div>
   );
 }
 
-// ===================== Admin ======================
-function Admin() {
-  const [authed, setAuthed] = useState(false);
-  const [fxOpen, setFxOpen] = useState(false);
+// ====== ADMIN PANEL ======
+function AdminPanel() {
+  const [authed, setAuthed] = useState(() => localStorage.getItem("adminAuthed") === "1");
+  const [pass, setPass] = useState("");
   const [rows, setRows] = useState([]);
+  const [fx, setFx] = useState([]);
+  const [fxOpen, setFxOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [sortKey, setSortKey] = useState("submittedAt");
   const [sortDir, setSortDir] = useState("desc");
-
-  // Map
   const mapRef = useRef(null);
-  const mapObj = useRef(null);
-  const markers = useRef([]);
+  const markersRef = useRef([]);
 
-  useEffect(() => {
-    if (!mapRef.current) return;
-    if (mapObj.current) return;
+  const doAuth = (e) => {
+    e.preventDefault();
+    if (pass === ADMIN_PASS) {
+      localStorage.setItem("adminAuthed", "1");
+      setAuthed(true);
+    } else {
+      alert("Wrong password");
+    }
+  };
+  const logout = () => {
+    localStorage.removeItem("adminAuthed");
+    setAuthed(false);
+  };
 
-    const m = L.map(mapRef.current).setView([ -2.5, 118 ], 5);
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      maxZoom: 18,
-      attribution: "&copy; OpenStreetMap contributors",
-    }).addTo(m);
-    mapObj.current = m;
-  }, []);
+  const refresh = async () => {
+    try {
+      const res = await gasGet({ action: "list" });
+      setRows(res.rows || []);
+      setFx(res.fx || []);
+      // init map markers
+      setTimeout(() => drawMap(res.rows || []), 50);
+    } catch (e) {
+      alert("Refresh failed: " + (e?.message || e));
+    }
+  };
 
-  function drawMapItems(list) {
-    if (!mapObj.current) return;
-    markers.current.forEach((g) => g.remove());
-    markers.current = [];
+  // Draw Leaflet map using global L from CDN (index.html must include Leaflet CSS/JS)
+  const drawMap = (data) => {
+    if (!window.L) return; // graceful fallback if CDN not loaded
+    const L = window.L;
 
-    const group = L.layerGroup().addTo(mapObj.current);
-    markers.current.push(group);
+    // init map once
+    if (!mapRef.current) {
+      const el = document.getElementById("admin-map");
+      if (!el) return;
+      mapRef.current = L.map(el).setView([1.3521, 103.8198], 5);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19,
+        attribution: "&copy; OpenStreetMap",
+      }).addTo(mapRef.current);
+    }
 
-    list.forEach((r) => {
-      if (!r.lat || !r.lng) return;
-      // modest bubble sizing — avoid huge overlays
-      const aud = Number(r.valueAUD || 0);
-      const radius = Math.min(60, Math.sqrt(aud) * 0.1); // cap 60px
-      L.circle([r.lat, r.lng], {
-        radius: radius * 100, // meters
-        color: "#f0a03a",
-        fillColor: "#f0a03a",
+    // clear old markers
+    markersRef.current.forEach((m) => m.remove());
+    markersRef.current = [];
+
+    // group by city,country
+    const groups = new Map();
+    for (const r of data) {
+      const key = (r.city || "") + "||" + (r.country || "");
+      if (!groups.has(key)) {
+        groups.set(key, { city: r.city, country: r.country, lat: Number(r.lat), lng: Number(r.lng), totalAUD: 0, rows: [] });
+      }
+      groups.get(key).rows.push(r);
+    }
+
+    // FX map to AUD
+    const fxMap = new Map(fx.map((r) => [r.code, Number(r.rateToAUD)]));
+    const toAud = (val, cur) => {
+      if (!val) return 0;
+      if (!cur || cur === "AUD") return Number(val);
+      const rate = fxMap.get(cur);
+      if (!rate || rate <= 0) return Number(val); // fallback if missing
+      return Number(val) * Number(rate);
+    };
+
+    groups.forEach((g) => {
+      let sum = 0;
+      g.rows.forEach((r) => (sum += toAud(r.value, r.currency)));
+      g.totalAUD = sum;
+
+      if (isNaN(g.lat) || isNaN(g.lng)) return;
+
+      const color =
+        g.rows.some((r) => r.status === "closed" || r.stage === "lost")
+          ? "#e11d48" // red
+          : g.rows.some((r) => r.status === "approved")
+          ? "#16a34a" // green
+          : "#0ea5e9"; // blue
+
+      const radius = 8 + Math.sqrt(Math.max(0, g.totalAUD)) / 250; // scale bubble
+      const m = L.circleMarker([g.lat, g.lng], {
+        radius,
+        color,
+        fillColor: color,
         fillOpacity: 0.25,
-        weight: 1,
-      })
-        .bindPopup(
-          `<b>${r.customerName || ""}</b><br>${r.location || ""}<br><b>A$ ${(
-            aud || 0
-          ).toLocaleString()}</b>`
-        )
-        .addTo(group);
+        weight: 2,
+      }).addTo(mapRef.current);
+
+      m.bindPopup(
+        `<strong>${g.city || ""}${g.country ? ", " + g.country : ""}</strong><br/>` +
+          `Deals: ${g.rows.length}<br/>Total (AUD): ${Math.round(g.totalAUD).toLocaleString()}`
+      );
+      markersRef.current.push(m);
     });
-  }
+
+    // fit bounds
+    const pts = [];
+    markersRef.current.forEach((m) => pts.push(m.getLatLng()));
+    if (pts.length) {
+      const b = window.L.latLngBounds(pts);
+      mapRef.current.fitBounds(b.pad(0.2));
+    }
+  };
 
   const filtered = useMemo(() => {
-    const q = search.toLowerCase().trim();
-    let out = rows.filter((r) => {
-      if (!q) return true;
-      return (
-        (r.customerName || "").toLowerCase().includes(q) ||
-        (r.location || "").toLowerCase().includes(q) ||
-        (r.solution || "").toLowerCase().includes(q) ||
-        (r.status || "").toLowerCase().includes(q)
+    const q = search.trim().toLowerCase();
+    let arr = rows.slice();
+    if (q) {
+      arr = arr.filter((r) =>
+        [
+          r.customerName,
+          r.customerLocation,
+          r.resellerName,
+          r.solution,
+          r.stage,
+          r.status,
+          r.currency,
+        ]
+          .join(" ")
+          .toLowerCase()
+          .includes(q)
       );
-    });
-    out.sort((a, b) => {
+    }
+    // sort
+    arr.sort((a, b) => {
       const dir = sortDir === "asc" ? 1 : -1;
-      if (sortKey === "valueAUD") {
-        return dir * ((a.valueAUD || 0) - (b.valueAUD || 0));
+      const A = a[sortKey] ?? "";
+      const B = b[sortKey] ?? "";
+      if (sortKey === "value" || sortKey === "probability") {
+        return dir * (Number(A) - Number(B));
       }
-      const av = a[sortKey] || "";
-      const bv = b[sortKey] || "";
-      return dir * String(av).localeCompare(String(bv));
+      return dir * String(A).localeCompare(String(B));
     });
-    return out;
+    return arr;
   }, [rows, search, sortKey, sortDir]);
 
-  useEffect(() => {
-    drawMapItems(filtered);
-  }, [filtered]);
-
-  async function refresh() {
+  const approve = async (id) => {
     try {
-      const j = await apiGET({ action: "list" });
-      const fx = await apiGET({ action: "fx" }).catch(() => ({ rows: [] }));
-      const fxMap = new Map((fx.rows || []).map((r) => [r.currency, r.rateToAUD]));
-
-      const mapped = (j.rows || []).map((r) => {
-        const rate = fxMap.get(r.currency) || (r.currency === "AUD" ? 1 : 0);
-        const valueAUD = rate ? Number(r.value || 0) / Number(rate) : 0;
-        return {
-          ...r,
-          valueAUD,
-          expected: niceDate(r.expectedCloseDate),
-          submitted: niceDate(r.submittedAt),
-        };
-      });
-      setRows(mapped);
+      await gasPost("update", { id, patch: { status: "approved" } });
+      setRows((prev) => prev.map((r) => (r.id === id ? { ...r, status: "approved" } : r)));
     } catch (e) {
-      alert("Refresh failed: " + e.message);
+      alert("Update failed: " + (e?.message || e));
     }
-  }
-
-  async function updateStatus(id, status) {
+  };
+  const close = async (id) => {
     try {
-      await apiPOST({ action: "status", id, status });
-      await refresh();
+      await gasPost("update", { id, patch: { status: "closed" } });
+      setRows((prev) => prev.map((r) => (r.id === id ? { ...r, status: "closed" } : r)));
     } catch (e) {
-      alert("Update failed: " + e.message);
+      alert("Update failed: " + (e?.message || e));
     }
-  }
+  };
 
-  useEffect(() => {
-    if (authed) refresh();
-  }, [authed]);
+  if (!authed) {
+    return (
+      <Card className="mt-6">
+        <CardHeader title="Admin Login" />
+        <CardBody>
+          <form className="flex items-center gap-3" onSubmit={doAuth}>
+            <Input
+              placeholder="Enter password"
+              type="password"
+              value={pass}
+              onChange={(e) => setPass(e.target.value)}
+            />
+            <button className="px-4 py-2 rounded-xl text-white bg-aptella-navy hover:bg-aptella-navy-dark">
+              Login
+            </button>
+          </form>
+        </CardBody>
+      </Card>
+    );
+  }
 
   return (
-    <div className="mx-auto max-w-[1200px] p-4">
-      <header className="mb-3 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <img src={logoUrl} alt="Aptella" className="h-7" />
-          <div>
-            <div className="text-lg font-semibold">Aptella Master Distributor</div>
-            <div className="text-xs text-slate-500">
-              Reseller Deal Registration Portal
-            </div>
-          </div>
+    <>
+      <div className="mt-6 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={refresh}
+            className="px-3 py-2 rounded-xl text-white bg-aptella-navy hover:bg-aptella-navy-dark"
+          >
+            Refresh
+          </button>
+          <button
+            onClick={() => setFxOpen(true)}
+            className="px-3 py-2 rounded-xl bg-slate-100"
+          >
+            FX Settings
+          </button>
         </div>
         <div className="flex items-center gap-2">
-          {!authed ? (
-            <button
-              className="rounded-lg bg-slate-800 px-3 py-1.5 text-white"
-              onClick={() => {
-                const p = prompt("Admin password?");
-                if (p === ADMIN_PASSWORD) setAuthed(true);
-                else alert("Incorrect password");
-              }}
-            >
-              Admin
-            </button>
-          ) : (
-            <button
-              className="rounded-lg bg-slate-100 px-3 py-1.5"
-              onClick={() => setAuthed(false)}
-            >
-              Logout
-            </button>
-          )}
+          <input
+            placeholder="Search…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="rounded-lg border px-3 py-2 text-sm"
+          />
+          <label className="text-sm text-slate-700">{T.en.sortBy}</label>
+          <Select value={sortKey} onChange={(e) => setSortKey(e.target.value)}>
+            <option value="submittedAt">{T.en.submitted}</option>
+            <option value="expectedCloseDate">{T.en.expected}</option>
+            <option value="customerName">{T.en.customer}</option>
+            <option value="customerLocation">{T.en.location}</option>
+            <option value="solution">{T.en.solution}</option>
+            <option value="value">{T.en.value}</option>
+            <option value="stage">{T.en.stage}</option>
+            <option value="status">{T.en.status}</option>
+          </Select>
+          <Select value={sortDir} onChange={(e) => setSortDir(e.target.value)}>
+            <option value="desc">↓</option>
+            <option value="asc">↑</option>
+          </Select>
+          <button onClick={logout} className="px-3 py-2 rounded-xl bg-slate-100">Logout</button>
         </div>
-      </header>
+      </div>
 
-      {!authed ? (
-        <div className="rounded-xl bg-white p-6 shadow">
-          <p className="text-sm text-slate-600">
-            Enter the Admin password to view the dashboard.
-          </p>
-        </div>
-      ) : (
-        <>
-          <div className="mb-2 flex items-center gap-2">
-            <button
-              className="rounded-lg bg-slate-800 px-3 py-1.5 text-white"
-              onClick={refresh}
-            >
-              Refresh
-            </button>
-            <button
-              className="rounded-lg bg-aptella-orange px-3 py-1.5 text-white"
-              onClick={() => setFxOpen(true)}
-            >
-              FX Settings
-            </button>
-            <input
-              className="ml-auto w-64 rounded-lg border bg-white p-2"
-              placeholder="Search…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-            <select
-              className="rounded-lg border bg-white p-2"
-              value={sortKey}
-              onChange={(e) => setSortKey(e.target.value)}
-            >
-              <option value="submittedAt">Submitted</option>
-              <option value="expectedCloseDate">Expected</option>
-              <option value="customerName">Customer</option>
-              <option value="location">Location</option>
-              <option value="solution">Solution</option>
-              <option value="valueAUD">Value (AUD)</option>
-              <option value="stage">Stage</option>
-              <option value="status">Status</option>
-            </select>
-            <select
-              className="rounded-lg border bg-white p-2"
-              value={sortDir}
-              onChange={(e) => setSortDir(e.target.value)}
-            >
-              <option value="desc">Desc</option>
-              <option value="asc">Asc</option>
-            </select>
+      {/* Map */}
+      <div id="admin-map" className="w-full h-[420px] rounded-2xl mt-4 ring-1 ring-slate-200 bg-slate-50 relative">
+        {!window.L && (
+          <div className="absolute inset-0 grid place-items-center text-slate-500 text-sm">
+            Map placeholder — Leaflet CDN must be loaded in index.html
           </div>
+        )}
+      </div>
 
-          <div className="rounded-xl bg-white p-2 shadow">
-            <div
-              ref={mapRef}
-              className="h-[360px] w-full rounded-lg border"
-              aria-label="Map"
-            />
-          </div>
+      {/* Table */}
+      <div className="mt-4 overflow-x-auto">
+        <table className="min-w-full text-sm">
+          <thead>
+            <tr className="bg-aptella-orange/10 text-aptella-orange">
+              <th className="p-3 text-left">{T.en.submitted}</th>
+              <th className="p-3 text-left">{T.en.expected}</th>
+              <th className="p-3 text-left">{T.en.customer}</th>
+              <th className="p-3 text-left">{T.en.location}</th>
+              <th className="p-3 text-left">{T.en.solution}</th>
+              <th className="p-3 text-left">{T.en.value} (AUD est.)</th>
+              <th className="p-3 text-left">{T.en.stage}</th>
+              <th className="p-3 text-left">{T.en.status}</th>
+              <th className="p-3 text-left">{T.en.actions}</th>
+            </tr>
+          </thead>
+          <tbody className="bg-white">
+            {filtered.map((r) => (
+              <tr key={r.id} className="border-b align-top">
+                <td className="p-3">{r.submittedAt || ""}</td>
+                <td className="p-3">{(r.expectedCloseDate || "").slice(0, 10)}</td>
+                <td className="p-3">{r.customerName || ""}</td>
+                <td className="p-3">{r.customerLocation || ""}</td>
+                <td className="p-3">{r.solution || ""}</td>
+                <td className="p-3">{Number(r.valueAUD || 0).toLocaleString()}</td>
+                <td className="p-3">{r.stage} • {r.probability ?? 0}%</td>
+                <td className="p-3"><span className={badge(r)}>{r.status || "pending"}</span></td>
+                <td className="p-3 space-x-2 whitespace-nowrap">
+                  {r.status !== "approved" && r.status !== "closed" && (
+                    <button
+                      onClick={() => approve(r.id)}
+                      className="px-2.5 py-1.5 rounded-lg text-white bg-green-600 hover:bg-green-700"
+                    >
+                      {T.en.approve}
+                    </button>
+                  )}
+                  {r.status !== "closed" && (
+                    <button
+                      onClick={() => close(r.id)}
+                      className="px-2.5 py-1.5 rounded-lg text-white bg-red-600 hover:bg-red-700"
+                    >
+                      {T.en.close}
+                    </button>
+                  )}
+                </td>
+              </tr>
+            ))}
+            {filtered.length === 0 && (
+              <tr><td className="p-4 text-slate-500" colSpan={9}>No rows</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
 
-          <div className="mt-3 overflow-auto rounded-xl bg-white shadow">
-            <table className="min-w-[920px] w-full">
-              <thead className="bg-[#f0a03a1a] text-aptella-orange">
-                <tr>
-                  <th className="p-2 text-left">Submitted</th>
-                  <th className="p-2 text-left">Expected</th>
-                  <th className="p-2 text-left">Customer</th>
-                  <th className="p-2 text-left">Location</th>
-                  <th className="p-2 text-left">Solution</th>
-                  <th className="p-2 text-left">Value</th>
-                  <th className="p-2 text-left">Stage</th>
-                  <th className="p-2 text-left">Status</th>
-                  <th className="p-2 text-left">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((r) => (
-                  <tr key={r.id} className="border-t">
-                    <td className="p-2">{niceDate(r.submittedAt)}</td>
-                    <td className="p-2">{niceDate(r.expectedCloseDate)}</td>
-                    <td className="p-2">{r.customerName || ""}</td>
-                    <td className="p-2">{r.location || ""}</td>
-                    <td className="p-2">
-                      {r.solution}
-                      {r.solution === "Other" && r.solutionOther
-                        ? ` — ${r.solutionOther}`
-                        : ""}
-                    </td>
-                    <td className="p-2">
-                      A${" "}
-                      {(Number(r.valueAUD || 0)).toLocaleString(undefined, {
-                        maximumFractionDigits: 0,
-                      })}
-                    </td>
-                    <td className="p-2">{r.stage}</td>
-                    <td className="p-2">
-                      <span
-                        className={classNames(
-                          "rounded-full px-2 py-0.5 text-xs",
-                          r.status === "approved"
-                            ? "bg-green-100 text-green-700"
-                            : r.status === "closed"
-                            ? "bg-red-100 text-red-700"
-                            : "bg-slate-100 text-slate-700"
-                        )}
-                      >
-                        {r.status || "pending"}
-                      </span>
-                    </td>
-                    <td className="p-2">
-                      <div className="flex items-center gap-2">
-                        {r.status !== "approved" && (
-                          <button
-                            className="rounded-lg bg-green-600 px-3 py-1.5 text-white"
-                            onClick={() => updateStatus(r.id, "approved")}
-                          >
-                            Approve
-                          </button>
-                        )}
-                        <button
-                          className="rounded-lg bg-red-600 px-3 py-1.5 text-white"
-                          onClick={() => updateStatus(r.id, "closed")}
-                        >
-                          Close
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-                {filtered.length === 0 && (
-                  <tr>
-                    <td className="p-4 text-center text-slate-500" colSpan={9}>
-                      No rows match the filter.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          <FXDrawer open={fxOpen} onClose={() => setFxOpen(false)} />
-        </>
-      )}
-    </div>
+      <FxDrawer open={fxOpen} onClose={() => setFxOpen(false)} />
+    </>
   );
 }
 
-// ===================== Root ======================
+// ====== ROOT ======
 export default function App() {
   const [tab, setTab] = useState("reseller");
-  return (
-    <div className="min-h-screen bg-slate-50">
-      <nav className="mx-auto flex max-w-6xl items-center justify-between p-4">
-        <div className="flex items-center gap-3">
-          <img src={logoUrl} className="h-7" alt="Aptella" />
-          <span className="text-sm text-slate-500">Reseller Deal Registration</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setTab("reseller")}
-            className={classNames(
-              "rounded-lg px-3 py-1.5",
-              tab === "reseller" ? "bg-slate-800 text-white" : "bg-white border"
-            )}
-          >
-            Reseller
-          </button>
-          <button
-            onClick={() => setTab("admin")}
-            className={classNames(
-              "rounded-lg px-3 py-1.5",
-              tab === "admin" ? "bg-slate-800 text-white" : "bg-white border"
-            )}
-          >
-            Admin
-          </button>
-        </div>
-      </nav>
+  const [localRows, setLocalRows] = useState([]);
 
-      {tab === "reseller" ? <ResellerForm /> : <Admin />}
+  return (
+    <div>
+      <BrandHeader />
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl sm:text-3xl font-semibold text-aptella-navy">
+            {tab === "reseller" ? "Reseller Portal" : "Admin"}
+          </h1>
+          <div className="flex items-center gap-2">
+            <button
+              className={`px-3 py-2 rounded-xl ${tab === "reseller" ? "bg-aptella-navy text-white" : "bg-slate-100"}`}
+              onClick={() => setTab("reseller")}
+            >
+              Reseller
+            </button>
+            <button
+              className={`px-3 py-2 rounded-xl ${tab === "admin" ? "bg-aptella-navy text-white" : "bg-slate-100"}`}
+              onClick={() => setTab("admin")}
+            >
+              Admin
+            </button>
+          </div>
+        </div>
+
+        {tab === "reseller" ? (
+          <SubmissionForm onSaved={(r) => setLocalRows((prev) => [r, ...prev])} />
+        ) : (
+          <AdminPanel />
+        )}
+      </div>
     </div>
   );
 }
