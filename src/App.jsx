@@ -296,21 +296,20 @@ function ResellerForm({ onSaved }) {
     remindersOptIn: false,
   });
   const [errors, setErrors] = useState({});
+  const [formBanner, setFormBanner] = useState("");   // NEW: top banner message
+  const [submitting, setSubmitting] = useState(false);
   const [linkInput, setLinkInput] = useState("");
   const isID = form.resellerCountry === "Indonesia";
 
-  // Bahasa labels for key fields
-  function t(en, id) {
-    return isID ? id : en;
-  }
+  const firstErrorRef = useRef(null);
+
+  function t(en, id) { return isID ? id : en; }
 
   useEffect(() => {
-    // Auto probability by stage
     setForm((f) => ({ ...f, probability: PROB_BY_STAGE[f.stage] ?? f.probability }));
   }, [form.stage]);
 
   useEffect(() => {
-    // Country → default currency, capital lat/lng, resellerLocation
     const cfg = COUNTRY_CONFIG[form.resellerCountry];
     if (!cfg) {
       setForm((f) => ({ ...f, currency: "", lat: "", lng: "", resellerLocation: "" }));
@@ -321,10 +320,8 @@ function ResellerForm({ onSaved }) {
         lat: cfg.lat,
         lng: cfg.lng,
         resellerLocation: cfg.capital,
-        country: form.resellerCountry, // mirror
-        customerLocation: f.city
-          ? `${f.city}, ${form.resellerCountry}`
-          : `${cfg.capital}, ${form.resellerCountry}`,
+        country: form.resellerCountry,
+        customerLocation: f.city ? `${f.city}, ${form.resellerCountry}` : `${cfg.capital}, ${form.resellerCountry}`,
       }));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -334,16 +331,13 @@ function ResellerForm({ onSaved }) {
     const { name, value, type, checked } = e.target;
     setForm((f) => ({ ...f, [name]: type === "checkbox" ? checked : value }));
   }
-
   function toggleMulti(listName, value) {
     setForm((f) => {
       const next = new Set(f[listName] || []);
-      if (next.has(value)) next.delete(value);
-      else next.add(value);
+      if (next.has(value)) next.delete(value); else next.add(value);
       return { ...f, [listName]: Array.from(next) };
     });
   }
-
   function handleFiles(e) {
     const files = Array.from(e.target.files || []);
     setForm((f) => ({ ...f, evidenceFiles: files }));
@@ -351,29 +345,59 @@ function ResellerForm({ onSaved }) {
 
   function validate() {
     const e = {};
-    if (!form.resellerCountry) e.resellerCountry = t("Required", "Wajib");
-    if (!form.resellerLocation) e.resellerLocation = t("Required", "Wajib");
-    if (!form.resellerName) e.resellerName = t("Required", "Wajib");
-    if (!form.resellerContact) e.resellerContact = t("Required", "Wajib");
-    if (!form.resellerEmail || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.resellerEmail))
-      e.resellerEmail = t("Valid email required", "Email valid wajib");
-    if (!form.customerName) e.customerName = t("Required", "Wajib");
-    if (!form.city) e.city = t("Required", "Wajib");
-    if (!form.country) e.country = t("Required", "Wajib");
-    if (!form.solution || (form.solution === "OTHER" && !form.otherSolution))
-      e.solution = t("Required", "Wajib");
+    const req = (k, msg) => { if (!form[k]) e[k] = msg; };
+    req("resellerCountry", t("Required", "Wajib"));
+    req("resellerLocation", t("Required", "Wajib"));
+    req("resellerName", t("Required", "Wajib"));
+    req("resellerContact", t("Required", "Wajib"));
+    if (!form.resellerEmail || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.resellerEmail)) e.resellerEmail = t("Valid email required", "Email valid wajib");
+    req("customerName", t("Required", "Wajib"));
+    req("city", t("Required", "Wajib"));
+    req("country", t("Required", "Wajib"));
+    if (!form.solution || (form.solution === "OTHER" && !form.otherSolution)) e.solution = t("Required", "Wajib");
     if (!form.value || Number(form.value) <= 0) e.value = t("Enter a positive amount", "Masukkan nilai positif");
-    if (!form.expectedCloseDate) e.expectedCloseDate = t("Required", "Wajib");
-    // Evidence mandatory: at least 1 file OR link
+    req("expectedCloseDate", t("Required", "Wajib"));
+
     const hasFiles = (form.evidenceFiles || []).length > 0;
     const hasLinks = (form.evidenceLinks || []).length > 0;
     if (!hasFiles && !hasLinks) e.evidence = t("Evidence file or link is required", "Bukti (file/tautan) wajib");
+
     setErrors(e);
-    return Object.keys(e).length === 0;
+    // Build banner + scroll to first error
+    const keys = Object.keys(e);
+    if (keys.length) {
+      const firstKey = keys[0];
+      setFormBanner(
+        t(
+          "Please fix the highlighted fields before submitting.",
+          "Perbaiki kolom yang ditandai sebelum mengirim."
+        )
+      );
+      // focus/scroll by id mapping
+      const idMap = {
+        resellerCountry: "resellerCountry",
+        resellerLocation: "resellerLocation",
+        resellerName: "resellerName",
+        resellerContact: "resellerContact",
+        resellerEmail: "resellerEmail",
+        customerName: "customerName",
+        city: "city",
+        country: "country",
+        solution: "solutionSelect",
+        value: "value",
+        expectedCloseDate: "expectedCloseDate",
+        evidence: "evidenceFiles",
+      };
+      const el = document.getElementById(idMap[firstKey] || idMap.evidence);
+      if (el) { el.scrollIntoView({ behavior: "smooth", block: "center" }); el.focus?.(); }
+      return false;
+    }
+    setFormBanner("");
+    return true;
   }
 
   async function submit(e) {
-    e.preventDefault();
+    e?.preventDefault?.();
     if (!validate()) return;
 
     const record = {
@@ -409,11 +433,12 @@ function ResellerForm({ onSaved }) {
       updates: [],
     };
 
+    setSubmitting(true);
     try {
       await gasPost("submit", record);
       alert(isID ? "Dikirim & disimpan." : "Submitted.");
       onSaved && onSaved();
-      // reset
+      // reset core fields (keep reseller country so Bahasa stays if ID)
       setForm((f) => ({
         ...f,
         resellerLocation: "",
@@ -443,6 +468,8 @@ function ResellerForm({ onSaved }) {
       if (el) el.value = "";
     } catch (err) {
       alert((isID ? "Gagal sinkronisasi" : "Google Sheets sync failed") + ": " + err.message);
+    } finally {
+      setSubmitting(false);
     }
   }
 
@@ -462,53 +489,41 @@ function ResellerForm({ onSaved }) {
         subtitle={t("Fields marked * are mandatory.", "Kolom bertanda * wajib diisi.")}
       />
       <CardBody>
+        {/* Banner */}
+        {formBanner && (
+          <div className="mb-4 rounded-lg border border-red-200 bg-red-50 text-red-800 px-3 py-2 text-sm">
+            {formBanner}
+          </div>
+        )}
+
         <form onSubmit={submit} className="grid gap-6">
-          {/* Top row */}
+          {/* Country / Location / Currency */}
           <div className="grid md:grid-cols-3 gap-4">
             <div className="grid gap-2">
               <Label htmlFor="resellerCountry" required>{t("Reseller Country", "Negara Reseller")}</Label>
-              <Select
-                id="resellerCountry"
-                name="resellerCountry"
-                value={form.resellerCountry}
-                onChange={handleChange}
-              >
+              <Select id="resellerCountry" name="resellerCountry" value={form.resellerCountry} onChange={handleChange}>
                 <option value="">{t("Select country", "Pilih negara")}</option>
                 <option>Singapore</option>
                 <option>Malaysia</option>
                 <option>Indonesia</option>
                 <option>Philippines</option>
               </Select>
-              {errors.resellerCountry && (
-                <p className="text-xs text-red-600">{errors.resellerCountry}</p>
-              )}
+              {errors.resellerCountry && <p className="text-xs text-red-600">{errors.resellerCountry}</p>}
             </div>
             <div className="grid gap-2">
               <Label htmlFor="resellerLocation" required>{t("Reseller Location", "Lokasi Reseller")}</Label>
-              <Input
-                id="resellerLocation"
-                name="resellerLocation"
-                value={form.resellerLocation}
-                onChange={handleChange}
-                placeholder={t("e.g., Jakarta", "mis., Jakarta")}
-              />
-              {errors.resellerLocation && (
-                <p className="text-xs text-red-600">{errors.resellerLocation}</p>
-              )}
+              <Input id="resellerLocation" name="resellerLocation" value={form.resellerLocation} onChange={handleChange} placeholder={t("e.g., Jakarta", "mis., Jakarta")} />
+              {errors.resellerLocation && <p className="text-xs text-red-600">{errors.resellerLocation}</p>}
             </div>
             <div className="grid gap-2">
               <Label htmlFor="currency">{t("Currency", "Mata Uang")}</Label>
               <Select id="currency" name="currency" value={form.currency} onChange={handleChange}>
-                {CURRENCIES.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
+                {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
               </Select>
             </div>
           </div>
 
-          {/* Reseller identity */}
+          {/* Identity */}
           <div className="grid md:grid-cols-2 gap-4">
             <div className="grid gap-2">
               <Label htmlFor="resellerName" required>{t("Reseller Company", "Perusahaan Reseller")}</Label>
@@ -534,37 +549,24 @@ function ResellerForm({ onSaved }) {
           {/* Customer location */}
           <div className="grid md:grid-cols-3 gap-4">
             <div className="grid gap-2">
+              <Label htmlFor="customerName" required>{t("Customer Name", "Nama Pelanggan")}</Label>
+              <Input id="customerName" name="customerName" value={form.customerName} onChange={handleChange} />
+              {errors.customerName && <p className="text-xs text-red-600">{errors.customerName}</p>}
+            </div>
+            <div className="grid gap-2">
               <Label htmlFor="city" required>{t("Customer City", "Kota Pelanggan")}</Label>
-              <Input
-                id="city"
-                name="city"
-                value={form.city}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  setForm((f) => ({
-                    ...f,
-                    city: v,
-                    customerLocation: `${v || ""}${f.country ? `, ${f.country}` : ""}`,
-                  }));
-                }}
-              />
+              <Input id="city" name="city" value={form.city} onChange={(e) => {
+                const v = e.target.value;
+                setForm((f) => ({ ...f, city: v, customerLocation: `${v || ""}${f.country ? `, ${f.country}` : ""}` }));
+              }} />
               {errors.city && <p className="text-xs text-red-600">{errors.city}</p>}
             </div>
             <div className="grid gap-2">
               <Label htmlFor="country" required>{t("Customer Country", "Negara Pelanggan")}</Label>
-              <Select
-                id="country"
-                name="country"
-                value={form.country}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  setForm((f) => ({
-                    ...f,
-                    country: v,
-                    customerLocation: `${f.city ? f.city : ""}${v ? `, ${v}` : ""}`,
-                  }));
-                }}
-              >
+              <Select id="country" name="country" value={form.country} onChange={(e) => {
+                const v = e.target.value;
+                setForm((f) => ({ ...f, country: v, customerLocation: `${f.city ? f.city : ""}${v ? `, ${v}` : ""}` }));
+              }}>
                 <option value="">{t("Select country", "Pilih negara")}</option>
                 <option>Singapore</option>
                 <option>Malaysia</option>
@@ -573,108 +575,52 @@ function ResellerForm({ onSaved }) {
               </Select>
               {errors.country && <p className="text-xs text-red-600">{errors.country}</p>}
             </div>
+          </div>
+
+          {/* Map quick lat/lng */}
+          <div className="grid md:grid-cols-3 gap-4">
             <div className="grid gap-2">
               <Label>{t("Map option (paste lat, lng)", "Opsi peta (tempel lat, lng)")}</Label>
               <div className="flex gap-2">
                 <Input placeholder="lat" value={form.lat} onChange={(e) => setForm((f) => ({ ...f, lat: e.target.value }))} />
                 <Input placeholder="lng" value={form.lng} onChange={(e) => setForm((f) => ({ ...f, lng: e.target.value }))} />
               </div>
-              <a
-                className={`inline-block mt-1 text-xs underline text-[#0e3446]`}
-                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-                  (form.city || "") + "," + (form.country || "")
-                )}`}
-                target="_blank"
-                rel="noreferrer"
-              >
-                Open Map
-              </a>
+              <a className="inline-block mt-1 text-xs underline text-[#0e3446]" href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((form.city || "") + "," + (form.country || ""))}`} target="_blank" rel="noreferrer">Open Map</a>
             </div>
-          </div>
 
-          {/* Solution / expected */}
-          <div className="grid md:grid-cols-3 gap-4">
+            {/* Solution & expected */}
             <div className="grid gap-2 md:col-span-2">
-              <Label required>{t("Solution Offered (Xgrids)", "Solusi Xgrids")}</Label>
-              <Select
-                value={form.solution || ""}
-                onChange={(e) => setForm((f) => ({ ...f, solution: e.target.value }))}
-              >
+              <Label htmlFor="solutionSelect" required>{t("Solution Offered (Xgrids)", "Solusi Xgrids")}</Label>
+              <Select id="solutionSelect" value={form.solution || ""} onChange={(e) => setForm((f) => ({ ...f, solution: e.target.value }))}>
                 <option value="">{t("Select an Xgrids solution", "Pilih solusi Xgrids")}</option>
-                {XGRIDS_SOLUTIONS.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
+                {XGRIDS_SOLUTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
                 <option value="OTHER">+ Other…</option>
               </Select>
               {form.solution === "OTHER" && (
-                <Input
-                  placeholder={t("Describe the solution", "Jelaskan solusi")}
-                  value={form.otherSolution}
-                  onChange={(e) => setForm((f) => ({ ...f, otherSolution: e.target.value }))}
-                />
+                <Input placeholder={t("Describe the solution", "Jelaskan solusi")} value={form.otherSolution} onChange={(e) => setForm((f) => ({ ...f, otherSolution: e.target.value }))} />
               )}
-              <a
-                className="text-sky-700 underline text-xs mt-1"
-                href="https://www.aptella.com/asia/product-brands/xgrids-asia/"
-                target="_blank"
-                rel="noreferrer"
-              >
-                Learn about Xgrids solutions
-              </a>
+              <a className="text-sky-700 underline text-xs mt-1" href="https://www.aptella.com/asia/product-brands/xgrids-asia/" target="_blank" rel="noreferrer">Learn about Xgrids solutions</a>
               {errors.solution && <p className="text-xs text-red-600">{errors.solution}</p>}
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="expectedCloseDate" required>{t("Expected Close Date", "Perkiraan Tanggal Tutup")}</Label>
-              <Input
-                id="expectedCloseDate"
-                name="expectedCloseDate"
-                type="date"
-                value={form.expectedCloseDate}
-                onChange={handleChange}
-              />
-              {errors.expectedCloseDate && (
-                <p className="text-xs text-red-600">{errors.expectedCloseDate}</p>
-              )}
             </div>
           </div>
 
-          {/* Industry / currency / value */}
+          {/* Industry / Currency / Value */}
           <div className="grid md:grid-cols-3 gap-4">
             <div className="grid gap-2">
               <Label htmlFor="industry">{t("Industry", "Industri")}</Label>
               <Select id="industry" name="industry" value={form.industry} onChange={handleChange}>
                 <option value="">{t("Select industry", "Pilih industri")}</option>
-                {INDUSTRIES.map((i) => (
-                  <option key={i} value={i}>
-                    {i}
-                  </option>
-                ))}
+                {INDUSTRIES.map((i) => <option key={i} value={i}>{i}</option>)}
               </Select>
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="currency">{t("Currency", "Mata Uang")}</Label>
-              <Select id="currency" name="currency" value={form.currency} onChange={handleChange}>
-                {CURRENCIES.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </Select>
+              <Label htmlFor="expectedCloseDate" required>{t("Expected Close Date", "Perkiraan Tanggal Tutup")}</Label>
+              <Input id="expectedCloseDate" name="expectedCloseDate" type="date" value={form.expectedCloseDate} onChange={handleChange} />
+              {errors.expectedCloseDate && <p className="text-xs text-red-600">{errors.expectedCloseDate}</p>}
             </div>
             <div className="grid gap-2">
               <Label htmlFor="value" required>{t("Deal Value", "Nilai Transaksi")}</Label>
-              <Input
-                id="value"
-                name="value"
-                type="number"
-                step="0.01"
-                min="0"
-                value={form.value}
-                onChange={handleChange}
-                placeholder="e.g., 25000"
-              />
+              <Input id="value" name="value" type="number" step="0.01" min="0" value={form.value} onChange={handleChange} placeholder="e.g., 25000" />
               {errors.value && <p className="text-xs text-red-600">{errors.value}</p>}
             </div>
           </div>
@@ -684,40 +630,19 @@ function ResellerForm({ onSaved }) {
             <div className="grid gap-2">
               <Label htmlFor="stage">{t("Sales Stage", "Tahap Penjualan")}</Label>
               <Select id="stage" name="stage" value={form.stage} onChange={handleChange}>
-                {STAGES.map((s) => (
-                  <option key={s.key} value={s.key}>
-                    {s.label}
-                  </option>
-                ))}
+                {STAGES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
               </Select>
             </div>
             <div className="grid gap-2">
               <Label>{t("Probability (%)", "Probabilitas (%)")}</Label>
-              <Input
-                type="number"
-                min="0"
-                max="100"
-                value={form.probability}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, probability: Number(e.target.value) }))
-                }
-              />
+              <Input type="number" min="0" max="100" value={form.probability} onChange={(e) => setForm((f) => ({ ...f, probability: Number(e.target.value) }))} />
             </div>
             <div className="grid gap-2">
               <Label>{t("Competitors", "Pesaing")}</Label>
-              <Input
-                placeholder={t("Comma-separated (optional)", "Pisahkan dengan koma (opsional)")}
-                value={(form.competitors || []).join(", ")}
-                onChange={(e) =>
-                  setForm((f) => ({
-                    ...f,
-                    competitors: e.target.value
-                      .split(",")
-                      .map((s) => s.trim())
-                      .filter(Boolean),
-                  }))
-                }
-              />
+              <Input placeholder={t("Comma-separated (optional)", "Pisahkan dengan koma (opsional)")} value={(form.competitors || []).join(", ")} onChange={(e) => setForm((f) => ({
+                ...f,
+                competitors: e.target.value.split(",").map((s) => s.trim()).filter(Boolean),
+              }))} />
             </div>
           </div>
 
@@ -727,11 +652,7 @@ function ResellerForm({ onSaved }) {
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
               {SUPPORT_OPTIONS.map((opt) => (
                 <label key={opt} className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={(form.supports || []).includes(opt)}
-                    onChange={() => toggleMulti("supports", opt)}
-                  />
+                  <input type="checkbox" checked={(form.supports || []).includes(opt)} onChange={() => toggleMulti("supports", opt)} />
                   {opt}
                 </label>
               ))}
@@ -743,87 +664,48 @@ function ResellerForm({ onSaved }) {
             <Label>{t("Evidence (required)", "Bukti (wajib)")}</Label>
             <div className="grid md:grid-cols-3 gap-3">
               <div className="md:col-span-2">
-                <input
-                  id="evidenceFiles"
-                  type="file"
-                  multiple
-                  onChange={handleFiles}
-                  className="block w-full text-sm file:mr-4 file:rounded-lg file:border-0 file:bg-sky-50 file:px-3 file:py-2 file:text-sky-700"
-                />
+                <input id="evidenceFiles" type="file" multiple onChange={handleFiles} className="block w-full text-sm file:mr-4 file:rounded-lg file:border-0 file:bg-sky-50 file:px-3 file:py-2 file:text-sky-700" />
                 {form.evidenceFiles?.length > 0 && (
                   <div className="mt-2 text-xs text-gray-600">
-                    {form.evidenceFiles.length} file(s) chosen — emailed to{" "}
-                    <span className="font-medium">admin.asia@aptella.com</span> by your team.
+                    {form.evidenceFiles.length} file(s) chosen — emailed to <span className="font-medium">admin.asia@aptella.com</span> by your team.
                   </div>
                 )}
               </div>
               <div className="flex gap-2">
-                <Input
-                  placeholder={t("Paste evidence link", "Tempel tautan bukti")}
-                  value={linkInput}
-                  onChange={(e) => setLinkInput(e.target.value)}
-                />
-                <button
-                  type="button"
-                  onClick={() => {
-                    const v = (linkInput || "").trim();
-                    if (!v) return;
-                    try {
-                      new URL(v);
-                    } catch {
-                      alert(t("Enter a valid URL", "Masukkan URL valid"));
-                      return;
-                    }
-                    setForm((f) => ({ ...f, evidenceLinks: [...(f.evidenceLinks || []), v] }));
-                    setLinkInput("");
-                  }}
-                  className="px-3 py-2 rounded-lg bg-gray-100 text-sm"
-                >
-                  {t("Add", "Tambah")}
-                </button>
+                <Input placeholder={t("Paste evidence link", "Tempel tautan bukti")} value={linkInput} onChange={(e) => setLinkInput(e.target.value)} />
+                <button type="button" onClick={() => {
+                  const v = (linkInput || "").trim();
+                  if (!v) return;
+                  try { new URL(v); } catch { alert(t("Enter a valid URL", "Masukkan URL valid")); return; }
+                  setForm((f) => ({ ...f, evidenceLinks: [...(f.evidenceLinks || []), v] }));
+                  setLinkInput("");
+                }} className="px-3 py-2 rounded-lg bg-gray-100 text-sm">{t("Add", "Tambah")}</button>
               </div>
             </div>
             {errors.evidence && <p className="text-xs text-red-600">{errors.evidence}</p>}
           </div>
 
-          {/* Notes & consents */}
+          {/* Notes & consent */}
           <div className="grid gap-2">
             <Label htmlFor="notes">{t("Notes", "Catatan")}</Label>
-            <Textarea
-              id="notes"
-              name="notes"
-              rows={4}
-              value={form.notes}
-              onChange={handleChange}
-              placeholder={t(
-                "Key requirements, technical scope, delivery constraints, decision process, etc.",
-                "Kebutuhan, ruang lingkup teknis, kendala pengiriman, proses keputusan, dll."
-              )}
-            />
+            <Textarea id="notes" name="notes" rows={4} value={form.notes} onChange={handleChange} placeholder={t("Key requirements, technical scope, delivery constraints, decision process, etc.", "Kebutuhan, ruang lingkup teknis, kendala pengiriman, proses keputusan, dll.")} />
           </div>
 
-          <div className="flex items-center gap-3">
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                name="remindersOptIn"
-                checked={!!form.remindersOptIn}
-                onChange={handleChange}
-              />
-              {t("Send me reminders for updates", "Kirim pengingat pembaruan")}
-            </label>
-          </div>
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" name="remindersOptIn" checked={!!form.remindersOptIn} onChange={handleChange} />
+            {t("Send me reminders for updates", "Kirim pengingat pembaruan")}
+          </label>
 
           <div className="flex items-center gap-3">
-            <button type="submit" className={`px-4 py-2 rounded-xl text-white ${BRAND.primaryBtn}`}>
-              {t("Submit Registration", "Kirim Pendaftaran")}
-            </button>
-            <a
-              className="px-4 py-2 rounded-xl bg-[#f0a03a]/15 text-[#9a5b12] border border-[#f0a03a]/30 text-sm"
-              href="https://www.aptella.com/asia/product-brands/xgrids-asia/"
-              target="_blank"
-              rel="noreferrer"
+            <button
+              type="submit"
+              onClick={(e) => { e.preventDefault(); submit(e); }}  // explicit trigger + prevents default nav
+              disabled={submitting}
+              className={`px-4 py-2 rounded-xl text-white ${BRAND.primaryBtn}`}
             >
+              {submitting ? t("Submitting…", "Mengirim…") : t("Submit Registration", "Kirim Pendaftaran")}
+            </button>
+            <a className="px-4 py-2 rounded-xl bg-[#f0a03a]/15 text-[#9a5b12] border border-[#f0a03a]/30 text-sm" href="https://www.aptella.com/asia/product-brands/xgrids-asia/" target="_blank" rel="noreferrer">
               Xgrids Info →
             </a>
           </div>
