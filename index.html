@@ -6,12 +6,15 @@
       name="viewport"
       content="width=device-width, initial-scale=1, viewport-fit=cover"
     />
-    <title>Aptella Reseller Portal</title>
+    <title>Aptella • Reseller Portal</title>
 
-    <!-- Prevent favicon 404s (replace later with /public/favicon.ico if you have one) -->
-    <link rel="icon" href="data:;base64,iVBORw0KGgo=" />
+    <!-- Favicon: put favicon.ico in /public so this relative path works in dev + GitHub Pages -->
+    <link rel="icon" href="favicon.ico" />
 
-    <!-- Leaflet CSS (required for the Admin map) -->
+    <!-- Brand color for mobile UI -->
+    <meta name="theme-color" content="#0e3446" />
+
+    <!-- Leaflet CSS (CDN) -->
     <link
       rel="stylesheet"
       href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
@@ -19,22 +22,51 @@
       crossorigin=""
     />
 
-    <!-- Leaflet JS (global `L`) -->
+    <!-- Minimal safe base styles (avoid white flash) -->
+    <style>
+      :root {
+        --aptella-navy: #0e3446;
+        --aptella-orange: #f0a03a;
+      }
+      html,
+      body,
+      #root {
+        height: 100%;
+      }
+      body {
+        margin: 0;
+        background: #f7fafc;
+        color: #0f172a;
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial,
+          "Apple Color Emoji", "Segoe UI Emoji";
+      }
+      .no-js {
+        margin: 0;
+        padding: 12px 16px;
+        background: #fee2e2;
+        color: #7f1d1d;
+        font-size: 14px;
+        border-bottom: 1px solid #fecaca;
+      }
+    </style>
+  </head>
+
+  <body>
+    <noscript class="no-js">
+      JavaScript is required to use the Aptella Reseller Portal.
+    </noscript>
+
+    <div id="root"></div>
+
+    <!-- Leaflet JS (CDN) placed BEFORE your app so window.L is ready -->
     <script
       src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
       integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
       crossorigin=""
-      defer
     ></script>
-  </head>
-  <body>
-    <div id="root"></div>
 
-    <!-- Vite entry (dev). In production, Vite rewrites this to built assets. -->
+    <!-- Your Vite entry. In dev this loads /src/main.jsx.
+         On build, Vite rewrites to hashed assets using vite.config base. -->
     <script type="module" src="/src/main.jsx"></script>
-
-    <noscript>
-      Please enable JavaScript to use the Aptella Reseller Portal.
-    </noscript>
   </body>
 </html>
