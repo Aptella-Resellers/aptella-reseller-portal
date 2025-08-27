@@ -6,13 +6,35 @@
       name="viewport"
       content="width=device-width, initial-scale=1, viewport-fit=cover"
     />
-    <meta name="theme-color" content="#0e3446" />
     <title>Aptella Reseller Portal</title>
-    <!-- Optional favicon (add /public/favicon.ico to avoid 404, otherwise leave commented)
-    <link rel="icon" href="/aptella-reseller-portal/favicon.ico" /> -->
+
+    <!-- Prevent favicon 404s (replace later with /public/favicon.ico if you have one) -->
+    <link rel="icon" href="data:;base64,iVBORw0KGgo=" />
+
+    <!-- Leaflet CSS (required for the Admin map) -->
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""
+    />
+
+    <!-- Leaflet JS (global `L`) -->
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+      defer
+    ></script>
   </head>
-  <body class="bg-slate-50">
+  <body>
     <div id="root"></div>
+
+    <!-- Vite entry (dev). In production, Vite rewrites this to built assets. -->
     <script type="module" src="/src/main.jsx"></script>
+
+    <noscript>
+      Please enable JavaScript to use the Aptella Reseller Portal.
+    </noscript>
   </body>
 </html>
