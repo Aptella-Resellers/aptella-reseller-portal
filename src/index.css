@@ -2,12 +2,48 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Components you want to style with @apply must live inside a layer */
+/* Brand utility classes that were causing the apply error.
+   We define them inside @layer so Tailwind can @apply them. */
 @layer components {
-  .btn-primary {
-    @apply px-3 py-2 rounded-lg text-white bg-aptella-navy hover:bg-aptella-navy-dark;
+  .brand-nav {
+    @apply bg-white border-b border-gray-200;
   }
-  .btn-secondary {
-    @apply px-3 py-2 rounded-lg bg-gray-100 text-aptella-navy;
+
+  .brand-btn {
+    @apply inline-flex items-center justify-center rounded-xl px-4 py-2
+           bg-aptella-navy text-white hover:bg-aptella-navy-dark transition;
+  }
+
+  .brand-btn-outline {
+    @apply inline-flex items-center justify-center rounded-xl px-4 py-2
+           border border-aptella-navy text-aptella-navy
+           hover:bg-aptella-navy hover:text-white transition;
+  }
+
+  .brand-card {
+    @apply bg-white rounded-aptella shadow-aptella;
+  }
+
+  .brand-pill {
+    @apply inline-flex items-center gap-2 rounded-full px-3 py-1 text-sm;
+  }
+
+  .brand-heading {
+    @apply text-2xl font-semibold text-aptella-navy;
+  }
+
+  .brand-accent {
+    @apply text-aptella-orange;
+  }
+}
+
+/* Optional: make inputs a bit nicer out of the box */
+@layer base {
+  input, select, textarea {
+    @apply rounded-lg border border-gray-300 px-3 py-2;
+  }
+
+  input:required, select:required, textarea:required {
+    @apply bg-gray-50;
   }
 }
