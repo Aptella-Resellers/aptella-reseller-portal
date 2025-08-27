@@ -1071,27 +1071,24 @@ function AdminPanel({ items, setItems, ratesAUD, setRatesAUD }) {
   );
 }
 
-/* ---------- AdminMap: clustered markers with status breakdown ---------- */
-function AdminMap({ rows = [], ratesAUD = {}, height = 420 }) {
+/* ---------- AdminMap: clusters with status counts + AUD totals ---------- */
+function AdminMap({ rows = [], ratesAUD = {}, height = 460 }) {
   const mapRef = React.useRef(null);
   const clusterRef = React.useRef(null);
   const markerByIdRef = React.useRef(new Map());
   const containerId = "leaflet-map";
 
-  // Status -> color + label
   const STATUS_META = {
     approved: { label: "Approved", color: "#16a34a" },   // green
     pending:  { label: "Pending",  color: "#2563eb" },   // blue
-    lost:     { label: "Closed/Lost", color: "#dc2626" },// red
     expiring: { label: "Expiring", color: "#f59e0b" },   // orange
+    lost:     { label: "Closed/Lost", color: "#dc2626" } // red
   };
 
-  // Decide status bucket for a row
   function statusOf(r) {
-    const s = (r.status || "").toLowerCase().trim();
+    const s = String(r.status || "").toLowerCase().trim();
     if (s === "approved") return "approved";
     if (s === "lost" || s === "closed" || s === "rejected") return "lost";
-    // expiring = pending and within 7 days
     if (s === "pending") {
       const d = new Date(r.expectedCloseDate || r.expected || "");
       const days = Math.round((d - new Date()) / 86400000);
@@ -1107,12 +1104,11 @@ function AdminMap({ rows = [], ratesAUD = {}, height = 420 }) {
     const cur = (r.currency || "AUD").toUpperCase();
     if (cur === "AUD") return v;
     const fx = Number(ratesAUD[cur] || 0);
-    return fx ? v * fx : v; // if fx missing, fall back to raw
+    return fx ? v * fx : v; // if missing FX, fall back to raw
   }
 
-  // Build a small colored dot icon with optional number
-  function iconFor(rowOrCount, color, count) {
-    const n = typeof rowOrCount === "number" ? rowOrCount : (count || "");
+  function iconFor(countOrNull, color) {
+    const n = typeof countOrNull === "number" ? countOrNull : "";
     const c = color || "#2563eb";
     return L.divIcon({
       className: "deal-pin",
@@ -1122,7 +1118,7 @@ function AdminMap({ rows = [], ratesAUD = {}, height = 420 }) {
           width:28px;height:28px;border-radius:9999px;
           background:${c};color:#fff;font-size:12px;font-weight:600;
           box-shadow:0 2px 8px rgba(0,0,0,.2)
-        ">${n || ""}</div>
+        ">${n}</div>
       `,
       iconSize: [28, 28],
       iconAnchor: [14, 14],
@@ -1130,16 +1126,14 @@ function AdminMap({ rows = [], ratesAUD = {}, height = 420 }) {
     });
   }
 
-  // Create / refresh map + clusters when rows change
   React.useEffect(() => {
-    if (!window.L) return; // Leaflet not ready
+    if (!window.L) return; // Leaflet not ready (CDN not loaded)
     let map = mapRef.current;
     if (!map) {
       map = L.map(containerId, { zoomControl: true, attributionControl: true })
-        .setView([1.3521, 103.8198], 5); // SG-ish default
+        .setView([1.3521, 103.8198], 5); // SG default view
       mapRef.current = map;
 
-      // OSM tiles
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         maxZoom: 19,
         attribution:
@@ -1147,7 +1141,6 @@ function AdminMap({ rows = [], ratesAUD = {}, height = 420 }) {
       }).addTo(map);
     }
 
-    // (Re)build cluster
     if (clusterRef.current) {
       clusterRef.current.remove();
       clusterRef.current = null;
@@ -1158,12 +1151,11 @@ function AdminMap({ rows = [], ratesAUD = {}, height = 420 }) {
       chunkedLoading: true,
       spiderfyOnEveryZoom: true,
       showCoverageOnHover: false,
-      zoomToBoundsOnClick: false, // we’ll show a popup instead
+      zoomToBoundsOnClick: false, // we show a popup instead
     });
     clusterRef.current = cluster;
     map.addLayer(cluster);
 
-    // Add markers
     const bounds = L.latLngBounds([]);
     (rows || []).forEach((r) => {
       const lat = Number(r.lat), lng = Number(r.lng);
@@ -1179,7 +1171,7 @@ function AdminMap({ rows = [], ratesAUD = {}, height = 420 }) {
           <div style="font-weight:700;margin-bottom:4px">${r.customerName || "(Customer)"}</div>
           <div style="font-size:12px;color:#374151;margin-bottom:8px">${r.solution || ""}</div>
           <div style="font-size:12px;margin-bottom:4px"><b>Location:</b> ${r.city || ""}${r.country ? ", " + r.country : ""}</div>
-          <div style="font-size:12px;margin-bottom:4px"><b>Value:</b> ${currency} ${Number(r.value || 0).toLocaleString()} <span style="color:#64748b">(${aud ? "≈ AUD " + aud.toLocaleString() : ""})</span></div>
+          <div style="font-size:12px;margin-bottom:4px"><b>Value:</b> ${currency} ${Number(r.value || 0).toLocaleString()} <span style="color:#64748b">${aud ? "(≈ AUD " + aud.toLocaleString() + ")" : ""}</span></div>
           <div style="font-size:12px;margin-bottom:4px"><b>Stage:</b> ${r.stage || ""} &nbsp; <b>Status:</b> ${r.status || ""}</div>
           <div style="font-size:12px;"><b>Expected:</b> ${
             r.expectedCloseDate
@@ -1188,7 +1180,7 @@ function AdminMap({ rows = [], ratesAUD = {}, height = 420 }) {
           }</div>
         </div>`;
       marker.bindPopup(html, { closeButton: true });
-      marker.options.dealId = r.id; // keep id
+      marker.options.dealId = r.id;
       markerByIdRef.current.set(r.id, marker);
       cluster.addLayer(marker);
       bounds.extend([lat, lng]);
@@ -1198,12 +1190,13 @@ function AdminMap({ rows = [], ratesAUD = {}, height = 420 }) {
       map.fitBounds(bounds.pad(0.15));
     }
 
-    // Custom cluster click: show status breakdown + drilldown
+    // Cluster click: status breakdown + AUD totals + drilldown
     cluster.on("clusterclick", (e) => {
       e.originalEvent?.preventDefault?.();
 
       const children = e.layer.getAllChildMarkers();
       const tally = { approved: 0, lost: 0, expiring: 0, pending: 0 };
+      const totalsAUD = { approved: 0, lost: 0, expiring: 0, pending: 0 };
       const byStatus = { approved: [], lost: [], expiring: [], pending: [] };
 
       children.forEach((m) => {
@@ -1211,27 +1204,34 @@ function AdminMap({ rows = [], ratesAUD = {}, height = 420 }) {
         const row = (rows || []).find((r) => r.id === id);
         if (!row) return;
         const b = statusOf(row);
-        tally[b]++; 
+        tally[b] += 1;
+        const aud = toAUD(row);
+        if (aud) totalsAUD[b] += aud;
         byStatus[b].push(row);
       });
 
-      // Build popup with summary lines — click a line to show the deals list
       const summaryLine = (key) => {
         const meta = STATUS_META[key];
         const count = tally[key] || 0;
         if (!count) return "";
+        const total = totalsAUD[key] || 0;
         return `
           <div class="cluster-line" data-status="${key}" style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:10px;margin-bottom:6px;background:#f8fafc;cursor:pointer">
             <span style="display:inline-block;width:10px;height:10px;border-radius:9999px;background:${meta.color}"></span>
             <span style="font-weight:600">${meta.label}</span>
             <span style="margin-left:auto;font-weight:700">${count}</span>
+            <span style="margin-left:8px;color:#334155;font-size:12px">AUD ${total.toLocaleString()}</span>
           </div>
         `;
       };
 
+      // Overall total (all statuses) for the cluster
+      const grandTotalAUD = Object.values(totalsAUD).reduce((a, b) => a + b, 0);
+
       const content = `
-        <div style="min-width:260px">
-          <div style="font-weight:700;margin-bottom:8px">Cluster Summary</div>
+        <div style="min-width:280px">
+          <div style="font-weight:700;margin-bottom:4px">Cluster Summary</div>
+          <div style="font-size:12px;color:#475569;margin-bottom:8px">Total (AUD): <b>${grandTotalAUD.toLocaleString()}</b></div>
           ${summaryLine("approved")}
           ${summaryLine("expiring")}
           ${summaryLine("pending")}
@@ -1245,7 +1245,6 @@ function AdminMap({ rows = [], ratesAUD = {}, height = 420 }) {
         .setContent(content)
         .openOn(map);
 
-      // After popup opens, wire click handlers for status lines
       map.once("popupopen", (evt) => {
         const root = evt?.popup?.getElement();
         if (!root) return;
@@ -1253,7 +1252,7 @@ function AdminMap({ rows = [], ratesAUD = {}, height = 420 }) {
         root.querySelectorAll(".cluster-line").forEach((el) => {
           el.addEventListener("click", () => {
             const key = el.getAttribute("data-status");
-            const items = (byStatus[key] || []).slice(0, 12); // show up to 12
+            const items = (byStatus[key] || []).slice(0, 18);
             const listHtml = items
               .map((r) => {
                 const aud = toAUD(r);
@@ -1263,7 +1262,7 @@ function AdminMap({ rows = [], ratesAUD = {}, height = 420 }) {
                   <div style="font-weight:600">${r.customerName || "(Customer)"} — ${r.solution || ""}</div>
                   <div style="font-size:12px;color:#374151">
                     ${r.city || ""}${r.country ? ", " + r.country : ""} &nbsp;•&nbsp; 
-                    ${r.currency || ""} ${Number(r.value || 0).toLocaleString()} 
+                    ${(r.currency || "").toUpperCase()} ${Number(r.value || 0).toLocaleString()} 
                     <span style="color:#64748b">${aud ? "(≈ AUD " + aud.toLocaleString() + ")" : ""}</span>
                   </div>
                 </div>`;
@@ -1277,9 +1276,7 @@ function AdminMap({ rows = [], ratesAUD = {}, height = 420 }) {
                   const id = d.getAttribute("data-id");
                   const m = markerByIdRef.current.get(id);
                   if (m) {
-                    map.setView(m.getLatLng(), Math.max(map.getZoom(), 13), {
-                      animate: true,
-                    });
+                    map.setView(m.getLatLng(), Math.max(map.getZoom(), 13), { animate: true });
                     m.openPopup();
                   }
                 });
@@ -1291,7 +1288,6 @@ function AdminMap({ rows = [], ratesAUD = {}, height = 420 }) {
     });
 
     return () => {
-      // clean up when component unmounts or rows change
       if (clusterRef.current) {
         clusterRef.current.remove();
         clusterRef.current = null;
@@ -1309,7 +1305,6 @@ function AdminMap({ rows = [], ratesAUD = {}, height = 420 }) {
         border: "1px solid #e5e7eb",
       }}
     >
-      {/* Map placeholder for SSR/first paint */}
       Map placeholder — your Leaflet init can target this container later.
     </div>
   );
