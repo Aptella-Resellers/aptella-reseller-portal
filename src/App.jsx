@@ -75,7 +75,20 @@ function addDays(dateISO, days) {
 function uid() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
+add this to your form submit so the selected files are sent as data: URLs inside evidenceLinks:
 
+// helper: convert FileList -> array of data: URLs
+async function filesToDataUrls(fileList) {
+  const files = Array.from(fileList || []);
+  const toDataUrl = f =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = e => resolve(e.target.result); // "data:<mime>;base64,AAAA..."
+      reader.onerror = reject;
+      reader.readAsDataURL(f);
+    });
+  return Promise.all(files.map(toDataUrl));
+}
 /* ======================== CONSTANTS & CONFIG ======================== */
 
 const CURRENCIES = ["SGD", "IDR", "MYR", "PHP", "AUD", "USD"];
@@ -455,8 +468,41 @@ function ResellerForm({ onSaved }) {
   }
 
   async function submit(e) {
-    e?.preventDefault?.();
-    if (!validate()) return;
+  e?.preventDefault?.();
+  if (!validate()) return;
+
+  // Convert files to data URLs, add to evidenceLinks
+  let allEvidenceLinks = [...(form.evidenceLinks || [])];
+  if (form.evidenceFiles && form.evidenceFiles.length > 0) {
+    const dataUrls = await filesToDataUrls(form.evidenceFiles);
+    allEvidenceLinks = allEvidenceLinks.concat(dataUrls);
+  }
+
+  // Build the payload using all fields, and use allEvidenceLinks
+  const record = {
+    id: uid(),
+    resellerName: form.resellerName,
+    customerName: form.customerName,
+    country: form.country,
+    solution: form.solution === "OTHER" ? form.otherSolution : form.solution,
+    value: Number(form.value || 0),
+    stage: form.stage,
+    probability: Number(form.probability || 0),
+    // IMPORTANT:
+    evidenceLinks: allEvidenceLinks, // <-- attaches files as data URLs
+    // ...add all other fields needed for your backend...
+  };
+
+  setSubmitting(true);
+  try {
+    await gasPost("submit", record); // Or your fetch/WEBAPP_URL logic
+    // rest of your submit logic ...
+  } catch (err) {
+    // error handling ...
+  } finally {
+    setSubmitting(false);
+  }
+}
 
     const record = {
       id: uid(),
