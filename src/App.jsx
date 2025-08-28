@@ -497,13 +497,30 @@ function ResellerForm({ onSaved }) {
   e?.preventDefault?.();
   if (!validate()) return;
 
-  // Collect evidence: links + files (as data: URLs)
-  const linkLinks = Array.isArray(form.evidenceLinks) ? form.evidenceLinks : [];
-  const fileLinks =
-    form.evidenceFiles && form.evidenceFiles.length
-      ? await filesToDataUrls(form.evidenceFiles)
-      : [];
-  const allEvidenceLinks = [...linkLinks, ...fileLinks];
+  // 1) validate files & compress if needed
+let files = Array.from(form.evidenceFiles || []);
+const tooBig = files.filter(fileTooBig);
+if (tooBig.length) {
+  alert(`Each evidence file must be ≤ ${MAX_ATTACH_MB} MB. Oversized: ` +
+        tooBig.map(f => `${f.name} (${bytesToMB(f.size).toFixed(1)} MB)`).join(', '));
+  return;
+}
+
+// Optional: shrink big images
+files = await Promise.all(files.map(f => downscaleImage(f)));
+
+const totalMB = files.reduce((s,f)=> s + bytesToMB(f.size), 0);
+if (totalMB > MAX_TOTAL_MB) {
+  alert(`Total evidence size must be ≤ ${MAX_TOTAL_MB} MB. You selected ~${totalMB.toFixed(1)} MB.`);
+  return;
+}
+
+// 2) turn files into data URLs (only after passing limits)
+const fileLinks = files.length ? await filesToDataUrls(files) : [];
+
+// 3) merge with any pasted links
+const linkLinks = Array.isArray(form.evidenceLinks) ? form.evidenceLinks : [];
+const allEvidenceLinks = [...linkLinks, ...fileLinks];
 
   // Build payload aligned with HEADERS in .gs
   const record = {
