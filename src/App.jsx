@@ -470,111 +470,88 @@ function ResellerForm({ onSaved }) {
   e?.preventDefault?.();
   if (!validate()) return;
 
-  // Convert files to data URLs, add to evidenceLinks
-  let allEvidenceLinks = [...(form.evidenceLinks || [])];
-  if (form.evidenceFiles && form.evidenceFiles.length > 0) {
-    const dataUrls = await filesToDataUrls(form.evidenceFiles);
-    allEvidenceLinks = allEvidenceLinks.concat(dataUrls);
-  }
+  // Collect evidence: links + files (as data: URLs)
+  const linkLinks = Array.isArray(form.evidenceLinks) ? form.evidenceLinks : [];
+  const fileLinks =
+    form.evidenceFiles && form.evidenceFiles.length
+      ? await filesToDataUrls(form.evidenceFiles)
+      : [];
+  const allEvidenceLinks = [...linkLinks, ...fileLinks];
 
-  // Build the payload using all fields, and use allEvidenceLinks
+  // Build payload aligned with HEADERS in .gs
   const record = {
     id: uid(),
-    resellerName: form.resellerName,
-    customerName: form.customerName,
-    country: form.country,
-    solution: form.solution === "OTHER" ? form.otherSolution : form.solution,
-    value: Number(form.value || 0),
-    stage: form.stage,
+    submittedAt: todayLocalISO(),
+    resellerCountry: form.resellerCountry || "",
+    resellerLocation: form.resellerLocation || "",
+    resellerName: form.resellerName || "",
+    resellerContact: form.resellerContact || "",
+    resellerEmail: form.resellerEmail || "",
+    resellerPhone: form.resellerPhone || "",
+    customerName: form.customerName || "",
+    customerLocation: form.customerLocation || "",
+    city: form.city || "",
+    country: form.country || "",
+    lat: form.lat ? Number(form.lat) : "",
+    lng: form.lng ? Number(form.lng) : "",
+    industry: form.industry || "",
+    currency: form.currency || "",
+    value: form.value ? Number(form.value) : "",
+    solution: form.solution === "OTHER" ? (form.otherSolution || "") : (form.solution || ""),
+    stage: form.stage || "qualified",
     probability: Number(form.probability || 0),
-    // IMPORTANT:
-    evidenceLinks: allEvidenceLinks, // <-- attaches files as data URLs
-    // ...add all other fields needed for your backend...
+    expectedCloseDate: form.expectedCloseDate || todayLocalISO(),
+    status: "pending",
+    lockExpiry: "",
+    syncedAt: todayLocalISO(),
+    remindersOptIn: !!form.remindersOptIn,
+    supports: form.supports || [],
+    competitors: form.competitors || [],
+    notes: form.notes || "",
+    evidenceLinks: allEvidenceLinks,      // <-- this is what the .gs attaches
+    updates: [],
   };
 
   setSubmitting(true);
   try {
-    await gasPost("submit", record); // Or your fetch/WEBAPP_URL logic
-    // rest of your submit logic ...
+    await gasPost("submit", record);
+    alert(isID ? "Dikirim & disimpan." : "Submitted.");
+    onSaved && onSaved();
+
+    // Reset (keep resellerCountry to preserve language behavior)
+    setForm((f) => ({
+      ...f,
+      resellerLocation: "",
+      resellerName: "",
+      resellerContact: "",
+      resellerEmail: "",
+      resellerPhone: "",
+      customerName: "",
+      customerLocation: "",
+      city: "",
+      country: "",
+      lat: "",
+      lng: "",
+      industry: "",
+      value: "",
+      solution: "",
+      otherSolution: "",
+      supports: [],
+      competitors: [],
+      notes: "",
+      evidenceLinks: [],
+      evidenceFiles: [],
+      remindersOptIn: false,
+      expectedCloseDate: addDays(todayLocalISO(), 14),
+    }));
+    const el = document.getElementById("evidenceFiles");
+    if (el) el.value = "";
   } catch (err) {
-    // error handling ...
+    alert((isID ? "Gagal sinkronisasi" : "Google Sheets sync failed") + ": " + err.message);
   } finally {
     setSubmitting(false);
   }
 }
-
-    const record = {
-      id: uid(),
-      submittedAt: todayLocalISO(),
-      resellerCountry: form.resellerCountry || "",
-      resellerLocation: form.resellerLocation || "",
-      resellerName: form.resellerName || "",
-      resellerContact: form.resellerContact || "",
-      resellerEmail: form.resellerEmail || "",
-      resellerPhone: form.resellerPhone || "",
-      customerName: form.customerName || "",
-      customerLocation: form.customerLocation || "",
-      city: form.city || "",
-      country: form.country || "",
-      lat: Number(form.lat || 0),
-      lng: Number(form.lng || 0),
-      industry: form.industry || "",
-      currency: form.currency || "",
-      value: Number(form.value || 0),
-      solution: form.solution === "OTHER" ? form.otherSolution || "" : form.solution,
-      stage: form.stage || "qualified",
-      probability: Number(form.probability || 0),
-      expectedCloseDate: form.expectedCloseDate || todayLocalISO(),
-      status: "pending",
-      lockExpiry: "",
-      syncedAt: todayLocalISO(),
-      remindersOptIn: !!form.remindersOptIn,
-      supports: form.supports || [],
-      competitors: form.competitors || [],
-      notes: form.notes || "",
-      evidenceLinks: form.evidenceLinks || [],
-      updates: [],
-    };
-
-    setSubmitting(true);
-    try {
-      await gasPost("submit", record);
-      alert(isID ? "Dikirim & disimpan." : "Submitted.");
-      onSaved && onSaved();
-      // reset core fields (keep reseller country so Bahasa stays if ID)
-      setForm((f) => ({
-        ...f,
-        resellerLocation: "",
-        resellerName: "",
-        resellerContact: "",
-        resellerEmail: "",
-        resellerPhone: "",
-        customerName: "",
-        customerLocation: "",
-        city: "",
-        country: "",
-        lat: "",
-        lng: "",
-        industry: "",
-        value: "",
-        solution: "",
-        otherSolution: "",
-        supports: [],
-        competitors: [],
-        notes: "",
-        evidenceLinks: [],
-        evidenceFiles: [],
-        remindersOptIn: false,
-        expectedCloseDate: addDays(todayLocalISO(), 14),
-      }));
-      const el = document.getElementById("evidenceFiles");
-      if (el) el.value = "";
-    } catch (err) {
-      alert((isID ? "Gagal sinkronisasi" : "Google Sheets sync failed") + ": " + err.message);
-    } finally {
-      setSubmitting(false);
-    }
-  }
 
   return (
     <Card>
