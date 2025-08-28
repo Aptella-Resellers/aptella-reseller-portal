@@ -75,7 +75,6 @@ function addDays(dateISO, days) {
 function uid() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
-add this to your form submit so the selected files are sent as data: URLs inside evidenceLinks:
 
 // helper: convert FileList -> array of data: URLs
 async function filesToDataUrls(fileList) {
