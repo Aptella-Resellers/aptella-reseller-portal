@@ -1026,9 +1026,7 @@ const allEvidenceLinks = [...linkLinks, ...fileLinks];
           </label>
 
           <div className="flex items-center gap-3">
-           <button
-  type="submit"
-  disabled={submitting}
+        <button type="submit" disabled={submitting} …>…</button>
   className={`px-4 py-2 rounded-xl text-white ${BRAND.primaryBtn}`}
 >
   {submitting ? t("Submitting…", "Mengirim…") : t("Submit Registration", "Kirim Pendaftaran")}
