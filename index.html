@@ -4,21 +4,19 @@
     <meta charset="UTF-8" />
     <meta
       name="viewport"
-      content="width=device-width, initial-scale=1, maximum-scale=1"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
     />
     <title>Aptella Reseller Portal</title>
-    <meta name="theme-color" content="#0e3446" />
 
-    <!-- Your app CSS (Tailwind compiled by Vite) -->
-    <link rel="stylesheet" href="/src/index.css" />
-
-    <!-- Leaflet CSS -->
+    <!-- Leaflet core styles -->
     <link
       rel="stylesheet"
       href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha512-p6VQhYCEG7VwP2s0u9k3KfG3j0j5Zf8c1kzqg7x3v9bKx3G0/8a0n0JmF4d2o1t5qCcz0wJ2O5x5o0wHn0fQkw=="
       crossorigin=""
     />
-    <!-- MarkerCluster CSS -->
+
+    <!-- Leaflet MarkerCluster styles -->
     <link
       rel="stylesheet"
       href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"
@@ -28,17 +26,30 @@
       href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"
     />
 
-    <link rel="icon" href="/favicon.ico" />
+    <!-- Optional: basic body background to match app -->
+    <style>
+      html, body, #root { height: 100%; }
+      body { background: #f7fafc; margin: 0; }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">Loading…</div>
 
-    <!-- Load Leaflet first -->
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" defer></script>
-    <!-- Then the cluster plugin (depends on Leaflet) -->
-    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js" defer></script>
+    <!-- Leaflet core JS (must load before your app) -->
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha512-bwZ8tV2S4gQkW+QyO6r9O3J9+fQvtJwzJ8q3h7JZbqQ3qjVw1Q7O3mZgX6wTzJQ7s5rV1bG2H9d3Q3B0QwQqMw=="
+      crossorigin=""
+      defer
+    ></script>
 
-    <!-- Vite entry (NOTE: no /aptella-reseller-portal prefix) -->
+    <!-- Leaflet MarkerCluster plugin (after Leaflet) -->
+    <script
+      src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"
+      defer
+    ></script>
+
+    <!-- Your Vite entry (do NOT prefix with repo base; Vite will rewrite on build) -->
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
