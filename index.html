@@ -8,15 +8,12 @@
     />
     <title>Aptella Reseller Portal</title>
 
-    <!-- Leaflet core styles -->
+    <!-- Leaflet CSS (NO integrity attribute) -->
     <link
       rel="stylesheet"
       href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-      integrity="sha512-p6VQhYCEG7VwP2s0u9k3KfG3j0j5Zf8c1kzqg7x3v9bKx3G0/8a0n0JmF4d2o1t5qCcz0wJ2O5x5o0wHn0fQkw=="
-      crossorigin=""
     />
-
-    <!-- Leaflet MarkerCluster styles -->
+    <!-- MarkerCluster CSS -->
     <link
       rel="stylesheet"
       href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"
@@ -26,30 +23,34 @@
       href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"
     />
 
-    <!-- Optional: basic body background to match app -->
+    <!-- Optional: your global CSS (Tailwind build will inject at build time) -->
+    <link rel="stylesheet" href="/src/index.css" />
+
     <style>
-      html, body, #root { height: 100%; }
-      body { background: #f7fafc; margin: 0; }
+      /* Keep modals above the map */
+      .leaflet-container { z-index: 0; }
+      .aptella-modal { z-index: 9999; }
+
+      /* Make cluster popup text a bit nicer */
+      .leaflet-popup-content { margin: 10px 14px; }
     </style>
   </head>
   <body>
-    <div id="root">Loading…</div>
+    <div id="root"></div>
 
-    <!-- Leaflet core JS (must load before your app) -->
+    <!-- Leaflet JS (NO integrity attribute) -->
     <script
+      defer
       src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-      integrity="sha512-bwZ8tV2S4gQkW+QyO6r9O3J9+fQvtJwzJ8q3h7JZbqQ3qjVw1Q7O3mZgX6wTzJQ7s5rV1bG2H9d3Q3B0QwQqMw=="
-      crossorigin=""
-      defer
     ></script>
 
-    <!-- Leaflet MarkerCluster plugin (after Leaflet) -->
+    <!-- MarkerCluster plugin (must load AFTER Leaflet) -->
     <script
-      src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"
       defer
+      src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"
     ></script>
 
-    <!-- Your Vite entry (do NOT prefix with repo base; Vite will rewrite on build) -->
+    <!-- Vite entry (dev) – Vite will rewrite this during build -->
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
