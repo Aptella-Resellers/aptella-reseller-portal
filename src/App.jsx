@@ -1350,7 +1350,7 @@ function AdminMap({ rows = [], ratesAUD = {}, height = 460 }) {
   const [ready, setReady] = React.useState(false);
   const [usingCluster, setUsingCluster] = React.useState(false);
 
-  // ---- status meta & helpers (same logic you had) ----
+  // ---- status meta & helpers ----
   const STATUS_META = {
     approved: { label: "Approved", color: "#16a34a" },   // green
     pending:  { label: "Pending",  color: "#2563eb" },   // blue
@@ -1398,7 +1398,7 @@ function AdminMap({ rows = [], ratesAUD = {}, height = 460 }) {
     });
   }
 
-  // ---- load Leaflet + markercluster safely if needed ----
+  // Load Leaflet + markercluster safely if needed
   React.useEffect(() => {
     let cancelled = false;
 
@@ -1406,10 +1406,9 @@ function AdminMap({ rows = [], ratesAUD = {}, height = 460 }) {
       const hasLeaflet = !!window.L;
       if (!hasLeaflet) return false;
 
-      // If markercluster exists, done
       if (window.L.markerClusterGroup) return true;
 
-      // Try to load the plugin dynamically (in case index.html missed it)
+      // try dynamic load
       await new Promise((resolve) => {
         const existing = document.querySelector('script[data-aptella="mc"]');
         if (existing) {
@@ -1432,14 +1431,14 @@ function AdminMap({ rows = [], ratesAUD = {}, height = 460 }) {
     (async () => {
       const ok = await ensureLeafletAndCluster();
       if (cancelled) return;
-      setUsingCluster(ok);
+      setUsingCluster(!!ok);
       setReady(!!window.L);
     })();
 
     return () => { cancelled = true; };
   }, []);
 
-  // ---- init map once ----
+  // init map once
   React.useEffect(() => {
     if (!ready || !window.L) return;
 
@@ -1455,12 +1454,11 @@ function AdminMap({ rows = [], ratesAUD = {}, height = 460 }) {
           '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>',
       }).addTo(map);
 
-      // Just in case the parent layout animates/resizes
       setTimeout(() => { map.invalidateSize?.(); }, 200);
     }
   }, [ready]);
 
-  // ---- render markers/clusters whenever rows or rates change ----
+  // render markers/clusters whenever rows or rates change
   React.useEffect(() => {
     const L = window.L;
     const map = mapRef.current;
@@ -1477,13 +1475,13 @@ function AdminMap({ rows = [], ratesAUD = {}, height = 460 }) {
     }
     markerByIdRef.current.clear();
 
-    // If we have cluster plugin, use it
     if (usingCluster && L.markerClusterGroup) {
+      // clustered path
       const cluster = L.markerClusterGroup({
         chunkedLoading: true,
         spiderfyOnEveryZoom: true,
         showCoverageOnHover: false,
-        zoomToBoundsOnClick: false, // we open a summary popup instead
+        zoomToBoundsOnClick: false,
       });
       clusterRef.current = cluster;
       map.addLayer(cluster);
@@ -1493,9 +1491,14 @@ function AdminMap({ rows = [], ratesAUD = {}, height = 460 }) {
         const lat = Number(r.lat), lng = Number(r.lng);
         if (isNaN(lat) || isNaN(lng)) return;
         const bucket = statusOf(r);
-        const color = STATUS_META[bucket]?.color || "#2563eb";
-        const marker = L.marker([lat, lng], { icon: iconDot(color, "") });
+        const color = ({
+          approved: "#16a34a",
+          lost: "#dc2626",
+          expiring: "#f59e0b",
+          pending: "#2563eb",
+        })[bucket] || "#2563eb";
 
+        const marker = L.marker([lat, lng], { icon: iconDot(color, "") });
         const aud = toAUD(r);
         const currency = (r.currency || "").toUpperCase();
         const html = `
@@ -1522,7 +1525,7 @@ function AdminMap({ rows = [], ratesAUD = {}, height = 460 }) {
         map.fitBounds(bounds.pad(0.15));
       }
 
-      // Cluster click => status breakdown + AUD totals + drilldown
+      // cluster click => summary + AUD totals + drilldown
       cluster.on("clusterclick", (e) => {
         e.originalEvent?.preventDefault?.();
 
@@ -1614,11 +1617,11 @@ function AdminMap({ rows = [], ratesAUD = {}, height = 460 }) {
           });
         });
       });
+
       return; // end clustered path
     }
 
     // ---- fallback: non-cluster bubbles grouped on a 0.5° grid ----
-    const L = window.L;
     const group = L.layerGroup();
     layerRef.current = group;
     map.addLayer(group);
@@ -1657,7 +1660,6 @@ function AdminMap({ rows = [], ratesAUD = {}, height = 460 }) {
       bounds.extend([g.lat, g.lng]);
 
       marker.on("click", () => {
-        // Build a status summary like clustered version
         const tally = { approved: 0, lost: 0, expiring: 0, pending: 0 };
         const totalsAUD = { approved: 0, lost: 0, expiring: 0, pending: 0 };
         const byStatus = { approved: [], lost: [], expiring: [], pending: [] };
@@ -1755,6 +1757,7 @@ function AdminMap({ rows = [], ratesAUD = {}, height = 460 }) {
     </div>
   );
 }
+
 
 /* ======================== ROOT APP ======================== */
 
