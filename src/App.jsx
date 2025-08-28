@@ -1340,18 +1340,22 @@ function AdminPanel({ items, setItems, ratesAUD, setRatesAUD }) {
   );
 }
 
-/* ---------- AdminMap: clusters with status counts + AUD totals ---------- */
+/* ---------- AdminMap: safe Leaflet + (optional) MarkerCluster with status/AUD ---------- */
 function AdminMap({ rows = [], ratesAUD = {}, height = 460 }) {
+  const containerId = "leaflet-map";
   const mapRef = React.useRef(null);
   const clusterRef = React.useRef(null);
+  const layerRef = React.useRef(null);       // fallback non-cluster layer
   const markerByIdRef = React.useRef(new Map());
-  const containerId = "leaflet-map";
+  const [ready, setReady] = React.useState(false);
+  const [usingCluster, setUsingCluster] = React.useState(false);
 
+  // ---- status meta & helpers (same logic you had) ----
   const STATUS_META = {
-    approved: { label: "Approved", color: "#16a34a" }, // green
-    pending: { label: "Pending", color: "#2563eb" }, // blue
-    expiring: { label: "Expiring", color: "#f59e0b" }, // orange
-    lost: { label: "Closed/Lost", color: "#dc2626" }, // red
+    approved: { label: "Approved", color: "#16a34a" },   // green
+    pending:  { label: "Pending",  color: "#2563eb" },   // blue
+    expiring: { label: "Expiring", color: "#f59e0b" },   // orange
+    lost:     { label: "Closed/Lost", color: "#dc2626" } // red
   };
 
   function statusOf(r) {
@@ -1373,36 +1377,76 @@ function AdminMap({ rows = [], ratesAUD = {}, height = 460 }) {
     const cur = (r.currency || "AUD").toUpperCase();
     if (cur === "AUD") return v;
     const fx = Number(ratesAUD[cur] || 0);
-    return fx ? v * fx : v; // if missing FX, fall back to raw
+    return fx ? v * fx : v; // if missing FX, show raw
   }
 
-  function iconFor(countOrNull, color) {
-    const n = typeof countOrNull === "number" ? countOrNull : "";
-    const c = color || "#2563eb";
-    return L.divIcon({
+  function iconDot(color, countText = "") {
+    const size = 28;
+    return window.L.divIcon({
       className: "deal-pin",
       html: `
         <div style="
           display:inline-flex;align-items:center;justify-content:center;
-          width:28px;height:28px;border-radius:9999px;
-          background:${c};color:#fff;font-size:12px;font-weight:600;
-          box-shadow:0 2px 8px rgba(0,0,0,.2)
-        ">${n}</div>
+          width:${size}px;height:${size}px;border-radius:9999px;
+          background:${color};color:#fff;font-size:12px;font-weight:600;
+          box-shadow:0 2px 8px rgba(0,0,0,.2);
+        ">${countText}</div>
       `,
-      iconSize: [28, 28],
-      iconAnchor: [14, 14],
-      popupAnchor: [0, -14],
+      iconSize: [size, size],
+      iconAnchor: [size/2, size/2],
+      popupAnchor: [0, -size/2],
     });
   }
 
+  // ---- load Leaflet + markercluster safely if needed ----
   React.useEffect(() => {
-    if (!window.L) return; // Leaflet not ready (CDN not loaded)
-    let map = mapRef.current;
-    if (!map) {
-      map = L.map(containerId, { zoomControl: true, attributionControl: true }).setView(
-        [1.3521, 103.8198],
-        5
-      ); // SG default view
+    let cancelled = false;
+
+    async function ensureLeafletAndCluster() {
+      const hasLeaflet = !!window.L;
+      if (!hasLeaflet) return false;
+
+      // If markercluster exists, done
+      if (window.L.markerClusterGroup) return true;
+
+      // Try to load the plugin dynamically (in case index.html missed it)
+      await new Promise((resolve) => {
+        const existing = document.querySelector('script[data-aptella="mc"]');
+        if (existing) {
+          existing.addEventListener("load", resolve, { once: true });
+          existing.addEventListener("error", resolve, { once: true });
+          return;
+        }
+        const s = document.createElement("script");
+        s.src = "https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js";
+        s.defer = true;
+        s.setAttribute("data-aptella", "mc");
+        s.onload = resolve;
+        s.onerror = resolve;
+        document.body.appendChild(s);
+      });
+
+      return !!window.L.markerClusterGroup;
+    }
+
+    (async () => {
+      const ok = await ensureLeafletAndCluster();
+      if (cancelled) return;
+      setUsingCluster(ok);
+      setReady(!!window.L);
+    })();
+
+    return () => { cancelled = true; };
+  }, []);
+
+  // ---- init map once ----
+  React.useEffect(() => {
+    if (!ready || !window.L) return;
+
+    const L = window.L;
+    if (!mapRef.current) {
+      const map = L.map(containerId, { zoomControl: true, attributionControl: true })
+        .setView([1.3521, 103.8198], 5); // SG default
       mapRef.current = map;
 
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -1410,167 +1454,281 @@ function AdminMap({ rows = [], ratesAUD = {}, height = 460 }) {
         attribution:
           '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>',
       }).addTo(map);
-    }
 
+      // Just in case the parent layout animates/resizes
+      setTimeout(() => { map.invalidateSize?.(); }, 200);
+    }
+  }, [ready]);
+
+  // ---- render markers/clusters whenever rows or rates change ----
+  React.useEffect(() => {
+    const L = window.L;
+    const map = mapRef.current;
+    if (!ready || !L || !map) return;
+
+    // Clear old layers
     if (clusterRef.current) {
-      clusterRef.current.remove();
+      try { map.removeLayer(clusterRef.current); } catch {}
       clusterRef.current = null;
+    }
+    if (layerRef.current) {
+      try { map.removeLayer(layerRef.current); } catch {}
+      layerRef.current = null;
     }
     markerByIdRef.current.clear();
 
-    const cluster = L.markerClusterGroup({
-      chunkedLoading: true,
-      spiderfyOnEveryZoom: true,
-      showCoverageOnHover: false,
-      zoomToBoundsOnClick: false, // we show a popup instead
-    });
-    clusterRef.current = cluster;
-    map.addLayer(cluster);
+    // If we have cluster plugin, use it
+    if (usingCluster && L.markerClusterGroup) {
+      const cluster = L.markerClusterGroup({
+        chunkedLoading: true,
+        spiderfyOnEveryZoom: true,
+        showCoverageOnHover: false,
+        zoomToBoundsOnClick: false, // we open a summary popup instead
+      });
+      clusterRef.current = cluster;
+      map.addLayer(cluster);
 
-    const bounds = L.latLngBounds([]);
-    (rows || []).forEach((r) => {
-      const lat = Number(r.lat),
-        lng = Number(r.lng);
-      if (isNaN(lat) || isNaN(lng)) return;
-      const bucket = statusOf(r);
-      const color = STATUS_META[bucket]?.color || "#2563eb";
-      const marker = L.marker([lat, lng], { icon: iconFor(null, color) });
+      const bounds = L.latLngBounds([]);
+      (rows || []).forEach((r) => {
+        const lat = Number(r.lat), lng = Number(r.lng);
+        if (isNaN(lat) || isNaN(lng)) return;
+        const bucket = statusOf(r);
+        const color = STATUS_META[bucket]?.color || "#2563eb";
+        const marker = L.marker([lat, lng], { icon: iconDot(color, "") });
 
-      const aud = toAUD(r);
-      const currency = (r.currency || "").toUpperCase();
-      const html = `
-        <div style="min-width:240px">
-          <div style="font-weight:700;margin-bottom:4px">${r.customerName || "(Customer)"}</div>
-          <div style="font-size:12px;color:#374151;margin-bottom:8px">${r.solution || ""}</div>
-          <div style="font-size:12px;margin-bottom:4px"><b>Location:</b> ${r.city || ""}${
-        r.country ? ", " + r.country : ""
-      }</div>
-          <div style="font-size:12px;margin-bottom:4px"><b>Value:</b> ${currency} ${Number(
-        r.value || 0
-      ).toLocaleString()} <span style="color:#64748b">${
-        aud ? "(≈ AUD " + aud.toLocaleString() + ")" : ""
-      }</span></div>
-          <div style="font-size:12px;margin-bottom:4px"><b>Stage:</b> ${r.stage || ""} &nbsp; <b>Status:</b> ${
-        r.status || ""
-      }</div>
-          <div style="font-size:12px;"><b>Expected:</b> ${
-            r.expectedCloseDate ? new Date(r.expectedCloseDate).toISOString().slice(0, 10) : "-"
-          }</div>
-        </div>`;
-      marker.bindPopup(html, { closeButton: true });
-      marker.options.dealId = r.id;
-      markerByIdRef.current.set(r.id, marker);
-      cluster.addLayer(marker);
-      bounds.extend([lat, lng]);
-    });
-
-    if (rows && rows.length && bounds.isValid()) {
-      map.fitBounds(bounds.pad(0.15));
-    }
-
-    // Cluster click: status breakdown + AUD totals + drilldown
-    cluster.on("clusterclick", (e) => {
-      e.originalEvent?.preventDefault?.();
-
-      const children = e.layer.getAllChildMarkers();
-      const tally = { approved: 0, lost: 0, expiring: 0, pending: 0 };
-      const totalsAUD = { approved: 0, lost: 0, expiring: 0, pending: 0 };
-      const byStatus = { approved: [], lost: [], expiring: [], pending: [] };
-
-      children.forEach((m) => {
-        const id = m.options.dealId;
-        const row = (rows || []).find((r) => r.id === id);
-        if (!row) return;
-        const b = statusOf(row);
-        tally[b] += 1;
-        const aud = toAUD(row);
-        if (aud) totalsAUD[b] += aud;
-        byStatus[b].push(row);
+        const aud = toAUD(r);
+        const currency = (r.currency || "").toUpperCase();
+        const html = `
+          <div style="min-width:240px">
+            <div style="font-weight:700;margin-bottom:4px">${r.customerName || "(Customer)"}</div>
+            <div style="font-size:12px;color:#374151;margin-bottom:8px">${r.solution || ""}</div>
+            <div style="font-size:12px;margin-bottom:4px"><b>Location:</b> ${r.city || ""}${r.country ? ", " + r.country : ""}</div>
+            <div style="font-size:12px;margin-bottom:4px"><b>Value:</b> ${currency} ${Number(r.value || 0).toLocaleString()} <span style="color:#64748b">${aud ? "(≈ AUD " + Math.round(aud).toLocaleString() + ")" : ""}</span></div>
+            <div style="font-size:12px;margin-bottom:4px"><b>Stage:</b> ${r.stage || ""} &nbsp; <b>Status:</b> ${r.status || ""}</div>
+            <div style="font-size:12px;"><b>Expected:</b> ${
+              r.expectedCloseDate
+                ? new Date(r.expectedCloseDate).toISOString().slice(0, 10)
+                : "-"
+            }</div>
+          </div>`;
+        marker.bindPopup(html, { closeButton: true });
+        marker.options.dealId = r.id;
+        markerByIdRef.current.set(r.id, marker);
+        cluster.addLayer(marker);
+        bounds.extend([lat, lng]);
       });
 
-      const summaryLine = (key) => {
-        const meta = STATUS_META[key];
-        const count = tally[key] || 0;
-        if (!count) return "";
-        const total = totalsAUD[key] || 0;
-        return `
-          <div class="cluster-line" data-status="${key}" style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:10px;margin-bottom:6px;background:#f8fafc;cursor:pointer">
-            <span style="display:inline-block;width:10px;height:10px;border-radius:9999px;background:${meta.color}"></span>
-            <span style="font-weight:600">${meta.label}</span>
-            <span style="margin-left:auto;font-weight:700">${count}</span>
-            <span style="margin-left:8px;color:#334155;font-size:12px">AUD ${total.toLocaleString()}</span>
+      if (rows && rows.length && bounds.isValid()) {
+        map.fitBounds(bounds.pad(0.15));
+      }
+
+      // Cluster click => status breakdown + AUD totals + drilldown
+      cluster.on("clusterclick", (e) => {
+        e.originalEvent?.preventDefault?.();
+
+        const children = e.layer.getAllChildMarkers();
+        const tally = { approved: 0, lost: 0, expiring: 0, pending: 0 };
+        const totalsAUD = { approved: 0, lost: 0, expiring: 0, pending: 0 };
+        const byStatus = { approved: [], lost: [], expiring: [], pending: [] };
+
+        children.forEach((m) => {
+          const id = m.options.dealId;
+          const row = (rows || []).find((r) => r.id === id);
+          if (!row) return;
+          const b = statusOf(row);
+          tally[b] += 1;
+          const aud = toAUD(row);
+          if (aud) totalsAUD[b] += aud;
+          byStatus[b].push(row);
+        });
+
+        const summaryLine = (key) => {
+          const meta = STATUS_META[key];
+          const count = tally[key] || 0;
+          if (!count) return "";
+          const total = Math.round(totalsAUD[key] || 0);
+          return `
+            <div class="cluster-line" data-status="${key}" style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:10px;margin-bottom:6px;background:#f8fafc;cursor:pointer">
+              <span style="display:inline-block;width:10px;height:10px;border-radius:9999px;background:${meta.color}"></span>
+              <span style="font-weight:600">${meta.label}</span>
+              <span style="margin-left:auto;font-weight:700">${count}</span>
+              <span style="margin-left:8px;color:#334155;font-size:12px">AUD ${total.toLocaleString()}</span>
+            </div>
+          `;
+        };
+
+        const grand = Math.round(Object.values(totalsAUD).reduce((a, b) => a + b, 0));
+        const content = `
+          <div style="min-width:280px">
+            <div style="font-weight:700;margin-bottom:4px">Cluster Summary</div>
+            <div style="font-size:12px;color:#475569;margin-bottom:8px">Total (AUD): <b>${grand.toLocaleString()}</b></div>
+            ${summaryLine("approved")}
+            ${summaryLine("expiring")}
+            ${summaryLine("pending")}
+            ${summaryLine("lost")}
+            <div id="cluster-drill" style="margin-top:8px"></div>
           </div>
         `;
-      };
 
-      // Overall total (all statuses) for the cluster
-      const grandTotalAUD = Object.values(totalsAUD).reduce((a, b) => a + b, 0);
+        const p = L.popup()
+          .setLatLng(e.layer.getLatLng())
+          .setContent(content)
+          .openOn(map);
 
-      const content = `
-        <div style="min-width:280px">
-          <div style="font-weight:700;margin-bottom:4px">Cluster Summary</div>
-          <div style="font-size:12px;color:#475569;margin-bottom:8px">Total (AUD): <b>${grandTotalAUD.toLocaleString()}</b></div>
-          ${summaryLine("approved")}
-          ${summaryLine("expiring")}
-          ${summaryLine("pending")}
-          ${summaryLine("lost")}
-          <div id="cluster-drill" style="margin-top:8px"></div>
-        </div>
-      `;
+        map.once("popupopen", (evt) => {
+          const root = evt?.popup?.getElement();
+          if (!root) return;
 
-      const p = L.popup().setLatLng(e.layer.getLatLng()).setContent(content).openOn(map);
-
-      map.once("popupopen", (evt) => {
-        const root = evt?.popup?.getElement();
-        if (!root) return;
-
-        root.querySelectorAll(".cluster-line").forEach((el) => {
-          el.addEventListener("click", () => {
-            const key = el.getAttribute("data-status");
-            const items = (byStatus[key] || []).slice(0, 18);
-            const listHtml = items
-              .map((r) => {
-                const aud = toAUD(r);
+          root.querySelectorAll(".cluster-line").forEach((el) => {
+            el.addEventListener("click", () => {
+              const key = el.getAttribute("data-status");
+              const items = (byStatus[key] || []).slice(0, 18);
+              const listHtml = items.map((r) => {
+                const aud = Math.round(toAUD(r));
                 return `
-                <div class="deal-link" data-id="${r.id}"
-                  style="padding:6px 8px;border-radius:8px;margin:4px 0;background:#fff;border:1px solid #e5e7eb;cursor:pointer">
-                  <div style="font-weight:600">${r.customerName || "(Customer)"} — ${r.solution || ""}</div>
-                  <div style="font-size:12px;color:#374151">
-                    ${r.city || ""}${r.country ? ", " + r.country : ""} &nbsp;•&nbsp; 
-                    ${(r.currency || "").toUpperCase()} ${Number(r.value || 0).toLocaleString()} 
-                    <span style="color:#64748b">${aud ? "(≈ AUD " + aud.toLocaleString() + ")" : ""}</span>
-                  </div>
-                </div>`;
-              })
-              .join("");
-            const drill = root.querySelector("#cluster-drill");
-            if (drill) {
-              drill.innerHTML = `<div style="font-weight:700;margin:8px 0">Deals (${
-                STATUS_META[key].label
-              })</div>${listHtml}`;
-              drill.querySelectorAll(".deal-link").forEach((d) => {
-                d.addEventListener("click", () => {
-                  const id = d.getAttribute("data-id");
-                  const m = markerByIdRef.current.get(id);
-                  if (m) {
-                    map.setView(m.getLatLng(), Math.max(map.getZoom(), 13), { animate: true });
-                    m.openPopup();
-                  }
+                  <div class="deal-link" data-id="${r.id}"
+                    style="padding:6px 8px;border-radius:8px;margin:4px 0;background:#fff;border:1px solid #e5e7eb;cursor:pointer">
+                    <div style="font-weight:600">${r.customerName || "(Customer)"} — ${r.solution || ""}</div>
+                    <div style="font-size:12px;color:#374151">
+                      ${r.city || ""}${r.country ? ", " + r.country : ""} &nbsp;•&nbsp; 
+                      ${(r.currency || "").toUpperCase()} ${Number(r.value || 0).toLocaleString()}
+                      <span style="color:#64748b">${aud ? "(≈ AUD " + aud.toLocaleString() + ")" : ""}</span>
+                    </div>
+                  </div>`;
+              }).join("");
+              const drill = root.querySelector("#cluster-drill");
+              if (drill) {
+                drill.innerHTML = `<div style="font-weight:700;margin:8px 0">Deals (${STATUS_META[key].label})</div>${listHtml}`;
+                drill.querySelectorAll(".deal-link").forEach((d) => {
+                  d.addEventListener("click", () => {
+                    const id = d.getAttribute("data-id");
+                    const m = markerByIdRef.current.get(id);
+                    if (m) {
+                      map.setView(m.getLatLng(), Math.max(map.getZoom(), 13), { animate: true });
+                      m.openPopup();
+                    }
+                  });
                 });
-              });
-            }
+              }
+            });
+          });
+        });
+      });
+      return; // end clustered path
+    }
+
+    // ---- fallback: non-cluster bubbles grouped on a 0.5° grid ----
+    const L = window.L;
+    const group = L.layerGroup();
+    layerRef.current = group;
+    map.addLayer(group);
+
+    const grid = new Map(); // key -> {lat,lng, totalAUD, count, items:[]}
+    (rows || []).forEach((r) => {
+      const la = Number(r.lat), ln = Number(r.lng);
+      if (isNaN(la) || isNaN(ln)) return;
+      const cellLat = Math.round(la * 2) / 2;
+      const cellLng = Math.round(ln * 2) / 2;
+      const key = `${cellLat},${cellLng}`;
+      const aud = toAUD(r);
+      if (!grid.has(key)) grid.set(key, { lat: cellLat, lng: cellLng, total: 0, count: 0, items: [] });
+      const g = grid.get(key);
+      g.total += aud;
+      g.count += 1;
+      g.items.push(r);
+    });
+
+    const bounds = L.latLngBounds([]);
+    grid.forEach((g) => {
+      const size = Math.min(64, 18 + Math.sqrt(g.total || 0) * 0.5);
+      const html = `
+        <div style="
+          background:${BRAND.orange};
+          color:#1f2937;
+          border:2px solid rgba(0,0,0,.15);
+          width:${size}px;height:${size}px;line-height:${size}px;
+          border-radius:999px;text-align:center;
+          font-weight:700;font-size:12px;box-shadow:0 8px 16px rgba(0,0,0,.15);
+        ">
+          ${Math.round(g.total).toLocaleString("en-AU")}
+        </div>`;
+      const icon = L.divIcon({ html, className: "aptella-bubble", iconSize: [size, size] });
+      const marker = L.marker([g.lat, g.lng], { icon }).addTo(group);
+      bounds.extend([g.lat, g.lng]);
+
+      marker.on("click", () => {
+        // Build a status summary like clustered version
+        const tally = { approved: 0, lost: 0, expiring: 0, pending: 0 };
+        const totalsAUD = { approved: 0, lost: 0, expiring: 0, pending: 0 };
+        const byStatus = { approved: [], lost: [], expiring: [], pending: [] };
+
+        g.items.forEach((r) => {
+          const b = statusOf(r);
+          tally[b] += 1;
+          const aud = toAUD(r);
+          if (aud) totalsAUD[b] += aud;
+          byStatus[b].push(r);
+        });
+
+        const summaryLine = (key) => {
+          const meta = STATUS_META[key];
+          const count = tally[key] || 0;
+          if (!count) return "";
+          const total = Math.round(totalsAUD[key] || 0);
+          return `
+            <div class="grid-line" data-status="${key}" style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:10px;margin-bottom:6px;background:#f8fafc;cursor:pointer">
+              <span style="display:inline-block;width:10px;height:10px;border-radius:9999px;background:${meta.color}"></span>
+              <span style="font-weight:600">${meta.label}</span>
+              <span style="margin-left:auto;font-weight:700">${count}</span>
+              <span style="margin-left:8px;color:#334155;font-size:12px">AUD ${total.toLocaleString()}</span>
+            </div>`;
+        };
+
+        const grand = Math.round(Object.values(totalsAUD).reduce((a, b) => a + b, 0));
+        const content = `
+          <div style="min-width:280px">
+            <div style="font-weight:700;margin-bottom:4px">Area Summary</div>
+            <div style="font-size:12px;color:#475569;margin-bottom:8px">Total (AUD): <b>${grand.toLocaleString()}</b></div>
+            ${summaryLine("approved")}
+            ${summaryLine("expiring")}
+            ${summaryLine("pending")}
+            ${summaryLine("lost")}
+            <div id="grid-drill" style="margin-top:8px"></div>
+          </div>`;
+        const p = L.popup().setLatLng([g.lat, g.lng]).setContent(content).openOn(map);
+
+        map.once("popupopen", (evt) => {
+          const root = evt?.popup?.getElement();
+          if (!root) return;
+          root.querySelectorAll(".grid-line").forEach((el) => {
+            el.addEventListener("click", () => {
+              const key = el.getAttribute("data-status");
+              const items = (byStatus[key] || []).slice(0, 18);
+              const listHtml = items.map((r) => {
+                const aud = Math.round(toAUD(r));
+                return `
+                  <div class="deal-link" data-id="${r.id}"
+                    style="padding:6px 8px;border-radius:8px;margin:4px 0;background:#fff;border:1px solid #e5e7eb;cursor:pointer">
+                    <div style="font-weight:600">${r.customerName || "(Customer)"} — ${r.solution || ""}</div>
+                    <div style="font-size:12px;color:#374151">
+                      ${r.city || ""}${r.country ? ", " + r.country : ""} &nbsp;•&nbsp; 
+                      ${(r.currency || "").toUpperCase()} ${Number(r.value || 0).toLocaleString()}
+                      <span style="color:#64748b">${aud ? "(≈ AUD " + aud.toLocaleString() + ")" : ""}</span>
+                    </div>
+                  </div>`;
+              }).join("");
+              const drill = root.querySelector("#grid-drill");
+              if (drill) drill.innerHTML = `<div style="font-weight:700;margin:8px 0">Deals (${STATUS_META[key].label})</div>${listHtml}`;
+            });
           });
         });
       });
     });
 
-    return () => {
-      if (clusterRef.current) {
-        clusterRef.current.remove();
-        clusterRef.current = null;
-      }
-    };
-  }, [rows, ratesAUD]);
+    if (rows && rows.length && bounds.isValid()) {
+      map.fitBounds(bounds.pad(0.15));
+    }
+  }, [ready, usingCluster, rows, ratesAUD]);
 
   return (
     <div
@@ -1580,9 +1738,20 @@ function AdminMap({ rows = [], ratesAUD = {}, height = 460 }) {
         borderRadius: "16px",
         overflow: "hidden",
         border: "1px solid #e5e7eb",
+        position: "relative",
+        zIndex: 0, // keep modals over the map
       }}
     >
-      Map placeholder — your Leaflet init can target this container later.
+      {!ready && (
+        <div
+          style={{
+            position: "absolute", inset: 0, display: "grid", placeItems: "center",
+            fontSize: 14, color: "#334155", background: "#f8fafc"
+          }}
+        >
+          Loading map…
+        </div>
+      )}
     </div>
   );
 }
