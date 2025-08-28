@@ -88,6 +88,33 @@ async function filesToDataUrls(fileList) {
     });
   return Promise.all(files.map(toDataUrl));
 }
+
+const MAX_ATTACH_MB = 8;      // per-file (keeps base64 < ~10.6MB)
+const MAX_TOTAL_MB  = 20;     // total for all files in one submit
+
+function bytesToMB(b){ return b / (1024*1024); }
+function fileTooBig(f){ return bytesToMB(f.size) > MAX_ATTACH_MB; }
+
+// Optional: shrink big JPEG/PNG before base64 (keeps quality good, size sane)
+async function downscaleImage(file, maxSide=2000, quality=0.85){
+  if (!/^image\/(png|jpe?g)$/i.test(file.type)) return file; // only images
+  const bitmap = await createImageBitmap(file);
+  let {width, height} = bitmap;
+  if (Math.max(width, height) <= maxSide) return file;
+
+  const scale = maxSide / Math.max(width, height);
+  width  = Math.round(width  * scale);
+  height = Math.round(height * scale);
+
+  const canvas = document.createElement('canvas');
+  canvas.width = width; canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(bitmap, 0, 0, width, height);
+
+  const blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', quality));
+  return new File([blob], file.name.replace(/\.(png|jpeg|jpg)$/i, '.jpg'), { type: 'image/jpeg' });
+}
+
 /* ======================== CONSTANTS & CONFIG ======================== */
 
 const CURRENCIES = ["SGD", "IDR", "MYR", "PHP", "AUD", "USD"];
