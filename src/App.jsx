@@ -181,19 +181,51 @@ function Textarea(props) {
   );
 }
 
-/* ======================== BRAND STRIP ======================== */
-function BrandStrip() {
+/* ---------- Replace BrandStrip with this BrandHero ---------- */
+function BrandHero() {
   return (
-    <div className="w-full bg-white/90 sticky top-0 z-40 border-b border-gray-200 backdrop-blur">
-      <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <img src={logoUrl} alt="Aptella" className="h-12 w-auto" />
-          <div className="text-[13px] font-medium tracking-wide text-[#0e3446]">
-            Master Distributor • Xgrids
+    <header className="relative">
+      {/* Navy gradient band */}
+      <div className="bg-gradient-to-r from-[#0b2938] to-[#0e3446] text-white">
+        <div className="max-w-7xl mx-auto px-4 py-5 flex items-center justify-between gap-6">
+          <div className="flex items-center gap-5">
+            {/* SVG logo: crisp + not scaled oddly */}
+            <img
+              src={logoUrl}
+              alt="Aptella"
+              height={64}            // exact device-pixel height for crispness
+              width="auto"
+              draggable="false"
+              decoding="async"
+              loading="eager"
+              className="select-none h-16 w-auto"
+              style={{
+                imageRendering: "crisp-edges",            // hint to avoid blur on some engines
+                WebkitFontSmoothing: "antialiased",       // subtle improvement on WebKit
+                MozOsxFontSmoothing: "grayscale",
+              }}
+            />
+
+            {/* Tagline */}
+            <div className="text-sm leading-5 tracking-wide text-white/90">
+              <span className="font-medium">Master Distributor</span>
+              <span className="mx-2 opacity-60">•</span>
+              <span className="font-medium">Xgrids</span>
+            </div>
+          </div>
+
+          {/* Optional right-side badge; remove if not needed */}
+          <div className="hidden md:flex items-center gap-2">
+            <span className="px-3 py-1 rounded-lg bg-white/10 backdrop-blur-sm border border-white/15 text-[13px]">
+              Asia Pacific
+            </span>
           </div>
         </div>
       </div>
-    </div>
+
+      {/* Aptella orange anchor bar */}
+      <div className="h-1.5 w-full bg-[#f0a03a] shadow-[0_2px_0_rgba(0,0,0,0.06)]" />
+    </header>
   );
 }
 
@@ -1786,7 +1818,7 @@ function AptellaRoot() {
 
   return (
     <div className="min-h-screen bg-[#f7fafc] text-slate-900">
-      <BrandStrip />
+      <BrandHero />
 
       <div className="max-w-7xl mx-auto px-4 py-6">
         {/* Page header */}
