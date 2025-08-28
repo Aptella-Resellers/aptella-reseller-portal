@@ -982,17 +982,14 @@ function ResellerForm({ onSaved }) {
           </label>
 
           <div className="flex items-center gap-3">
-            <button
-              type="submit"
-              onClick={(e) => {
-                e.preventDefault();
-                submit(e);
-              }} // explicit trigger + prevents default nav
-              disabled={submitting}
-              className={`px-4 py-2 rounded-xl text-white ${BRAND.primaryBtn}`}
-            >
-              {submitting ? t("Submitting…", "Mengirim…") : t("Submit Registration", "Kirim Pendaftaran")}
-            </button>
+           <button
+  type="submit"
+  disabled={submitting}
+  className={`px-4 py-2 rounded-xl text-white ${BRAND.primaryBtn}`}
+>
+  {submitting ? t("Submitting…", "Mengirim…") : t("Submit Registration", "Kirim Pendaftaran")}
+</button>
+
             <a
               className="px-4 py-2 rounded-xl bg-[#f0a03a]/15 text-[#9a5b12] border border-[#f0a03a]/30 text-sm"
               href="https://www.aptella.com/asia/product-brands/xgrids-asia/"
